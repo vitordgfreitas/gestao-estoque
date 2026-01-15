@@ -56,17 +56,110 @@ def mostrar_tela_login():
         """)
         st.stop()
     
+    # CSS para tela de login - Paleta Azul Profissional
+    st.markdown("""
+    <style>
+        /* Fundo */
+        .stApp {
+            background-color: #f8f9fa !important;
+        }
+        
+        .main .block-container {
+            background-color: #f8f9fa !important;
+        }
+        
+        .login-container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        /* TODOS os botões - aplicar cor azul profissional */
+        .stButton > button {
+            background-color: #2c3e50 !important;
+            color: white !important;
+            border: 1px solid #2c3e50 !important;
+        }
+        
+        .stButton > button:hover {
+            background-color: #34495e !important;
+        }
+        
+        /* Botão Primário específico */
+        .stButton > button[kind="primary"] {
+            background-color: #2c3e50 !important;
+            color: white !important;
+        }
+        
+        .stButton > button[kind="primary"]:hover {
+            background-color: #34495e !important;
+        }
+        
+        /* Inputs */
+        .stTextInput > div > div > input {
+            border-color: #e0e0e0 !important;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #3498db !important;
+        }
+        
+        /* Mensagens */
+        .stSuccess {
+            background-color: #d4edda !important;
+            border-left: 4px solid #27ae60 !important;
+            color: #155724 !important;
+        }
+        
+        .stError {
+            background-color: #f8d7da !important;
+            border-left: 4px solid #e74c3c !important;
+            color: #721c24 !important;
+        }
+        
+        .stWarning {
+            background-color: #fff3cd !important;
+            border-left: 4px solid #f39c12 !important;
+            color: #856404 !important;
+        }
+        
+        .stInfo {
+            background-color: #d1ecf1 !important;
+            border-left: 4px solid #3498db !important;
+            color: #0c5460 !important;
+        }
+        
+        /* Títulos */
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50 !important;
+        }
+        
+        /* Texto geral */
+        p, label, .stMarkdown {
+            color: #2c3e50 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Centraliza o formulário
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.title("🔐 Acesso ao Sistema")
+        st.markdown("""
+        <div style="text-align: center; padding: 2rem 0;">
+            <h1 style="color: #2c3e50; font-size: 2rem; margin-bottom: 0.5rem;">🔐 Acesso ao Sistema</h1>
+            <p style="color: #7f8c8d;">Faça login para continuar</p>
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown("---")
         
         with st.form("login_form"):
-            usuario = st.text_input("Usuário", placeholder="Digite o usuário")
-            senha = st.text_input("Senha", type="password", placeholder="Digite a senha")
-            submitted = st.form_submit_button("Entrar", type="primary", use_container_width=True)
+            usuario = st.text_input("👤 Usuário", placeholder="Digite o usuário")
+            senha = st.text_input("🔒 Senha", type="password", placeholder="Digite a senha")
+            submitted = st.form_submit_button("🚀 Entrar", type="primary", use_container_width=True)
             
             if submitted:
                 if usuario == usuario_config and senha == senha_config:
@@ -84,9 +177,5 @@ def fazer_logout():
     st.rerun()
 
 def mostrar_botao_logout():
-    """Mostra botão de logout na sidebar"""
-    if st.session_state.get('authenticated'):
-        st.sidebar.markdown("---")
-        st.sidebar.write(f"👤 **Usuário:** {st.session_state.get('usuario', '')}")
-        if st.sidebar.button("🚪 Sair", use_container_width=True):
-            fazer_logout()
+    """Função mantida para compatibilidade, mas o logout agora é gerenciado no app.py"""
+    pass

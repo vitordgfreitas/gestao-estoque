@@ -12,6 +12,10 @@ class Item(Base):
     id = Column(Integer, primary_key=True)
     nome = Column(String(200), nullable=False)
     quantidade_total = Column(Integer, nullable=False)
+    descricao = Column(String(500))
+    cidade = Column(String(200), nullable=False)
+    uf = Column(String(2), nullable=False)
+    endereco = Column(String(500))
     
     compromissos = relationship("Compromisso", back_populates="item", cascade="all, delete-orphan")
     
@@ -28,6 +32,10 @@ class Compromisso(Base):
     data_inicio = Column(Date, nullable=False)
     data_fim = Column(Date, nullable=False)
     descricao = Column(String(500))
+    cidade = Column(String(200), nullable=False)
+    uf = Column(String(2), nullable=False)
+    endereco = Column(String(500))
+    contratante = Column(String(200))
     
     item = relationship("Item", back_populates="compromissos")
     

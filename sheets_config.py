@@ -103,31 +103,41 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             header = sheet_itens.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
                 # Se a primeira célula não for 'ID', adiciona cabeçalhos na primeira linha
-                sheet_itens.insert_row(["ID", "Nome", "Quantidade Total", "Descrição", "Localização"], 1)
+                sheet_itens.insert_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"], 1)
             else:
                 # Verifica se todas as colunas existem, se não, adiciona
                 headers = sheet_itens.row_values(1)
-                if len(headers) < 5:
+                if len(headers) < 7:
                     # Adiciona colunas faltantes
                     if len(headers) < 4:
                         sheet_itens.update('D1', [['Descrição']])
                     if len(headers) < 5:
-                        sheet_itens.update('E1', [['Localização']])
-                elif headers[4] != "Localização" if len(headers) > 4 else True:
-                    sheet_itens.update('E1', [['Localização']])
+                        sheet_itens.update('E1', [['Cidade']])
+                    if len(headers) < 6:
+                        sheet_itens.update('F1', [['UF']])
+                    if len(headers) < 7:
+                        sheet_itens.update('G1', [['Endereço']])
+                # Verifica se as colunas estão corretas
+                headers = sheet_itens.row_values(1)
+                if len(headers) >= 5 and headers[4] != "Cidade":
+                    sheet_itens.update('E1', [['Cidade']])
+                if len(headers) >= 6 and headers[5] != "UF":
+                    sheet_itens.update('F1', [['UF']])
+                if len(headers) >= 7 and headers[6] != "Endereço":
+                    sheet_itens.update('G1', [['Endereço']])
         except Exception:
             # Se houver erro ao ler, tenta adicionar cabeçalhos apenas se a aba estiver vazia
             try:
                 all_values = sheet_itens.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Localização"])
+                    sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"])
             except Exception:
                 pass  # Ignora erros ao verificar/inserir cabeçalhos
     else:
         # Aba não existe, cria nova
         sheet_itens = spreadsheet.add_worksheet(title=sheet_itens_name, rows=1000, cols=10)
         # Cabeçalhos
-        sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Localização"])
+        sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"])
     
     # Obtém ou cria aba de Compromissos
     if sheet_compromissos_name in existing_worksheets:
@@ -138,29 +148,43 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             header = sheet_compromissos.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
                 # Se a primeira célula não for 'ID', adiciona cabeçalhos na primeira linha
-                sheet_compromissos.insert_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Localização", "Contratante"], 1)
+                sheet_compromissos.insert_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Cidade", "UF", "Endereço", "Contratante"], 1)
             else:
                 # Verifica se todas as colunas existem, se não, adiciona
                 headers = sheet_compromissos.row_values(1)
-                if len(headers) < 8:
+                if len(headers) < 10:
                     # Adiciona colunas faltantes
                     if len(headers) < 7:
-                        sheet_compromissos.update('G1', [['Localização']])
+                        sheet_compromissos.update('G1', [['Cidade']])
                     if len(headers) < 8:
-                        sheet_compromissos.update('H1', [['Contratante']])
+                        sheet_compromissos.update('H1', [['UF']])
+                    if len(headers) < 9:
+                        sheet_compromissos.update('I1', [['Endereço']])
+                    if len(headers) < 10:
+                        sheet_compromissos.update('J1', [['Contratante']])
+                # Verifica se as colunas estão corretas
+                headers = sheet_compromissos.row_values(1)
+                if len(headers) >= 7 and headers[6] != "Cidade":
+                    sheet_compromissos.update('G1', [['Cidade']])
+                if len(headers) >= 8 and headers[7] != "UF":
+                    sheet_compromissos.update('H1', [['UF']])
+                if len(headers) >= 9 and headers[8] != "Endereço":
+                    sheet_compromissos.update('I1', [['Endereço']])
+                if len(headers) >= 10 and headers[9] != "Contratante":
+                    sheet_compromissos.update('J1', [['Contratante']])
         except Exception:
             # Se houver erro ao ler, tenta adicionar cabeçalhos apenas se a aba estiver vazia
             try:
                 all_values = sheet_compromissos.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_compromissos.append_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Localização", "Contratante"])
+                    sheet_compromissos.append_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Cidade", "UF", "Endereço", "Contratante"])
             except Exception:
                 pass  # Ignora erros ao verificar/inserir cabeçalhos
     else:
         # Aba não existe, cria nova
         sheet_compromissos = spreadsheet.add_worksheet(title=sheet_compromissos_name, rows=1000, cols=10)
         # Cabeçalhos
-        sheet_compromissos.append_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Localização", "Contratante"])
+        sheet_compromissos.append_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Cidade", "UF", "Endereço", "Contratante"])
     
     return {
         'spreadsheet': spreadsheet,
