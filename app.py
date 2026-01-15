@@ -330,7 +330,23 @@ elif menu == "📊 Visualizar Dados":
     
     with tab1:
         st.subheader("Itens Cadastrados")
+        
+        # Campo de busca
+        col_search, col_space = st.columns([3, 1])
+        with col_search:
+            busca_item = st.text_input("🔍 Buscar item", placeholder="Digite o nome do item para filtrar...", key="busca_item")
+        
         itens = db.listar_itens()
+        
+        # Filtra itens pela busca
+        itens_originais = itens.copy() if itens else []
+        if busca_item:
+            busca_lower = busca_item.lower().strip()
+            itens = [item for item in itens if busca_lower in item.nome.lower()]
+            if itens:
+                st.info(f"🔍 Mostrando {len(itens)} item(ns) encontrado(s) para '{busca_item}'")
+            elif itens_originais:
+                st.warning(f"🔍 Nenhum item encontrado para '{busca_item}'")
         
         if itens:
             for item in itens:
@@ -403,7 +419,31 @@ elif menu == "📊 Visualizar Dados":
     
     with tab2:
         st.subheader("Compromissos Registrados")
+        
+        # Campo de busca
+        col_search, col_space = st.columns([3, 1])
+        with col_search:
+            busca_compromisso = st.text_input("🔍 Buscar compromisso", placeholder="Digite o nome do item ou contratante para filtrar...", key="busca_compromisso")
+        
         compromissos = db.listar_compromissos()
+        
+        # Filtra compromissos pela busca
+        if busca_compromisso:
+            busca_lower = busca_compromisso.lower().strip()
+            compromissos_originais = compromissos.copy()
+            compromissos_filtrados = []
+            for comp in compromissos:
+                # Busca no nome do item, descrição, localização ou contratante
+                if (busca_lower in comp.item.nome.lower() or
+                    (hasattr(comp, 'descricao') and comp.descricao and busca_lower in comp.descricao.lower()) or
+                    (hasattr(comp, 'localizacao') and comp.localizacao and busca_lower in comp.localizacao.lower()) or
+                    (hasattr(comp, 'contratante') and comp.contratante and busca_lower in comp.contratante.lower())):
+                    compromissos_filtrados.append(comp)
+            compromissos = compromissos_filtrados
+            if compromissos:
+                st.info(f"🔍 Mostrando {len(compromissos)} compromisso(s) encontrado(s) para '{busca_compromisso}'")
+            elif compromissos_originais:
+                st.warning(f"🔍 Nenhum compromisso encontrado para '{busca_compromisso}'")
         
         if compromissos:
             # Ordenar por data de início (mais recentes primeiro)
