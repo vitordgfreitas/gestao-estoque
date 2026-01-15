@@ -9,6 +9,37 @@ st.set_page_config(
     layout="wide"
 )
 
+# CSS para remover cursor piscante em textos não editáveis
+st.markdown("""
+<style>
+    /* Remove cursor de texto em elementos não editáveis */
+    .stMarkdown, .stText, .stWrite, .stExpander {
+        caret-color: transparent;
+    }
+    
+    /* Remove cursor piscante mas mantém seleção de texto */
+    div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stMarkdownContainer"] div,
+    .element-container .stMarkdown p,
+    .element-container .stMarkdown div {
+        user-select: text;
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+    }
+    
+    /* Remove cursor de texto em labels e textos estáticos */
+    label, .stText, .stMarkdown p, .stMarkdown div {
+        caret-color: transparent;
+    }
+    
+    /* Remove outline ao focar em elementos não editáveis */
+    .stMarkdown:focus, .stText:focus {
+        outline: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Sistema de autenticação simples
 from auth_simples import verificar_autenticacao, mostrar_tela_login, mostrar_botao_logout
 
