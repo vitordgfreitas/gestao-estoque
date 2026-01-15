@@ -45,10 +45,15 @@ Este guia mostra como colocar o sistema no ar usando serviços gratuitos.
    - Main file path: `app.py`
    - Clique em "Deploy"
 
-5. **Configurar Variáveis de Ambiente**:
+5. **Configurar Secrets**:
    - No Streamlit Cloud, vá em "Settings" > "Secrets"
    - Adicione as variáveis:
      ```toml
+     # Autenticação
+     APP_USUARIO = "seu_usuario"
+     APP_SENHA = "sua_senha"
+     
+     # Google Sheets
      GOOGLE_SHEET_ID = "1OmKLrAJq4CBYzyhwQlbjCd-AbPl3YmMNPNExSBeAvlE"
      USE_GOOGLE_SHEETS = "true"
      ```

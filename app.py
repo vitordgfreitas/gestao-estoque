@@ -9,6 +9,15 @@ st.set_page_config(
     layout="wide"
 )
 
+# Sistema de autenticação simples
+from auth_simples import verificar_autenticacao, mostrar_tela_login, mostrar_botao_logout
+
+if not verificar_autenticacao():
+    mostrar_tela_login()
+    st.stop()
+
+mostrar_botao_logout()
+
 # Escolhe qual banco de dados usar baseado em variável de ambiente
 USE_GOOGLE_SHEETS = os.getenv('USE_GOOGLE_SHEETS', 'true').lower() == 'true'
 

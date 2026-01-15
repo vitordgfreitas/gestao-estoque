@@ -34,6 +34,15 @@ data/
 credentials.json
 *-credentials.json
 *credentials*.json
+credentials.toml
+streamlit_secrets.toml
+
+# Documentação local
+DEPLOY.md
+AUTENTICACAO.md
+
+# Secrets locais
+.streamlit/secrets.toml
 
 # IDE
 .vscode/
