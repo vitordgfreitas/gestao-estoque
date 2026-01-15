@@ -5,6 +5,15 @@ import os
 # Lista de UFs brasileiras (usada em múltiplos lugares)
 UFS_BRASILEIRAS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
 
+# Lista de marcas de carros brasileiras
+MARCAS_CARROS = [
+    'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Toyota', 'Honda', 'Hyundai', 
+    'Renault', 'Nissan', 'Peugeot', 'Citroën', 'Jeep', 'Mitsubishi', 'Kia',
+    'BMW', 'Mercedes-Benz', 'Audi', 'Volvo', 'Land Rover', 'Jaguar', 'Porsche',
+    'Subaru', 'Suzuki', 'Chery', 'JAC', 'Troller', 'RAM', 'Dodge', 'Chrysler',
+    'Mini', 'Smart', 'BYD', 'GWM', 'Caoa Chery', 'Outra'
+]
+
 # Configuração da página
 st.set_page_config(
     page_title="Gestão de Estoque - Aluguel de Itens",
@@ -673,31 +682,89 @@ elif menu == "Registrar Item":
     # Lista de UFs brasileiras
     ufs_brasileiras = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
     
+    # Inicializa categoria no session_state se não existir
+    categoria_key = f'categoria_form_{form_key}'
+    if categoria_key not in st.session_state:
+        st.session_state[categoria_key] = "Estrutura de Evento"
+    
+    # Selectbox de categoria FORA do form para permitir mudança dinâmica
+    categoria = st.selectbox(
+        "Categoria *", 
+        options=["Estrutura de Evento", "Carros"], 
+        index=0 if st.session_state[categoria_key] == "Estrutura de Evento" else 1,
+        key=f"select_categoria_{form_key}"
+    )
+    
+    # Atualiza session_state quando categoria mudar e força rerun
+    if st.session_state[categoria_key] != categoria:
+        st.session_state[categoria_key] = categoria
+        st.rerun()
+    
+    categoria_atual = st.session_state[categoria_key]
+    
     with st.form(form_key):
-        nome = st.text_input("Nome do Item *", placeholder="Ex: Alambrado, Mesa, Cadeira...", value="")
-        quantidade = st.number_input("Quantidade Total *", min_value=1, value=1, step=1)
-        descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Mesa retangular de madeira, tamanho 3x2 metros...", value="")
+        
+        # Campos que mudam baseado na categoria
+        if categoria_atual == "Carros":
+            st.markdown("**Informações do Veículo**")
+            # Para carros, quantidade é sempre 1 (cada veículo é único)
+            quantidade = 1
+            
+            col_marca, col_modelo = st.columns(2)
+            with col_marca:
+                marca = st.selectbox("Marca *", options=MARCAS_CARROS, index=0, key=f"marca_{form_key}")
+            with col_modelo:
+                modelo = st.text_input("Modelo *", placeholder="Ex: Uno, Gol, Celta, Corolla...", value="", key=f"modelo_{form_key}")
+            
+            col_placa, col_ano = st.columns(2)
+            with col_placa:
+                placa = st.text_input("Placa *", placeholder="ABC-1234", value="", max_chars=10, key=f"placa_{form_key}")
+            with col_ano:
+                ano = st.number_input("Ano *", min_value=1900, max_value=2100, value=2020, step=1, key=f"ano_{form_key}")
+            
+            descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Carro em bom estado, revisado recentemente...", value="", key=f"descricao_{form_key}")
+            
+            # Gera nome automaticamente como "Marca Modelo"
+            nome = f"{marca} {modelo}".strip() if modelo else ""
+        else:
+            nome = st.text_input("Nome do Item *", placeholder="Ex: Alambrado, Mesa, Cadeira...", value="", key=f"nome_{form_key}")
+            quantidade = st.number_input("Quantidade Total *", min_value=1, value=1, step=1, key=f"quantidade_{form_key}")
+            descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Mesa retangular de madeira, tamanho 3x2 metros...", value="", key=f"descricao_{form_key}")
+            marca = None
+            placa = None
+            modelo = None
+            ano = None
         
         st.markdown("**Localização do Item**")
         col1, col2 = st.columns(2)
         with col1:
-            cidade = st.text_input("Cidade *", placeholder="Ex: São Paulo, Rio de Janeiro...", value="")
+            cidade = st.text_input("Cidade *", placeholder="Ex: São Paulo, Rio de Janeiro...", value="", key=f"cidade_{form_key}")
         with col2:
-            uf = st.selectbox("UF *", options=UFS_BRASILEIRAS, index=24)  # SP como padrão
-        endereco = st.text_input("Endereço (opcional)", placeholder="Ex: Rua das Flores, 123 - Centro...", value="")
+            uf = st.selectbox("UF *", options=UFS_BRASILEIRAS, index=24, key=f"uf_{form_key}")  # SP como padrão
+        endereco = st.text_input("Endereço (opcional)", placeholder="Ex: Rua das Flores, 123 - Centro...", value="", key=f"endereco_{form_key}")
         
         submitted = st.form_submit_button("Registrar Item", type="primary")
         
         if submitted:
-            if nome.strip() and cidade.strip() and uf:
+            # Validação básica
+            campos_ok = nome.strip() and cidade.strip() and uf
+            if categoria == "Carros":
+                campos_ok = campos_ok and marca and placa and modelo and ano
+            
+            if campos_ok:
                 try:
                     item = db.criar_item(
                         nome.strip(), 
                         quantidade, 
+                        categoria,
                         descricao.strip() if descricao else None, 
                         cidade.strip(), 
                         uf, 
-                        endereco.strip() if endereco else None
+                        endereco.strip() if endereco else None,
+                        placa.strip() if placa else None,
+                        marca.strip() if marca else None,
+                        modelo.strip() if modelo else None,
+                        int(ano) if ano else None
                     )
                     # Incrementa contador para gerar nova key no próximo render
                     st.session_state['form_item_counter'] = st.session_state.get('form_item_counter', 0) + 1
@@ -721,7 +788,7 @@ elif menu == "Registrar Item":
                     else:
                         st.error(f"❌ Erro ao registrar item: {error_msg}")
             else:
-                st.warning("⚠️ Por favor, preencha o nome do item.")
+                st.warning("⚠️ Por favor, preencha os campos obrigatórios.")
 
 # Página Registrar Compromisso
 elif menu == "Registrar Compromisso":
@@ -790,12 +857,41 @@ elif menu == "Registrar Compromisso":
         form_key_comp = f"form_compromisso_{st.session_state.get('form_compromisso_counter', 0)}"
         
         with st.form(form_key_comp):
-            # Seleção do item
-            item_options = {f"{item.nome} (Estoque: {item.quantidade_total})": item.id for item in itens}
-            item_selecionado = st.selectbox("Selecione o Item *", options=list(item_options.keys()))
-            item_id = item_options[item_selecionado]
+            # Filtro por categoria
+            categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
+            categoria_filtro = st.selectbox("Categoria *", options=categorias_disponiveis, index=0)
             
-            quantidade = st.number_input("Quantidade *", min_value=1, value=1, step=1)
+            # Filtra itens pela categoria selecionada
+            itens_filtrados = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro]
+            
+            if not itens_filtrados:
+                st.warning(f"⚠️ Não há itens cadastrados na categoria '{categoria_filtro}'.")
+            else:
+                # Seleção do item
+                if categoria_filtro == "Carros":
+                    # Para carros, mostra marca e modelo
+                    item_options = {}
+                    for item in itens_filtrados:
+                        carro = getattr(item, 'carro', None)
+                        if carro:
+                            marca = getattr(carro, 'marca', 'N/A')
+                            modelo = carro.modelo
+                            placa = carro.placa
+                            item_options[f"{marca} {modelo} - {placa}"] = item.id
+                        else:
+                            item_options[f"{item.nome}"] = item.id
+                else:
+                    item_options = {f"{item.nome} (Estoque: {item.quantidade_total})": item.id for item in itens_filtrados}
+                
+                item_selecionado = st.selectbox("Selecione o Item *", options=list(item_options.keys()))
+                item_id = item_options[item_selecionado]
+                
+                # Quantidade só aparece para Estrutura de Evento
+                if categoria_filtro == "Carros":
+                    quantidade = 1  # Carros sempre quantidade 1
+                    st.info("ℹ️ Para carros, a quantidade é sempre 1 (cada veículo é único).")
+                else:
+                    quantidade = st.number_input("Quantidade *", min_value=1, value=1, step=1)
             
             descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Evento corporativo, Licitação pública...", value="")
             
@@ -814,7 +910,7 @@ elif menu == "Registrar Compromisso":
                 if data_fim < data_inicio:
                     st.error("❌ A data de fim deve ser posterior ou igual à data de início.")
                 elif not cidade_compromisso.strip() or not uf_compromisso:
-                    st.warning("⚠️ Por favor, preencha a cidade e selecione a UF do compromisso.")
+                    st.warning("⚠️ Por favor, preencha os campos obrigatórios.")
                 else:
                     try:
                         # Verificar disponibilidade em todo o período antes de criar
@@ -861,6 +957,14 @@ elif menu == "Verificar Disponibilidade":
         with col2:
             data_consulta = st.date_input("Data de Consulta", value=date.today())
         
+        # Filtro por categoria
+        categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
+        categoria_filtro = st.selectbox("Filtrar por Categoria (opcional)", options=["Todas as Categorias"] + categorias_disponiveis, index=0)
+        
+        # Filtra itens pela categoria se selecionada
+        if categoria_filtro != "Todas as Categorias":
+            itens = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro]
+        
         # Filtro por localização (Cidade - UF)
         localizacoes_disponiveis = set()
         for item in itens:
@@ -885,91 +989,327 @@ elif menu == "Verificar Disponibilidade":
             st.info("ℹ️ Nenhum item ou compromisso possui localização cadastrada.")
         
         if modo_consulta == "Item Específico":
-            # Mostra TODOS os itens, independente da localização
-            item_options = {f"{item.nome}": item.id for item in itens}
+            # Mostra itens filtrados por categoria
+            if categoria_filtro == "Carros":
+                # Para carros, agrupa por marca+modelo
+                item_options = {}
+                for item in itens:
+                    carro = getattr(item, 'carro', None)
+                    if carro:
+                        marca = getattr(carro, 'marca', 'N/A')
+                        modelo = carro.modelo
+                        item_options[f"{marca} {modelo}"] = item.id
+                    else:
+                        item_options[f"{item.nome}"] = item.id
+            else:
+                item_options = {f"{item.nome}": item.id for item in itens}
+            
             item_selecionado = st.selectbox("Selecione o Item", options=list(item_options.keys()))
             item_id = item_options[item_selecionado]
             
             if st.button("Verificar Disponibilidade", type="primary"):
-                # Passa o filtro de localização para a função
-                disponibilidade = db.verificar_disponibilidade(
-                    item_id, 
-                    data_consulta, 
-                    filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None
-                )
-                
-                if disponibilidade:
-                    st.subheader(f"Disponibilidade para '{disponibilidade['item'].nome}' em {data_consulta.strftime('%d/%m/%Y')}")
-                    
-                    # Mostra filtro de localização se aplicado
-                    if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
-                        st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
-                        # Verifica se o item está na localização selecionada
-                        cidade_uf = filtro_localizacao.split(" - ")
-                        if len(cidade_uf) == 2:
-                            cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                            item_na_localizacao = (hasattr(disponibilidade['item'], 'cidade') and hasattr(disponibilidade['item'], 'uf') and 
-                                                  disponibilidade['item'].cidade == cidade_filtro and disponibilidade['item'].uf == uf_filtro.upper())
-                            if not item_na_localizacao:
-                                st.warning(f"⚠️ Este item não está na localização '{filtro_localizacao}'. Mostrando disponibilidade considerando apenas compromissos nesta localização.")
-                    
-                    # Mostra localização do item se disponível
-                    if hasattr(disponibilidade['item'], 'cidade') and hasattr(disponibilidade['item'], 'uf') and disponibilidade['item'].cidade and disponibilidade['item'].uf:
-                        localizacao_str = f"{disponibilidade['item'].cidade} - {disponibilidade['item'].uf}"
-                        if hasattr(disponibilidade['item'], 'endereco') and disponibilidade['item'].endereco:
-                            localizacao_str += f" ({disponibilidade['item'].endereco})"
-                        st.caption(f"📍 **Localização do Item:** {localizacao_str}")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Quantidade Total", disponibilidade['quantidade_total'])
-                    with col2:
-                        st.metric("Quantidade Comprometida", disponibilidade['quantidade_comprometida'])
-                    with col3:
-                        cor = "normal" if disponibilidade['quantidade_disponivel'] > 0 else "inverse"
-                        st.metric("Quantidade Disponível", disponibilidade['quantidade_disponivel'], delta=None)
-                    
-                    if disponibilidade['compromissos_ativos']:
-                        st.subheader("Compromissos Ativos nesta Data")
-                        for comp in disponibilidade['compromissos_ativos']:
-                            with st.expander(f"Compromisso #{comp.id} - {comp.quantidade} unidades ({comp.data_inicio} a {comp.data_fim})"):
-                                st.write(f"**Item:** {comp.item.nome}")
-                                st.write(f"**Quantidade:** {comp.quantidade}")
-                                st.write(f"**Período:** {comp.data_inicio.strftime('%d/%m/%Y')} a {comp.data_fim.strftime('%d/%m/%Y')}")
-                                if hasattr(comp, 'descricao') and comp.descricao:
-                                    st.write(f"**Descrição:** {comp.descricao}")
-                                if hasattr(comp, 'cidade') and hasattr(comp, 'uf') and comp.cidade and comp.uf:
-                                    localizacao_str = f"{comp.cidade} - {comp.uf}"
-                                    if hasattr(comp, 'endereco') and comp.endereco:
-                                        localizacao_str += f" ({comp.endereco})"
-                                    st.write(f"**Localização:** {localizacao_str}")
-                                if hasattr(comp, 'contratante') and comp.contratante:
-                                    st.write(f"**Contratante:** {comp.contratante}")
+                # Se for carro, busca todos os carros com a mesma marca+modelo
+                if categoria_filtro == "Carros":
+                    # Busca o item selecionado para obter marca e modelo
+                    item_selecionado_obj = next((item for item in itens if item.id == item_id), None)
+                    if item_selecionado_obj:
+                        carro_selecionado = getattr(item_selecionado_obj, 'carro', None)
+                        if carro_selecionado:
+                            marca_selecionada = getattr(carro_selecionado, 'marca', 'N/A')
+                            modelo_selecionado = carro_selecionado.modelo
+                            
+                            # Busca todos os carros com a mesma marca+modelo
+                            carros_mesmo_modelo = [item for item in itens 
+                                                  if getattr(item, 'categoria', 'Estrutura de Evento') == 'Carros'
+                                                  and getattr(item, 'carro', None)
+                                                  and getattr(item.carro, 'marca', '') == marca_selecionada
+                                                  and item.carro.modelo == modelo_selecionado]
+                            
+                            # Verifica disponibilidade de todos os carros do mesmo modelo
+                            resultados_carros = []
+                            for item_carro in carros_mesmo_modelo:
+                                # Se há filtro de localização, verifica se o carro está na localização antes de verificar disponibilidade
+                                if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                                    cidade_uf = filtro_localizacao.split(" - ")
+                                    if len(cidade_uf) == 2:
+                                        cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                        carro_na_localizacao = (hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf')
+                                                               and item_carro.cidade == cidade_filtro 
+                                                               and item_carro.uf == uf_filtro.upper())
+                                        if not carro_na_localizacao:
+                                            continue  # Pula carros que não estão na localização filtrada
+                                
+                                disponibilidade_carro = db.verificar_disponibilidade(
+                                    item_carro.id,
+                                    data_consulta,
+                                    filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None
+                                )
+                                if disponibilidade_carro:
+                                    resultados_carros.append(disponibilidade_carro)
+                            
+                            if resultados_carros:
+                                st.subheader(f"Disponibilidade para '{marca_selecionada} {modelo_selecionado}' em {data_consulta.strftime('%d/%m/%Y')}")
+                                
+                                if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                                    st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
+                                
+                                # Agrupa carros
+                                total_disponivel = sum(r['quantidade_disponivel'] for r in resultados_carros)
+                                total_comprometido = sum(r['quantidade_comprometida'] for r in resultados_carros)
+                                total_veiculos = len(resultados_carros)
+                                
+                                with st.expander(f"🚗 **{marca_selecionada} {modelo_selecionado}** - {total_disponivel} disponível(is) de {total_veiculos} total"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Total de Veículos", total_veiculos)
+                                    with col2:
+                                        st.metric("Comprometidos", total_comprometido)
+                                    with col3:
+                                        st.metric("Disponíveis", total_disponivel)
+                                    
+                                    st.divider()
+                                    st.write("**Placas dos Veículos:**")
+                                    for resultado in resultados_carros:
+                                        carro = getattr(resultado['item'], 'carro', None)
+                                        item_carro = resultado['item']
+                                        if carro:
+                                            disponivel = resultado['quantidade_disponivel']
+                                            comprometido = resultado['quantidade_comprometida']
+                                            status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
+                                            
+                                            # Mostra placa e localização
+                                            info_placa = f"- **{carro.placa}** ({carro.ano}) - {status}"
+                                            if hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf') and item_carro.cidade and item_carro.uf:
+                                                localizacao_carro = f"{item_carro.cidade} - {item_carro.uf}"
+                                                if hasattr(item_carro, 'endereco') and item_carro.endereco:
+                                                    localizacao_carro += f" ({item_carro.endereco})"
+                                                info_placa += f" | 📍 {localizacao_carro}"
+                                            
+                                            st.write(info_placa)
+                                            if comprometido > 0:
+                                                st.caption(f"  Comprometido: {comprometido}")
+                                
+                                # Mostra compromissos ativos
+                                todos_compromissos = []
+                                for resultado in resultados_carros:
+                                    todos_compromissos.extend(resultado.get('compromissos_ativos', []))
+                                
+                                if todos_compromissos:
+                                    st.subheader("Compromissos Ativos nesta Data")
+                                    for comp in todos_compromissos:
+                                        with st.expander(f"Compromisso #{comp.id} - {comp.quantidade} unidades ({comp.data_inicio} a {comp.data_fim})"):
+                                            st.write(f"**Item:** {comp.item.nome}")
+                                            carro_comp = getattr(comp.item, 'carro', None)
+                                            if carro_comp:
+                                                st.write(f"**Placa:** {carro_comp.placa}")
+                                            st.write(f"**Quantidade:** {comp.quantidade}")
+                                            st.write(f"**Período:** {comp.data_inicio.strftime('%d/%m/%Y')} a {comp.data_fim.strftime('%d/%m/%Y')}")
+                                            if hasattr(comp, 'descricao') and comp.descricao:
+                                                st.write(f"**Descrição:** {comp.descricao}")
+                                            if hasattr(comp, 'cidade') and hasattr(comp, 'uf') and comp.cidade and comp.uf:
+                                                localizacao_str = f"{comp.cidade} - {comp.uf}"
+                                                if hasattr(comp, 'endereco') and comp.endereco:
+                                                    localizacao_str += f" ({comp.endereco})"
+                                                st.write(f"**Localização:** {localizacao_str}")
+                                            if hasattr(comp, 'contratante') and comp.contratante:
+                                                st.write(f"**Contratante:** {comp.contratante}")
+                                else:
+                                    st.info("ℹ️ Nenhum compromisso ativo nesta data.")
+                            else:
+                                st.error("❌ Nenhum carro encontrado.")
+                        else:
+                            st.error("❌ Carro não encontrado.")
                     else:
-                        st.info("ℹ️ Nenhum compromisso ativo nesta data.")
+                        st.error("❌ Item não encontrado.")
                 else:
-                    st.error("❌ Item não encontrado.")
+                    # Para itens de Estrutura de Evento, comportamento normal
+                    disponibilidade = db.verificar_disponibilidade(
+                        item_id, 
+                        data_consulta, 
+                        filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None
+                    )
+                    
+                    if disponibilidade:
+                        st.subheader(f"Disponibilidade para '{disponibilidade['item'].nome}' em {data_consulta.strftime('%d/%m/%Y')}")
+                        
+                        # Mostra filtro de localização se aplicado
+                        if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                            st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
+                            # Verifica se o item está na localização selecionada
+                            cidade_uf = filtro_localizacao.split(" - ")
+                            if len(cidade_uf) == 2:
+                                cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                item_na_localizacao = (hasattr(disponibilidade['item'], 'cidade') and hasattr(disponibilidade['item'], 'uf') and 
+                                                      disponibilidade['item'].cidade == cidade_filtro and disponibilidade['item'].uf == uf_filtro.upper())
+                                if not item_na_localizacao:
+                                    st.warning(f"⚠️ Este item não está na localização '{filtro_localizacao}'. Mostrando disponibilidade considerando apenas compromissos nesta localização.")
+                        
+                        # Mostra localização do item se disponível
+                        if hasattr(disponibilidade['item'], 'cidade') and hasattr(disponibilidade['item'], 'uf') and disponibilidade['item'].cidade and disponibilidade['item'].uf:
+                            localizacao_str = f"{disponibilidade['item'].cidade} - {disponibilidade['item'].uf}"
+                            if hasattr(disponibilidade['item'], 'endereco') and disponibilidade['item'].endereco:
+                                localizacao_str += f" ({disponibilidade['item'].endereco})"
+                            st.caption(f"📍 **Localização do Item:** {localizacao_str}")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Quantidade Total", disponibilidade['quantidade_total'])
+                        with col2:
+                            st.metric("Quantidade Comprometida", disponibilidade['quantidade_comprometida'])
+                        with col3:
+                            cor = "normal" if disponibilidade['quantidade_disponivel'] > 0 else "inverse"
+                            st.metric("Quantidade Disponível", disponibilidade['quantidade_disponivel'], delta=None)
+                        
+                        if disponibilidade['compromissos_ativos']:
+                            st.subheader("Compromissos Ativos nesta Data")
+                            for comp in disponibilidade['compromissos_ativos']:
+                                with st.expander(f"Compromisso #{comp.id} - {comp.quantidade} unidades ({comp.data_inicio} a {comp.data_fim})"):
+                                    st.write(f"**Item:** {comp.item.nome}")
+                                    st.write(f"**Quantidade:** {comp.quantidade}")
+                                    st.write(f"**Período:** {comp.data_inicio.strftime('%d/%m/%Y')} a {comp.data_fim.strftime('%d/%m/%Y')}")
+                                    if hasattr(comp, 'descricao') and comp.descricao:
+                                        st.write(f"**Descrição:** {comp.descricao}")
+                                    if hasattr(comp, 'cidade') and hasattr(comp, 'uf') and comp.cidade and comp.uf:
+                                        localizacao_str = f"{comp.cidade} - {comp.uf}"
+                                        if hasattr(comp, 'endereco') and comp.endereco:
+                                            localizacao_str += f" ({comp.endereco})"
+                                        st.write(f"**Localização:** {localizacao_str}")
+                                    if hasattr(comp, 'contratante') and comp.contratante:
+                                        st.write(f"**Contratante:** {comp.contratante}")
+                        else:
+                            st.info("ℹ️ Nenhum compromisso ativo nesta data.")
+                    else:
+                        st.error("❌ Item não encontrado.")
         else: # Todos os Itens
             if st.button("Verificar Disponibilidade de Todos os Itens", type="primary"):
                 # Passa o filtro de localização para a função
                 resultados = db.verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None)
                     
                 st.subheader(f"Disponibilidade em {data_consulta.strftime('%d/%m/%Y')}")
+                if categoria_filtro != "Todas as Categorias":
+                    st.info(f"📦 **Filtro aplicado:** Categoria '{categoria_filtro}'")
                 if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
                     st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
                 
                 if resultados:
+                    # Separa carros e itens de estrutura
+                    carros_resultados = []
+                    estrutura_resultados = []
+                    
                     for resultado in resultados:
-                        with st.container():
-                            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-                            with col1:
-                                st.write(f"**{resultado['item'].nome}**")
+                        categoria_item = getattr(resultado['item'], 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                        if categoria_item == 'Carros':
+                            carros_resultados.append(resultado)
+                        else:
+                            estrutura_resultados.append(resultado)
+                    
+                    # Agrupa carros por marca+modelo
+                    if carros_resultados:
+                        # Se há filtro de localização, remove carros que não estão na localização
+                        if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                            cidade_uf = filtro_localizacao.split(" - ")
+                            if len(cidade_uf) == 2:
+                                cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                carros_resultados = [r for r in carros_resultados 
+                                                   if hasattr(r['item'], 'cidade') and hasattr(r['item'], 'uf')
+                                                   and r['item'].cidade == cidade_filtro 
+                                                   and r['item'].uf == uf_filtro.upper()]
+                        
+                        carros_agrupados = {}
+                        for resultado in carros_resultados:
+                            item = resultado['item']
+                            carro = getattr(item, 'carro', None)
+                            if carro:
+                                marca = getattr(carro, 'marca', 'N/A')
+                                modelo = carro.modelo
+                                chave = f"{marca} {modelo}"
+                                
+                                if chave not in carros_agrupados:
+                                    carros_agrupados[chave] = {
+                                        'marca': marca,
+                                        'modelo': modelo,
+                                        'itens': [],
+                                        'total_disponivel': 0,
+                                        'total_comprometido': 0
+                                    }
+                                
+                                carros_agrupados[chave]['itens'].append({
+                                    'item': item,
+                                    'carro': carro,
+                                    'disponivel': resultado['quantidade_disponivel'],
+                                    'comprometido': resultado['quantidade_comprometida']
+                                })
+                                carros_agrupados[chave]['total_disponivel'] += resultado['quantidade_disponivel']
+                                carros_agrupados[chave]['total_comprometido'] += resultado['quantidade_comprometida']
+                        
+                        # Mostra carros agrupados
+                        for chave, grupo in sorted(carros_agrupados.items()):
+                            with st.expander(f"🚗 **{chave}** - {grupo['total_disponivel']} disponível(is) de {len(grupo['itens'])} total"):
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Total de Veículos", len(grupo['itens']))
+                                with col2:
+                                    st.metric("Comprometidos", grupo['total_comprometido'])
+                                with col3:
+                                    st.metric("Disponíveis", grupo['total_disponivel'])
+                                
+                                st.divider()
+                                st.write("**Placas dos Veículos:**")
+                                for item_info in grupo['itens']:
+                                    carro = item_info['carro']
+                                    item_carro = item_info['item']
+                                    disponivel = item_info['disponivel']
+                                    comprometido = item_info['comprometido']
+                                    status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
+                                    
+                                    # Mostra placa e localização
+                                    info_placa = f"- **{carro.placa}** ({carro.ano}) - {status}"
+                                    if hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf') and item_carro.cidade and item_carro.uf:
+                                        localizacao_carro = f"{item_carro.cidade} - {item_carro.uf}"
+                                        if hasattr(item_carro, 'endereco') and item_carro.endereco:
+                                            localizacao_carro += f" ({item_carro.endereco})"
+                                        info_placa += f" | 📍 {localizacao_carro}"
+                                    
+                                    st.write(info_placa)
+                                    if comprometido > 0:
+                                        st.caption(f"  Comprometido: {comprometido}")
+                    
+                    # Mostra itens de Estrutura de Evento
+                    if estrutura_resultados:
+                        # Se há filtro de localização, remove itens que não estão na localização
+                        if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                            cidade_uf = filtro_localizacao.split(" - ")
+                            if len(cidade_uf) == 2:
+                                cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                estrutura_resultados = [r for r in estrutura_resultados 
+                                                      if hasattr(r['item'], 'cidade') and hasattr(r['item'], 'uf')
+                                                      and r['item'].cidade == cidade_filtro 
+                                                      and r['item'].uf == uf_filtro.upper()]
+                        
+                        for resultado in estrutura_resultados:
+                            item_nome = resultado['item'].nome
+                            disponivel = resultado['quantidade_disponivel']
+                            total = resultado['quantidade_total']
+                            comprometido = resultado['quantidade_comprometida']
+                            
+                            with st.expander(f"📦 **{item_nome}** - {disponivel} disponível(is) de {total} total"):
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Quantidade Total", total)
+                                with col2:
+                                    st.metric("Comprometidos", comprometido)
+                                with col3:
+                                    st.metric("Disponíveis", disponivel)
+                                
+                                st.divider()
+                                
                                 # Mostra localização do item se disponível
                                 if hasattr(resultado['item'], 'cidade') and hasattr(resultado['item'], 'uf') and resultado['item'].cidade and resultado['item'].uf:
                                     localizacao_str = f"{resultado['item'].cidade} - {resultado['item'].uf}"
                                     if hasattr(resultado['item'], 'endereco') and resultado['item'].endereco:
                                         localizacao_str += f" ({resultado['item'].endereco})"
-                                    st.caption(f"📍 {localizacao_str}")
+                                    st.write(f"**Localização:** {localizacao_str}")
+                                
                                 # Mostra aviso se item não está na localização filtrada
                                 if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
                                     cidade_uf = filtro_localizacao.split(" - ")
@@ -978,26 +1318,23 @@ elif menu == "Verificar Disponibilidade":
                                         item_na_localizacao = (hasattr(resultado['item'], 'cidade') and hasattr(resultado['item'], 'uf') and 
                                                               resultado['item'].cidade == cidade_filtro and resultado['item'].uf == uf_filtro.upper())
                                         if not item_na_localizacao:
-                                            st.caption("⚠️ Item não está nesta localização")
-                            with col2:
-                                st.write(f"Total: {resultado['quantidade_total']}")
-                            with col3:
-                                st.write(f"Comprometido: {resultado['quantidade_comprometida']}")
-                            with col4:
-                                disponivel = resultado['quantidade_disponivel']
-                                if disponivel < 0:
-                                    st.error(f"⚠️ {disponivel}")
-                                elif disponivel == 0:
-                                    st.warning(f"{disponivel}")
-                                else:
-                                    st.success(f"✅ {disponivel}")
-                            st.divider()
+                                            st.warning("⚠️ Este item não está na localização filtrada.")
+                                
+                                # Mostra descrição se disponível
+                                if hasattr(resultado['item'], 'descricao') and resultado['item'].descricao:
+                                    st.divider()
+                                    st.write(f"**Descrição:** {resultado['item'].descricao}")
                 else:
                     st.info("ℹ️ Nenhum item cadastrado ou disponível.")
 
 # Página Visualizar Dados
 elif menu == "Visualizar Dados":
     st.header("Visualizar Dados")
+    
+    # Filtro por categoria
+    itens = db.listar_itens()
+    categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
+    categoria_filtro_viz = st.selectbox("Filtrar por Categoria (opcional)", options=["Todas as Categorias"] + categorias_disponiveis, index=0, key="filtro_categoria_viz")
     
     tab1, tab2 = st.tabs(["Itens", "Compromissos"])
     
@@ -1010,6 +1347,10 @@ elif menu == "Visualizar Dados":
             busca_item = st.text_input("🔍 Buscar item", placeholder="Digite o nome do item para filtrar...", key="busca_item")
         
         itens = db.listar_itens()
+        
+        # Filtra por categoria se selecionada
+        if categoria_filtro_viz != "Todas as Categorias":
+            itens = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro_viz]
         
         # Carrega compromissos UMA vez para evitar múltiplas chamadas à API
         compromissos_todos = db.listar_compromissos()
@@ -1031,13 +1372,38 @@ elif menu == "Visualizar Dados":
         
         if itens:
             for item in itens:
-                with st.expander(f"📦 {item.nome} - Estoque Total: {item.quantidade_total}"):
+                categoria_item = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                # Título do expander muda baseado na categoria
+                if categoria_item == 'Carros':
+                    carro = getattr(item, 'carro', None)
+                    if carro:
+                        titulo_expander = f"🚗 {item.nome} - {carro.placa}"
+                    else:
+                        titulo_expander = f"🚗 {item.nome}"
+                else:
+                    titulo_expander = f"📦 {item.nome} - Estoque Total: {item.quantidade_total}"
+                
+                with st.expander(titulo_expander):
                     col1, col2 = st.columns([3, 1])
                     
                     with col1:
                         st.write(f"**ID:** {item.id}")
+                        categoria_item = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                        st.write(f"**Categoria:** {categoria_item}")
                         st.write(f"**Nome:** {item.nome}")
-                        st.write(f"**Quantidade Total:** {item.quantidade_total}")
+                        # Quantidade só aparece para Estrutura de Evento
+                        if categoria_item != 'Carros':
+                            st.write(f"**Quantidade Total:** {item.quantidade_total}")
+                        
+                        # Mostra campos específicos de carro se aplicável
+                        if categoria_item == 'Carros':
+                            carro = getattr(item, 'carro', None)
+                            if carro:
+                                st.write(f"**Marca:** {getattr(carro, 'marca', 'N/A')}")
+                                st.write(f"**Modelo:** {carro.modelo}")
+                                st.write(f"**Placa:** {carro.placa}")
+                                st.write(f"**Ano:** {carro.ano}")
+                        
                         if hasattr(item, 'descricao') and item.descricao:
                             st.write(f"**Descrição:** {item.descricao}")
                         if hasattr(item, 'cidade') and hasattr(item, 'uf') and item.cidade and item.uf:
@@ -1059,6 +1425,13 @@ elif menu == "Visualizar Dados":
                                 st.session_state[f'edit_cidade_{item.id}'] = getattr(item, 'cidade', '') or ''
                                 st.session_state[f'edit_uf_{item.id}'] = getattr(item, 'uf', 'SP') or 'SP'
                                 st.session_state[f'edit_endereco_{item.id}'] = getattr(item, 'endereco', '') or ''
+                                # Inicializa campos de carro se existir
+                                carro = getattr(item, 'carro', None)
+                                if carro:
+                                    st.session_state[f'edit_marca_{item.id}'] = getattr(carro, 'marca', '')
+                                    st.session_state[f'edit_placa_{item.id}'] = carro.placa
+                                    st.session_state[f'edit_modelo_{item.id}'] = carro.modelo
+                                    st.session_state[f'edit_ano_{item.id}'] = carro.ano
                         with col_del:
                             if st.button(f"🗑️ Deletar", key=f"del_item_{item.id}"):
                                 try:
@@ -1073,9 +1446,54 @@ elif menu == "Visualizar Dados":
                         st.divider()
                         st.write("**Editar Item**")
                         with st.form(f"form_edit_item_{item.id}"):
+                            # Determina categoria atual
+                            categoria_atual = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                            categoria_index = 0 if categoria_atual == 'Estrutura de Evento' else 1
+                            edit_categoria = st.selectbox("Categoria *", options=["Estrutura de Evento", "Carros"], index=categoria_index, key=f"input_categoria_{item.id}")
+                            
                             edit_nome = st.text_input("Nome do Item", value=st.session_state.get(f'edit_nome_{item.id}', item.nome), key=f"input_nome_{item.id}")
-                            edit_quantidade = st.number_input("Quantidade Total", min_value=1, value=st.session_state.get(f'edit_quantidade_{item.id}', item.quantidade_total), key=f"input_quantidade_{item.id}")
+                            
+                            # Quantidade só aparece para Estrutura de Evento
+                            if edit_categoria == "Carros":
+                                # Para carros, quantidade é sempre 1
+                                edit_quantidade = 1
+                            else:
+                                edit_quantidade = st.number_input("Quantidade Total", min_value=1, value=st.session_state.get(f'edit_quantidade_{item.id}', item.quantidade_total), key=f"input_quantidade_{item.id}")
+                            
                             edit_descricao = st.text_area("Descrição (opcional)", value=st.session_state.get(f'edit_descricao_{item.id}', getattr(item, 'descricao', '') or ''), key=f"input_descricao_{item.id}")
+                            
+                            # Campos específicos para carros
+                            if edit_categoria == "Carros":
+                                carro_atual = getattr(item, 'carro', None)
+                                marca_atual = getattr(carro_atual, 'marca', '') if carro_atual else ''
+                                placa_atual = carro_atual.placa if carro_atual else ''
+                                modelo_atual = carro_atual.modelo if carro_atual else ''
+                                ano_atual = carro_atual.ano if carro_atual else 2020
+                                
+                                # Busca índice da marca atual
+                                marca_index = 0
+                                if marca_atual and marca_atual in MARCAS_CARROS:
+                                    marca_index = MARCAS_CARROS.index(marca_atual)
+                                
+                                col_marca, col_modelo = st.columns(2)
+                                with col_marca:
+                                    edit_marca = st.selectbox("Marca *", options=MARCAS_CARROS, index=marca_index, key=f"input_marca_{item.id}")
+                                with col_modelo:
+                                    edit_modelo = st.text_input("Modelo *", value=st.session_state.get(f'edit_modelo_{item.id}', modelo_atual), key=f"input_modelo_{item.id}")
+                                
+                                col_placa, col_ano = st.columns(2)
+                                with col_placa:
+                                    edit_placa = st.text_input("Placa *", value=st.session_state.get(f'edit_placa_{item.id}', placa_atual), key=f"input_placa_{item.id}", max_chars=10)
+                                with col_ano:
+                                    edit_ano = st.number_input("Ano *", min_value=1900, max_value=2100, value=st.session_state.get(f'edit_ano_{item.id}', ano_atual), key=f"input_ano_{item.id}", step=1)
+                                
+                                # Atualiza nome automaticamente
+                                edit_nome = f"{edit_marca} {edit_modelo}".strip() if edit_modelo else edit_nome
+                            else:
+                                edit_marca = None
+                                edit_placa = None
+                                edit_modelo = None
+                                edit_ano = None
                             
                             st.markdown("**Localização do Item**")
                             col1, col2 = st.columns(2)
@@ -1094,9 +1512,27 @@ elif menu == "Visualizar Dados":
                                 cancel = st.form_submit_button("❌ Cancelar")
                             
                             if submitted:
-                                if edit_nome.strip() and edit_cidade.strip() and edit_uf:
+                                # Validação básica
+                                campos_ok = edit_nome.strip() and edit_cidade.strip() and edit_uf
+                                if edit_categoria == "Carros":
+                                    campos_ok = campos_ok and edit_marca and edit_placa and edit_modelo and edit_ano
+                                
+                                if campos_ok:
                                     try:
-                                        item_atualizado = db.atualizar_item(item.id, edit_nome.strip(), edit_quantidade, edit_descricao.strip() if edit_descricao else None, edit_cidade.strip(), edit_uf, edit_endereco.strip() if edit_endereco else None)
+                                        item_atualizado = db.atualizar_item(
+                                            item.id, 
+                                            edit_nome.strip(), 
+                                            edit_quantidade, 
+                                            edit_categoria,
+                                            edit_descricao.strip() if edit_descricao else None, 
+                                            edit_cidade.strip(), 
+                                            edit_uf, 
+                                            edit_endereco.strip() if edit_endereco else None,
+                                            edit_placa.strip() if edit_placa else None,
+                                            edit_marca.strip() if edit_marca else None,
+                                            edit_modelo.strip() if edit_modelo else None,
+                                            int(edit_ano) if edit_ano else None
+                                        )
                                         if item_atualizado:
                                             st.success("✅ Item atualizado com sucesso!")
                                             st.session_state[f'editing_item_{item.id}'] = False
@@ -1106,7 +1542,7 @@ elif menu == "Visualizar Dados":
                                     except Exception as e:
                                         st.error(f"❌ Erro ao atualizar item: {str(e)}")
                                 else:
-                                    st.warning("⚠️ Por favor, preencha o nome do item.")
+                                    st.warning("⚠️ Por favor, preencha os campos obrigatórios.")
                             
                             if cancel:
                                 st.session_state[f'editing_item_{item.id}'] = False
@@ -1154,6 +1590,9 @@ elif menu == "Visualizar Dados":
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**ID:** {comp.id}")
+                        if comp.item:
+                            categoria_item_comp = getattr(comp.item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                            st.write(f"**Categoria:** {categoria_item_comp}")
                         st.write(f"**Item:** {comp.item.nome if comp.item else 'Item Deletado (ID: ' + str(comp.item_id) + ')'}")
                         st.write(f"**Quantidade:** {comp.quantidade}")
                         st.write(f"**Período:** {comp.data_inicio.strftime('%d/%m/%Y')} a {comp.data_fim.strftime('%d/%m/%Y')}")
@@ -1247,7 +1686,7 @@ elif menu == "Visualizar Dados":
                                 if edit_data_fim < edit_data_inicio:
                                     st.error("❌ Data fim deve ser igual ou posterior à data início!")
                                 elif not edit_cidade.strip() or not edit_uf:
-                                    st.warning("⚠️ Por favor, preencha a cidade e selecione a UF.")
+                                    st.warning("⚠️ Por favor, preencha os campos obrigatórios.")
                                 else:
                                     try:
                                         compromisso_atualizado = db.atualizar_compromisso(

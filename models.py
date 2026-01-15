@@ -16,11 +16,30 @@ class Item(Base):
     cidade = Column(String(200), nullable=False)
     uf = Column(String(2), nullable=False)
     endereco = Column(String(500))
+    categoria = Column(String(50), nullable=False, default='Estrutura de Evento')  # Nova coluna
     
+    # Relacionamento com Carro (um para um)
+    carro = relationship("Carro", back_populates="item", uselist=False, cascade="all, delete-orphan")
     compromissos = relationship("Compromisso", back_populates="item", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Item(nome='{self.nome}', quantidade_total={self.quantidade_total})>"
+        return f"<Item(nome='{self.nome}', quantidade_total={self.quantidade_total}, categoria='{self.categoria}')>"
+
+
+class Carro(Base):
+    __tablename__ = 'carros'
+    
+    id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey('itens.id'), nullable=False, unique=True)
+    placa = Column(String(10), nullable=False)
+    marca = Column(String(50), nullable=False)
+    modelo = Column(String(100), nullable=False)
+    ano = Column(Integer, nullable=False)
+    
+    item = relationship("Item", back_populates="carro")
+    
+    def __repr__(self):
+        return f"<Carro(item_id={self.item_id}, placa='{self.placa}', marca='{self.marca}', modelo='{self.modelo}', ano={self.ano})>"
 
 
 class Compromisso(Base):

@@ -78,19 +78,29 @@ def get_sheets():
     return _sheets_cache
 
 
-def criar_item(nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
     """Cria um novo item no estoque
     
     Args:
         nome: Nome do item
         quantidade_total: Quantidade total disponível
+        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
         endereco: Endereço opcional do item
+        placa: Placa do carro (obrigatório se categoria='Carros')
+        marca: Marca do carro (obrigatório se categoria='Carros')
+        modelo: Modelo do carro (obrigatório se categoria='Carros')
+        ano: Ano do carro (obrigatório se categoria='Carros')
     """
     if not cidade or not uf:
         raise ValueError("Cidade e UF são obrigatórios")
+    
+    # Validação para carros
+    if categoria == 'Carros':
+        if not placa or not marca or not modelo or not ano:
+            raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
     
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
@@ -112,26 +122,58 @@ def criar_item(nome, quantidade_total, descricao=None, cidade=None, uf=None, end
     
     # Adiciona novo item
     try:
-        sheet_itens.append_row([next_id, nome, quantidade_total, descricao or '', cidade, uf.upper()[:2], endereco or ''])
+        sheet_itens.append_row([next_id, nome, quantidade_total, categoria, descricao or '', cidade, uf.upper()[:2], endereco or ''])
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "criar_item (adicionar linha)")
+    
+    # Se for carro, cria registro na aba Carros
+    if categoria == 'Carros':
+        sheet_carros = sheets['sheet_carros']
+        try:
+            all_carros = sheet_carros.get_all_records()
+            if all_carros:
+                valid_carro_ids = [int(record.get('ID', 0)) for record in all_carros if record and record.get('ID')]
+                next_carro_id = max(valid_carro_ids) + 1 if valid_carro_ids else 1
+            else:
+                next_carro_id = 1
+        except (IndexError, KeyError, ValueError):
+            next_carro_id = 1
+        
+        try:
+            sheet_carros.append_row([next_carro_id, next_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)])
+        except gspread.exceptions.APIError as e:
+            _handle_api_error(e, "criar_item (adicionar carro)")
     
     # Limpa cache para forçar atualização na próxima leitura
     _clear_cache()
     
     # Retorna objeto similar ao modelo Item
     class Item:
-        def __init__(self, id, nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+        def __init__(self, id, nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, carro=None):
             self.id = id
             self.nome = nome
             self.quantidade_total = quantidade_total
+            self.categoria = categoria or 'Estrutura de Evento'
             self.descricao = descricao or ''
             self.cidade = cidade or ''
             self.uf = (uf or '').upper()[:2]
             self.endereco = endereco or ''
+            self.carro = carro
             self.compromissos = []
     
-    return Item(next_id, nome, quantidade_total, descricao, cidade, uf, endereco)
+    # Busca dados do carro se aplicável
+    carro_obj = None
+    if categoria == 'Carros':
+        class Carro:
+            def __init__(self, item_id, placa, marca, modelo, ano):
+                self.item_id = item_id
+                self.placa = placa
+                self.marca = marca
+                self.modelo = modelo
+                self.ano = int(ano)
+        carro_obj = Carro(next_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano))
+    
+    return Item(next_id, nome, quantidade_total, categoria, descricao, cidade, uf, endereco, carro_obj)
 
 
 def listar_itens():
@@ -152,15 +194,38 @@ def listar_itens():
         # Se a aba estiver vazia ou sem cabeçalhos, retorna lista vazia
         return []
     
+    # Busca dados de carros
+    carros_dict = {}
+    try:
+        sheet_carros = sheets['sheet_carros']
+        carros_records = sheet_carros.get_all_records()
+        for carro_record in carros_records:
+            if carro_record and carro_record.get('Item ID'):
+                item_id = int(carro_record.get('Item ID'))
+                carros_dict[item_id] = carro_record
+    except (IndexError, KeyError, ValueError, gspread.exceptions.APIError):
+        # Se não conseguir ler carros, continua sem eles
+        pass
+    
+    class Carro:
+        def __init__(self, item_id, placa, marca, modelo, ano):
+            self.item_id = item_id
+            self.placa = placa
+            self.marca = marca
+            self.modelo = modelo
+            self.ano = int(ano) if ano else 0
+    
     class Item:
-        def __init__(self, id, nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+        def __init__(self, id, nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, carro=None):
             self.id = int(id) if id else None
             self.nome = nome
             self.quantidade_total = int(quantidade_total) if quantidade_total else 0
+            self.categoria = categoria or 'Estrutura de Evento'
             self.descricao = descricao or ''
             self.cidade = cidade or ''
             self.uf = (uf or '').upper()[:2]
             self.endereco = endereco or ''
+            self.carro = carro
             self.compromissos = []
     
     itens = []
@@ -168,14 +233,31 @@ def listar_itens():
         # Verifica se o registro tem os campos necessários
         if record and record.get('ID') and record.get('Nome'):
             try:
+                item_id = int(record.get('ID'))
+                categoria = record.get('Categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                
+                # Busca carro se existir
+                carro_obj = None
+                if categoria == 'Carros' and item_id in carros_dict:
+                    carro_data = carros_dict[item_id]
+                    carro_obj = Carro(
+                        item_id,
+                        carro_data.get('Placa', ''),
+                        carro_data.get('Marca', ''),
+                        carro_data.get('Modelo', ''),
+                        carro_data.get('Ano', 0)
+                    )
+                
                 itens.append(Item(
                     record.get('ID'),
                     record.get('Nome'),
                     record.get('Quantidade Total', 0),
+                    categoria,
                     record.get('Descrição', ''),
                     record.get('Cidade', ''),
                     record.get('UF', ''),
-                    record.get('Endereço', '')
+                    record.get('Endereço', ''),
+                    carro_obj
                 ))
             except (ValueError, TypeError):
                 # Ignora registros inválidos
@@ -197,17 +279,22 @@ def buscar_item_por_id(item_id):
     return None
 
 
-def atualizar_item(item_id, nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
     """Atualiza um item existente
     
     Args:
         item_id: ID do item
         nome: Nome do item
         quantidade_total: Quantidade total disponível
+        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
         endereco: Endereço opcional do item
+        placa: Placa do carro (obrigatório se categoria='Carros')
+        marca: Marca do carro (obrigatório se categoria='Carros')
+        modelo: Modelo do carro (obrigatório se categoria='Carros')
+        ano: Ano do carro (obrigatório se categoria='Carros')
     """
     if not cidade or not uf:
         raise ValueError("Cidade e UF são obrigatórios")
@@ -222,14 +309,59 @@ def atualizar_item(item_id, nome, quantidade_total, descricao=None, cidade=None,
     
     # Busca a linha do item
     row_to_update = None
+    categoria_atual = 'Estrutura de Evento'
     for idx, record in enumerate(records, start=2):  # Começa em 2 porque linha 1 é cabeçalho
         if record and str(record.get('ID')) == str(item_id):
             row_to_update = idx
+            categoria_atual = record.get('Categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
             break
     
     if row_to_update:
-        # Atualiza a linha com os novos valores (incluindo descrição, cidade, uf e endereço)
-        sheet_itens.update(f'A{row_to_update}:G{row_to_update}', [[item_id, nome, quantidade_total, descricao or '', cidade, uf.upper()[:2], endereco or '']])
+        # Se categoria não foi fornecida, mantém a atual
+        if categoria is None:
+            categoria = categoria_atual
+        
+        # Validação para carros
+        if categoria == 'Carros':
+            if not placa or not marca or not modelo or not ano:
+                raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+        
+        # Atualiza a linha do item (incluindo categoria)
+        sheet_itens.update(f'A{row_to_update}:H{row_to_update}', [[item_id, nome, quantidade_total, categoria, descricao or '', cidade, uf.upper()[:2], endereco or '']])
+        
+        # Gerencia dados de carro
+        sheet_carros = sheets['sheet_carros']
+        try:
+            carros_records = sheet_carros.get_all_records()
+            carro_row = None
+            for idx, carro_record in enumerate(carros_records, start=2):
+                if carro_record and str(carro_record.get('Item ID')) == str(item_id):
+                    carro_row = idx
+                    break
+            
+            if categoria == 'Carros':
+                if carro_row:
+                    # Atualiza carro existente (colunas C, D, E, F: Placa, Marca, Modelo, Ano)
+                    sheet_carros.update(f'C{carro_row}:F{carro_row}', [[placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)]])
+                else:
+                    # Cria novo registro de carro
+                    try:
+                        all_carros = sheet_carros.get_all_records()
+                        if all_carros:
+                            valid_carro_ids = [int(record.get('ID', 0)) for record in all_carros if record and record.get('ID')]
+                            next_carro_id = max(valid_carro_ids) + 1 if valid_carro_ids else 1
+                        else:
+                            next_carro_id = 1
+                    except (IndexError, KeyError, ValueError):
+                        next_carro_id = 1
+                    sheet_carros.append_row([next_carro_id, item_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)])
+            elif carro_row:
+                # Remove registro de carro se mudou de categoria
+                sheet_carros.delete_rows(carro_row)
+        except (IndexError, KeyError, ValueError, gspread.exceptions.APIError):
+            # Se houver erro ao gerenciar carros, continua
+            pass
+        
         _clear_cache()
         return buscar_item_por_id(item_id)
     

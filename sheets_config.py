@@ -90,6 +90,7 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
     # Nomes das abas
     sheet_itens_name = "Itens"
     sheet_compromissos_name = "Compromissos"
+    sheet_carros_name = "Carros"
     
     # Lista todas as abas existentes
     existing_worksheets = [ws.title for ws in spreadsheet.worksheets()]
@@ -103,41 +104,56 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             header = sheet_itens.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
                 # Se a primeira célula não for 'ID', adiciona cabeçalhos na primeira linha
-                sheet_itens.insert_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"], 1)
+                sheet_itens.insert_row(["ID", "Nome", "Quantidade Total", "Categoria", "Descrição", "Cidade", "UF", "Endereço"], 1)
             else:
                 # Verifica se todas as colunas existem, se não, adiciona
                 headers = sheet_itens.row_values(1)
-                if len(headers) < 7:
-                    # Adiciona colunas faltantes
-                    if len(headers) < 4:
-                        sheet_itens.update('D1', [['Descrição']])
-                    if len(headers) < 5:
-                        sheet_itens.update('E1', [['Cidade']])
-                    if len(headers) < 6:
-                        sheet_itens.update('F1', [['UF']])
-                    if len(headers) < 7:
-                        sheet_itens.update('G1', [['Endereço']])
-                # Verifica se as colunas estão corretas
-                headers = sheet_itens.row_values(1)
-                if len(headers) >= 5 and headers[4] != "Cidade":
-                    sheet_itens.update('E1', [['Cidade']])
-                if len(headers) >= 6 and headers[5] != "UF":
-                    sheet_itens.update('F1', [['UF']])
-                if len(headers) >= 7 and headers[6] != "Endereço":
-                    sheet_itens.update('G1', [['Endereço']])
+                expected_headers = ["ID", "Nome", "Quantidade Total", "Categoria", "Descrição", "Cidade", "UF", "Endereço"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        # Adiciona ou atualiza a coluna na posição correta
+                        col_letter = chr(65 + i)  # A=65, B=66, etc.
+                        sheet_itens.update(f'{col_letter}1', [[expected_header]])
+                headers = sheet_itens.row_values(1)  # Atualiza headers após modificações
         except Exception:
             # Se houver erro ao ler, tenta adicionar cabeçalhos apenas se a aba estiver vazia
             try:
                 all_values = sheet_itens.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"])
+                    sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Categoria", "Descrição", "Cidade", "UF", "Endereço"])
             except Exception:
                 pass  # Ignora erros ao verificar/inserir cabeçalhos
     else:
         # Aba não existe, cria nova
         sheet_itens = spreadsheet.add_worksheet(title=sheet_itens_name, rows=1000, cols=10)
         # Cabeçalhos
-        sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Descrição", "Cidade", "UF", "Endereço"])
+        sheet_itens.append_row(["ID", "Nome", "Quantidade Total", "Categoria", "Descrição", "Cidade", "UF", "Endereço"])
+    
+    # Obtém ou cria aba de Carros
+    if sheet_carros_name in existing_worksheets:
+        sheet_carros = spreadsheet.worksheet(sheet_carros_name)
+        # Verifica se tem cabeçalhos
+        try:
+            header = sheet_carros.get('A1')
+            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
+                sheet_carros.insert_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"], 1)
+            else:
+                headers = sheet_carros.row_values(1)
+                expected_headers = ["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        col_letter = chr(65 + i)
+                        sheet_carros.update(f'{col_letter}1', [[expected_header]])
+        except Exception:
+            try:
+                all_values = sheet_carros.get_all_values()
+                if not all_values or len(all_values) == 0:
+                    sheet_carros.append_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"])
+            except Exception:
+                pass
+    else:
+        sheet_carros = spreadsheet.add_worksheet(title=sheet_carros_name, rows=1000, cols=10)
+        sheet_carros.append_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"])
     
     # Obtém ou cria aba de Compromissos
     if sheet_compromissos_name in existing_worksheets:
@@ -190,6 +206,7 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         'spreadsheet': spreadsheet,
         'sheet_itens': sheet_itens,
         'sheet_compromissos': sheet_compromissos,
+        'sheet_carros': sheet_carros,
         'spreadsheet_id': spreadsheet.id,
         'spreadsheet_url': spreadsheet.url
     }

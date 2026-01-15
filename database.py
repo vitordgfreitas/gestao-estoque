@@ -1,35 +1,62 @@
-from models import get_session, Item, Compromisso
+from models import get_session, Item, Compromisso, Carro
 from datetime import date
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
 
-def criar_item(nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
     """Cria um novo item no estoque
     
     Args:
         nome: Nome do item
         quantidade_total: Quantidade total disponível
+        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
         endereco: Endereço opcional do item
+        placa: Placa do carro (obrigatório se categoria='Carros')
+        marca: Marca do carro (obrigatório se categoria='Carros')
+        modelo: Modelo do carro (obrigatório se categoria='Carros')
+        ano: Ano do carro (obrigatório se categoria='Carros')
     """
     session = get_session()
     try:
         if not cidade or not uf:
             raise ValueError("Cidade e UF são obrigatórios")
         
+        # Validação para carros
+        if categoria == 'Carros':
+            if not placa or not marca or not modelo or not ano:
+                raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+        
         item = Item(
             nome=nome, 
             quantidade_total=quantidade_total,
+            categoria=categoria,
             descricao=descricao,
             cidade=cidade,
             uf=uf.upper()[:2],  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
             endereco=endereco
         )
         session.add(item)
+        session.flush()  # Para obter o ID do item
+        
+        # Se for carro, cria registro na tabela carros
+        if categoria == 'Carros':
+            carro = Carro(
+                item_id=item.id,
+                placa=placa.upper().strip(),
+                marca=marca.strip(),
+                modelo=modelo.strip(),
+                ano=int(ano)
+            )
+            session.add(carro)
+        
         session.commit()
         session.refresh(item)
+        if categoria == 'Carros' and item.carro:
+            session.refresh(item.carro)
+            session.expunge(item.carro)
         session.expunge(item)
         return item
     except Exception as e:
@@ -44,9 +71,11 @@ def listar_itens():
     session = get_session()
     try:
         # Carrega os relacionamentos antes de desanexar
-        itens = session.query(Item).options(joinedload(Item.compromissos)).all()
+        itens = session.query(Item).options(joinedload(Item.compromissos), joinedload(Item.carro)).all()
         # Desanexa todos os objetos da sessão
         for item in itens:
+            if item.carro:
+                session.expunge(item.carro)
             session.expunge(item)
         return itens
     finally:
@@ -57,41 +86,89 @@ def buscar_item_por_id(item_id):
     """Busca um item pelo ID"""
     session = get_session()
     try:
-        item = session.query(Item).filter(Item.id == item_id).first()
+        item = session.query(Item).options(joinedload(Item.carro)).filter(Item.id == item_id).first()
         if item:
+            if item.carro:
+                session.expunge(item.carro)
             session.expunge(item)
         return item
     finally:
         session.close()
 
 
-def atualizar_item(item_id, nome, quantidade_total, descricao=None, cidade=None, uf=None, endereco=None):
+def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
     """Atualiza um item existente
     
     Args:
         item_id: ID do item
         nome: Nome do item
         quantidade_total: Quantidade total disponível
+        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
         endereco: Endereço opcional do item
+        placa: Placa do carro (obrigatório se categoria='Carros')
+        marca: Marca do carro (obrigatório se categoria='Carros')
+        modelo: Modelo do carro (obrigatório se categoria='Carros')
+        ano: Ano do carro (obrigatório se categoria='Carros')
     """
     session = get_session()
     try:
-        item = session.query(Item).filter(Item.id == item_id).first()
+        item = session.query(Item).options(joinedload(Item.carro)).filter(Item.id == item_id).first()
         if item:
             if not cidade or not uf:
                 raise ValueError("Cidade e UF são obrigatórios")
             
+            # Se categoria mudou ou foi especificada
+            if categoria:
+                item.categoria = categoria
+                
+                # Se mudou para Carros, cria registro de carro se não existir
+                if categoria == 'Carros':
+                    if not placa or not marca or not modelo or not ano:
+                        raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+                    
+                    if item.carro:
+                        # Atualiza carro existente
+                        item.carro.placa = placa.upper().strip()
+                        item.carro.marca = marca.strip()
+                        item.carro.modelo = modelo.strip()
+                        item.carro.ano = int(ano)
+                    else:
+                        # Cria novo registro de carro
+                        carro = Carro(
+                            item_id=item.id,
+                            placa=placa.upper().strip(),
+                            marca=marca.strip(),
+                            modelo=modelo.strip(),
+                            ano=int(ano)
+                        )
+                        session.add(carro)
+                elif item.carro:
+                    # Se mudou de Carros para outra categoria, remove o registro de carro
+                    session.delete(item.carro)
+            
+            # Atualiza campos do item
             item.nome = nome
             item.quantidade_total = quantidade_total
             item.descricao = descricao
             item.cidade = cidade
             item.uf = uf.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
             item.endereco = endereco
+            
+            # Se já é carro e não mudou categoria, atualiza dados do carro
+            if item.categoria == 'Carros' and item.carro and placa and marca and modelo and ano:
+                item.carro.placa = placa.upper().strip()
+                item.carro.marca = marca.strip()
+                item.carro.modelo = modelo.strip()
+                item.carro.ano = int(ano)
+            
             session.commit()
             session.refresh(item)
+            if item.carro:
+                session.refresh(item.carro)
+                session.expunge(item.carro)
             session.expunge(item)
             return item
         return None
