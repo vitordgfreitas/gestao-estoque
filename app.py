@@ -394,12 +394,96 @@ elif menu == "📊 Visualizar Dados":
                         if hasattr(comp, 'contratante') and comp.contratante:
                             st.write(f"**Contratante:** {comp.contratante}")
                     with col2:
-                        if st.button(f"🗑️ Deletar", key=f"del_comp_{comp.id}"):
-                            try:
-                                db.deletar_compromisso(comp.id)
-                                st.success("Compromisso deletado com sucesso!")
+                        col_edit, col_del = st.columns(2)
+                        with col_edit:
+                            if st.button(f"✏️ Editar", key=f"edit_comp_{comp.id}"):
+                                st.session_state[f'editing_comp_{comp.id}'] = True
+                                st.session_state[f'edit_item_id_{comp.id}'] = comp.item_id
+                                st.session_state[f'edit_quantidade_{comp.id}'] = comp.quantidade
+                                st.session_state[f'edit_data_inicio_{comp.id}'] = comp.data_inicio
+                                st.session_state[f'edit_data_fim_{comp.id}'] = comp.data_fim
+                                st.session_state[f'edit_descricao_{comp.id}'] = getattr(comp, 'descricao', '') or ''
+                                st.session_state[f'edit_localizacao_{comp.id}'] = getattr(comp, 'localizacao', '') or ''
+                                st.session_state[f'edit_contratante_{comp.id}'] = getattr(comp, 'contratante', '') or ''
+                        with col_del:
+                            if st.button(f"🗑️ Deletar", key=f"del_comp_{comp.id}"):
+                                try:
+                                    db.deletar_compromisso(comp.id)
+                                    st.success("Compromisso deletado com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao deletar: {str(e)}")
+                    
+                    # Formulário de edição
+                    if st.session_state.get(f'editing_comp_{comp.id}', False):
+                        st.divider()
+                        st.write("**Editar Compromisso**")
+                        with st.form(f"form_edit_comp_{comp.id}"):
+                            # Lista de itens para seleção
+                            itens = db.listar_itens()
+                            itens_dict = {item.id: item.nome for item in itens}
+                            item_selecionado = st.selectbox(
+                                "Item",
+                                options=list(itens_dict.keys()),
+                                format_func=lambda x: itens_dict[x],
+                                index=list(itens_dict.keys()).index(comp.item_id) if comp.item_id in itens_dict.keys() else 0,
+                                key=f"select_item_{comp.id}"
+                            )
+                            
+                            edit_quantidade = st.number_input("Quantidade", min_value=1, value=st.session_state.get(f'edit_quantidade_{comp.id}', comp.quantidade), key=f"input_quantidade_{comp.id}")
+                            
+                            col_data1, col_data2 = st.columns(2)
+                            with col_data1:
+                                edit_data_inicio = st.date_input(
+                                    "Data Início",
+                                    value=st.session_state.get(f'edit_data_inicio_{comp.id}', comp.data_inicio),
+                                    key=f"input_data_inicio_{comp.id}"
+                                )
+                            with col_data2:
+                                # Data fim deve ser >= data início
+                                min_date = edit_data_inicio
+                                edit_data_fim = st.date_input(
+                                    "Data Fim",
+                                    value=st.session_state.get(f'edit_data_fim_{comp.id}', comp.data_fim),
+                                    min_value=min_date,
+                                    key=f"input_data_fim_{comp.id}"
+                                )
+                            
+                            edit_descricao = st.text_area("Descrição (opcional)", value=st.session_state.get(f'edit_descricao_{comp.id}', getattr(comp, 'descricao', '') or ''), key=f"input_descricao_{comp.id}")
+                            edit_localizacao = st.text_input("Localização (opcional)", value=st.session_state.get(f'edit_localizacao_{comp.id}', getattr(comp, 'localizacao', '') or ''), key=f"input_localizacao_{comp.id}")
+                            edit_contratante = st.text_input("Contratante (opcional)", value=st.session_state.get(f'edit_contratante_{comp.id}', getattr(comp, 'contratante', '') or ''), key=f"input_contratante_{comp.id}")
+                            
+                            col_save, col_cancel = st.columns(2)
+                            with col_save:
+                                submitted = st.form_submit_button("💾 Salvar Alterações", type="primary")
+                            with col_cancel:
+                                cancel = st.form_submit_button("❌ Cancelar")
+                            
+                            if submitted:
+                                if edit_data_fim < edit_data_inicio:
+                                    st.error("❌ Data fim deve ser igual ou posterior à data início!")
+                                else:
+                                    try:
+                                        if db.atualizar_compromisso(
+                                            comp.id,
+                                            item_selecionado,
+                                            edit_quantidade,
+                                            edit_data_inicio,
+                                            edit_data_fim,
+                                            edit_descricao.strip() if edit_descricao else None,
+                                            edit_localizacao.strip() if edit_localizacao else None,
+                                            edit_contratante.strip() if edit_contratante else None
+                                        ):
+                                            st.success("✅ Compromisso atualizado com sucesso!")
+                                            st.session_state[f'editing_comp_{comp.id}'] = False
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ Erro ao atualizar compromisso. Compromisso não encontrado.")
+                                    except Exception as e:
+                                        st.error(f"❌ Erro ao atualizar compromisso: {str(e)}")
+                            
+                            if cancel:
+                                st.session_state[f'editing_comp_{comp.id}'] = False
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao deletar: {str(e)}")
         else:
             st.info("ℹ️ Nenhum compromisso registrado ainda.")

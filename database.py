@@ -259,6 +259,36 @@ def deletar_item(item_id):
         session.close()
 
 
+def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data_fim, descricao=None, localizacao=None, contratante=None):
+    """Atualiza um compromisso existente"""
+    session = get_session()
+    try:
+        compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
+        if compromisso:
+            compromisso.item_id = item_id
+            compromisso.quantidade = quantidade
+            compromisso.data_inicio = data_inicio
+            compromisso.data_fim = data_fim
+            compromisso.descricao = descricao
+            if hasattr(compromisso, 'localizacao'):
+                compromisso.localizacao = localizacao
+            if hasattr(compromisso, 'contratante'):
+                compromisso.contratante = contratante
+            session.commit()
+            session.refresh(compromisso)
+            compromisso.item  # Força o carregamento do relacionamento
+            session.expunge(compromisso)
+            if compromisso.item:
+                session.expunge(compromisso.item)
+            return True
+        return False
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
 def deletar_compromisso(compromisso_id):
     """Deleta um compromisso"""
     session = get_session()

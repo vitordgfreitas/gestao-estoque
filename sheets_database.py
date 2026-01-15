@@ -399,6 +399,44 @@ def deletar_item(item_id):
     return False
 
 
+def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data_fim, descricao=None, localizacao=None, contratante=None):
+    """Atualiza um compromisso existente"""
+    sheets = get_sheets()
+    sheet_compromissos = sheets['sheet_compromissos']
+    
+    try:
+        records = sheet_compromissos.get_all_records()
+    except (IndexError, KeyError):
+        return False
+    
+    # Busca a linha do compromisso
+    row_to_update = None
+    for idx, record in enumerate(records, start=2):  # Começa em 2 porque linha 1 é cabeçalho
+        if record and str(record.get('ID')) == str(compromisso_id):
+            row_to_update = idx
+            break
+    
+    if row_to_update:
+        # Formata datas
+        data_inicio_str = data_inicio.strftime('%Y-%m-%d') if isinstance(data_inicio, date) else str(data_inicio)
+        data_fim_str = data_fim.strftime('%Y-%m-%d') if isinstance(data_fim, date) else str(data_fim)
+        
+        # Atualiza a linha com os novos valores
+        sheet_compromissos.update(f'A{row_to_update}:H{row_to_update}', [[
+            compromisso_id,
+            item_id,
+            quantidade,
+            data_inicio_str,
+            data_fim_str,
+            descricao or '',
+            localizacao or '',
+            contratante or ''
+        ]])
+        return True
+    
+    return False
+
+
 def deletar_compromisso(compromisso_id):
     """Deleta um compromisso"""
     sheets = get_sheets()
