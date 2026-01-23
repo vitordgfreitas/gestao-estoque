@@ -78,13 +78,94 @@ def get_sheets():
     return _sheets_cache
 
 
-def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
+def obter_categorias():
+    """Obtém todas as categorias únicas da coluna Categoria na aba Itens"""
+    sheets = get_sheets()
+    sheet_itens = sheets['sheet_itens']
+    
+    try:
+        records = sheet_itens.get_all_records()
+        categorias = set()
+        for record in records:
+            if record and record.get('Categoria'):
+                categoria = record.get('Categoria').strip()
+                if categoria:
+                    categorias.add(categoria)
+        
+        # Retorna apenas categorias que existem no Google Sheets
+        return sorted(list(categorias)) if categorias else []
+    except Exception as e:
+        # Em caso de erro, retorna lista vazia
+        return []
+
+
+def obter_campos_categoria(categoria):
+    """Obtém os campos específicos de uma categoria lendo os cabeçalhos da aba com o nome da categoria
+    
+    Args:
+        categoria: Nome da categoria
+        
+    Returns:
+        Lista de nomes de campos (cabeçalhos) da aba da categoria, ou lista vazia se a aba não existir
+    """
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    try:
+        # Tenta obter a aba com o nome da categoria
+        worksheet = spreadsheet.worksheet(categoria)
+        # Lê a primeira linha (cabeçalhos)
+        headers = worksheet.row_values(1)
+        # Remove campos padrão que não são específicos da categoria
+        # Campos padrão: ID, Item ID (são gerenciados pelo sistema)
+        campos_especificos = [h for h in headers if h not in ['ID', 'Item ID', '']]
+        return campos_especificos
+    except gspread.exceptions.WorksheetNotFound:
+        # Aba não existe, retorna lista vazia
+        return []
+    except Exception:
+        # Outro erro, retorna lista vazia
+        return []
+
+
+def obter_ou_criar_aba_categoria(categoria):
+    """Obtém ou cria a aba para uma categoria específica
+    
+    Args:
+        categoria: Nome da categoria
+        
+    Returns:
+        Worksheet da categoria
+    """
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    try:
+        worksheet = spreadsheet.worksheet(categoria)
+        # Verifica se tem cabeçalhos, se não tiver, adiciona padrão
+        try:
+            headers = worksheet.row_values(1)
+            if not headers or len(headers) == 0:
+                # Adiciona cabeçalhos padrão: ID, Item ID
+                worksheet.append_row(['ID', 'Item ID'])
+        except Exception:
+            worksheet.append_row(['ID', 'Item ID'])
+        return worksheet
+    except gspread.exceptions.WorksheetNotFound:
+        # Cria nova aba
+        worksheet = spreadsheet.add_worksheet(title=categoria, rows=1000, cols=10)
+        # Adiciona cabeçalhos padrão
+        worksheet.append_row(['ID', 'Item ID'])
+        return worksheet
+
+
+def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
     """Cria um novo item no estoque
     
     Args:
         nome: Nome do item
         quantidade_total: Quantidade total disponível
-        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
+        categoria: Categoria do item
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
@@ -93,11 +174,12 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
         marca: Marca do carro (obrigatório se categoria='Carros')
         modelo: Modelo do carro (obrigatório se categoria='Carros')
         ano: Ano do carro (obrigatório se categoria='Carros')
+        campos_categoria: Dicionário com campos específicos da categoria {nome_campo: valor}
     """
     if not cidade or not uf:
         raise ValueError("Cidade e UF são obrigatórios")
     
-    # Validação para carros
+    # Validação para carros (mantém compatibilidade)
     if categoria == 'Carros':
         if not placa or not marca or not modelo or not ano:
             raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
@@ -126,43 +208,87 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "criar_item (adicionar linha)")
     
-    # Se for carro, cria registro na aba Carros
-    if categoria == 'Carros':
-        sheet_carros = sheets['sheet_carros']
-        try:
-            all_carros = sheet_carros.get_all_records()
-            if all_carros:
-                valid_carro_ids = [int(record.get('ID', 0)) for record in all_carros if record and record.get('ID')]
-                next_carro_id = max(valid_carro_ids) + 1 if valid_carro_ids else 1
-            else:
-                next_carro_id = 1
-        except (IndexError, KeyError, ValueError):
-            next_carro_id = 1
-        
-        try:
-            sheet_carros.append_row([next_carro_id, next_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)])
-        except gspread.exceptions.APIError as e:
-            _handle_api_error(e, "criar_item (adicionar carro)")
+    # Se houver campos específicos da categoria, salva na aba da categoria
+    if campos_categoria or categoria == 'Carros':
+        # Para compatibilidade com código antigo, trata Carros especialmente
+        if categoria == 'Carros':
+            sheet_categoria = obter_ou_criar_aba_categoria(categoria)
+            try:
+                all_records_cat = sheet_categoria.get_all_records()
+                if all_records_cat:
+                    valid_ids_cat = [int(record.get('ID', 0)) for record in all_records_cat if record and record.get('ID')]
+                    next_cat_id = max(valid_ids_cat) + 1 if valid_ids_cat else 1
+                else:
+                    next_cat_id = 1
+            except (IndexError, KeyError, ValueError):
+                next_cat_id = 1
+            
+            # Lê cabeçalhos da aba
+            headers = sheet_categoria.row_values(1)
+            # Prepara valores na ordem dos cabeçalhos
+            valores = [next_cat_id, next_id]  # ID, Item ID
+            for header in headers[2:]:  # Pula ID e Item ID
+                if header == 'Placa':
+                    valores.append(placa.upper().strip() if placa else '')
+                elif header == 'Marca':
+                    valores.append(marca.strip() if marca else '')
+                elif header == 'Modelo':
+                    valores.append(modelo.strip() if modelo else '')
+                elif header == 'Ano':
+                    valores.append(int(ano) if ano else '')
+                else:
+                    # Usa campos_categoria se fornecido
+                    valores.append(campos_categoria.get(header, '') if campos_categoria else '')
+            
+            try:
+                sheet_categoria.append_row(valores)
+            except gspread.exceptions.APIError as e:
+                _handle_api_error(e, "criar_item (adicionar categoria)")
+        elif campos_categoria:
+            # Para outras categorias, usa campos_categoria
+            sheet_categoria = obter_ou_criar_aba_categoria(categoria)
+            try:
+                all_records_cat = sheet_categoria.get_all_records()
+                if all_records_cat:
+                    valid_ids_cat = [int(record.get('ID', 0)) for record in all_records_cat if record and record.get('ID')]
+                    next_cat_id = max(valid_ids_cat) + 1 if valid_ids_cat else 1
+                else:
+                    next_cat_id = 1
+            except (IndexError, KeyError, ValueError):
+                next_cat_id = 1
+            
+            # Lê cabeçalhos da aba
+            headers = sheet_categoria.row_values(1)
+            # Prepara valores na ordem dos cabeçalhos
+            valores = [next_cat_id, next_id]  # ID, Item ID
+            for header in headers[2:]:  # Pula ID e Item ID
+                valores.append(campos_categoria.get(header, ''))
+            
+            try:
+                sheet_categoria.append_row(valores)
+            except gspread.exceptions.APIError as e:
+                _handle_api_error(e, "criar_item (adicionar categoria)")
     
     # Limpa cache para forçar atualização na próxima leitura
     _clear_cache()
     
     # Retorna objeto similar ao modelo Item
     class Item:
-        def __init__(self, id, nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, carro=None):
+        def __init__(self, id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, carro=None, dados_categoria=None):
             self.id = id
             self.nome = nome
             self.quantidade_total = quantidade_total
-            self.categoria = categoria or 'Estrutura de Evento'
+            self.categoria = categoria or ''
             self.descricao = descricao or ''
             self.cidade = cidade or ''
             self.uf = (uf or '').upper()[:2]
             self.endereco = endereco or ''
             self.carro = carro
+            self.dados_categoria = dados_categoria or {}
             self.compromissos = []
     
-    # Busca dados do carro se aplicável
-    carro_obj = None
+    # Busca dados da categoria se aplicável
+    dados_cat_obj = None
     if categoria == 'Carros':
         class Carro:
             def __init__(self, item_id, placa, marca, modelo, ano):
@@ -172,8 +298,11 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
                 self.modelo = modelo
                 self.ano = int(ano)
         carro_obj = Carro(next_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano))
+        dados_cat_obj = {'carro': carro_obj}
+    elif campos_categoria:
+        dados_cat_obj = campos_categoria
     
-    return Item(next_id, nome, quantidade_total, categoria, descricao, cidade, uf, endereco, carro_obj)
+    return Item(next_id, nome, quantidade_total, categoria, descricao, cidade, uf, endereco, carro_obj if categoria == 'Carros' else None, dados_cat_obj)
 
 
 def listar_itens():
@@ -194,38 +323,56 @@ def listar_itens():
         # Se a aba estiver vazia ou sem cabeçalhos, retorna lista vazia
         return []
     
-    # Busca dados de carros
-    carros_dict = {}
+    # Busca dados de categorias específicas dinamicamente
+    dados_categoria_dict = {}
+    spreadsheet = sheets['spreadsheet']
+    
+    # Obtém todas as categorias únicas dos itens
     try:
-        sheet_carros = sheets['sheet_carros']
-        carros_records = sheet_carros.get_all_records()
-        for carro_record in carros_records:
-            if carro_record and carro_record.get('Item ID'):
-                item_id = int(carro_record.get('Item ID'))
-                carros_dict[item_id] = carro_record
-    except (IndexError, KeyError, ValueError, gspread.exceptions.APIError):
-        # Se não conseguir ler carros, continua sem eles
+        categorias = set()
+        for record in records:
+            if record and record.get('Categoria'):
+                categoria = record.get('Categoria').strip()
+                if categoria:  # Todas as categorias podem ter aba específica
+                    categorias.add(categoria)
+        
+        # Para cada categoria, tenta ler dados da aba correspondente
+        for categoria in categorias:
+            try:
+                sheet_categoria = spreadsheet.worksheet(categoria)
+                categoria_records = sheet_categoria.get_all_records()
+                for cat_record in categoria_records:
+                    if cat_record and cat_record.get('Item ID'):
+                        item_id = int(cat_record.get('Item ID'))
+                        dados_categoria_dict[item_id] = {'categoria': categoria, 'dados': cat_record}
+            except (gspread.exceptions.WorksheetNotFound, IndexError, KeyError, ValueError, gspread.exceptions.APIError):
+                # Aba não existe ou erro ao ler, continua
+                pass
+    except Exception:
+        # Em caso de erro geral, continua sem dados de categoria
         pass
     
+    # Classe Carro mantida apenas para compatibilidade com código antigo que ainda usa item.carro
     class Carro:
-        def __init__(self, item_id, placa, marca, modelo, ano):
+        def __init__(self, item_id, placa=None, marca=None, modelo=None, ano=None):
             self.item_id = item_id
-            self.placa = placa
-            self.marca = marca
-            self.modelo = modelo
+            self.placa = placa or ''
+            self.marca = marca or ''
+            self.modelo = modelo or ''
             self.ano = int(ano) if ano else 0
     
     class Item:
-        def __init__(self, id, nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, carro=None):
+        def __init__(self, id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, carro=None, dados_categoria=None):
             self.id = int(id) if id else None
             self.nome = nome
             self.quantidade_total = int(quantidade_total) if quantidade_total else 0
-            self.categoria = categoria or 'Estrutura de Evento'
+            self.categoria = categoria or ''
             self.descricao = descricao or ''
             self.cidade = cidade or ''
             self.uf = (uf or '').upper()[:2]
             self.endereco = endereco or ''
             self.carro = carro
+            self.dados_categoria = dados_categoria or {}
             self.compromissos = []
     
     itens = []
@@ -234,19 +381,29 @@ def listar_itens():
         if record and record.get('ID') and record.get('Nome'):
             try:
                 item_id = int(record.get('ID'))
-                categoria = record.get('Categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                categoria = record.get('Categoria', '') or ''
                 
-                # Busca carro se existir
+                # Busca dados da categoria se existir
                 carro_obj = None
-                if categoria == 'Carros' and item_id in carros_dict:
-                    carro_data = carros_dict[item_id]
-                    carro_obj = Carro(
-                        item_id,
-                        carro_data.get('Placa', ''),
-                        carro_data.get('Marca', ''),
-                        carro_data.get('Modelo', ''),
-                        carro_data.get('Ano', 0)
-                    )
+                dados_categoria_obj = None
+                
+                if item_id in dados_categoria_dict:
+                    cat_info = dados_categoria_dict[item_id]
+                    cat_data = cat_info['dados']
+                    
+                    # Armazena dados dinamicamente para todas as categorias
+                    dados_categoria_obj = cat_data
+                    
+                    # Para compatibilidade com código antigo que ainda usa item.carro
+                    # Cria objeto Carro apenas se a categoria for Carros e tiver os campos esperados
+                    if cat_info['categoria'] == 'Carros':
+                        carro_obj = Carro(
+                            item_id,
+                            cat_data.get('Placa', ''),
+                            cat_data.get('Marca', ''),
+                            cat_data.get('Modelo', ''),
+                            cat_data.get('Ano', 0)
+                        )
                 
                 itens.append(Item(
                     record.get('ID'),
@@ -257,7 +414,8 @@ def listar_itens():
                     record.get('Cidade', ''),
                     record.get('UF', ''),
                     record.get('Endereço', ''),
-                    carro_obj
+                    carro_obj,
+                    dados_categoria_obj
                 ))
             except (ValueError, TypeError):
                 # Ignora registros inválidos
@@ -286,7 +444,7 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         item_id: ID do item
         nome: Nome do item
         quantidade_total: Quantidade total disponível
-        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
+        categoria: Categoria do item
         descricao: Descrição opcional do item
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
@@ -309,11 +467,11 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     
     # Busca a linha do item
     row_to_update = None
-    categoria_atual = 'Estrutura de Evento'
+    categoria_atual = ''
     for idx, record in enumerate(records, start=2):  # Começa em 2 porque linha 1 é cabeçalho
         if record and str(record.get('ID')) == str(item_id):
             row_to_update = idx
-            categoria_atual = record.get('Categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+            categoria_atual = record.get('Categoria', '') or ''
             break
     
     if row_to_update:

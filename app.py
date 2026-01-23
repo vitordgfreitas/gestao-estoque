@@ -14,6 +14,63 @@ MARCAS_CARROS = [
     'Mini', 'Smart', 'BYD', 'GWM', 'Caoa Chery', 'Outra'
 ]
 
+def obter_campos_agrupamento(categoria, dados_categoria):
+    """Determina campos de agrupamento para uma categoria baseado nos dados
+    
+    Args:
+        categoria: Nome da categoria
+        dados_categoria: Dicionário com dados da categoria
+        
+    Returns:
+        Lista de nomes de campos para agrupamento, ou None se não houver agrupamento
+    """
+    if not dados_categoria or not isinstance(dados_categoria, dict):
+        return None
+    
+    # Campos comuns para agrupamento
+    campos_agrupamento_comuns = {
+        'Carros': ['Marca', 'Modelo'],  # Compatibilidade
+        # Adicione outros padrões aqui conforme necessário
+    }
+    
+    # Verifica padrões conhecidos
+    if categoria in campos_agrupamento_comuns:
+        campos = campos_agrupamento_comuns[categoria]
+        # Verifica se todos os campos existem nos dados
+        if all(campo in dados_categoria for campo in campos):
+            return campos
+    
+    # Tenta inferir campos de agrupamento comuns
+    campos_possiveis = ['Marca', 'Modelo', 'Tipo', 'Categoria', 'Fabricante']
+    campos_encontrados = [campo for campo in campos_possiveis if campo in dados_categoria]
+    
+    return campos_encontrados if campos_encontrados else None
+
+def obter_valor_campo_agrupamento(item, campos_agrupamento):
+    """Obtém valor de agrupamento de um item baseado nos campos especificados
+    
+    Args:
+        item: Objeto Item
+        campos_agrupamento: Lista de nomes de campos para agrupamento
+        
+    Returns:
+        String com valores concatenados dos campos, ou None
+    """
+    if not campos_agrupamento:
+        return None
+    
+    dados_cat = getattr(item, 'dados_categoria', None)
+    if not dados_cat or not isinstance(dados_cat, dict):
+        return None
+    
+    valores = []
+    for campo in campos_agrupamento:
+        valor = dados_cat.get(campo)
+        if valor:
+            valores.append(str(valor))
+    
+    return ' '.join(valores) if valores else None
+
 # Configuração da página
 st.set_page_config(
     page_title="Gestão de Estoque - Aluguel de Itens",
@@ -682,16 +739,36 @@ elif menu == "Registrar Item":
     # Lista de UFs brasileiras
     ufs_brasileiras = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
     
-    # Inicializa categoria no session_state se não existir
+    # Obtém categorias dinamicamente do Google Sheets
+    try:
+        if USE_GOOGLE_SHEETS:
+            categorias_disponiveis = db.obter_categorias()
+        else:
+            # Para SQLite, obtém categorias dos itens existentes
+            itens_existentes = db.listar_itens()
+            categorias_disponiveis = sorted(set([getattr(item, 'categoria', '') or '' for item in itens_existentes if getattr(item, 'categoria', '')]))
+    except Exception:
+        categorias_disponiveis = []
+    
+    # Se não houver categorias, mostra aviso
+    if not categorias_disponiveis:
+        st.warning("⚠️ Não há categorias cadastradas. Por favor, adicione pelo menos uma categoria no Google Sheets.")
+        st.stop()
+    
+    # Inicializa categoria no session_state se não existir (usa primeira categoria disponível)
     categoria_key = f'categoria_form_{form_key}'
     if categoria_key not in st.session_state:
-        st.session_state[categoria_key] = "Estrutura de Evento"
+        st.session_state[categoria_key] = categorias_disponiveis[0] if categorias_disponiveis else ""
     
     # Selectbox de categoria FORA do form para permitir mudança dinâmica
+    categoria_index = 0
+    if st.session_state[categoria_key] in categorias_disponiveis:
+        categoria_index = categorias_disponiveis.index(st.session_state[categoria_key])
+    
     categoria = st.selectbox(
         "Categoria *", 
-        options=["Estrutura de Evento", "Carros"], 
-        index=0 if st.session_state[categoria_key] == "Estrutura de Evento" else 1,
+        options=categorias_disponiveis, 
+        index=categoria_index,
         key=f"select_categoria_{form_key}"
     )
     
@@ -702,10 +779,89 @@ elif menu == "Registrar Item":
     
     categoria_atual = st.session_state[categoria_key]
     
+    # Obtém campos específicos da categoria
+    campos_categoria = []
+    try:
+        if USE_GOOGLE_SHEETS:
+            campos_categoria = db.obter_campos_categoria(categoria_atual)
+    except Exception:
+        campos_categoria = []
+    
     with st.form(form_key):
         
         # Campos que mudam baseado na categoria
-        if categoria_atual == "Carros":
+        # Mantém compatibilidade com código antigo para "Carros"
+        campos_dinamicos = {}
+        
+        # Se há campos específicos da categoria (incluindo Carros se tiver aba), usa lógica dinâmica
+        if campos_categoria:
+            # Renderiza campos dinamicamente baseado nos cabeçalhos da aba da categoria
+            st.markdown(f"**Informações Específicas de {categoria_atual}**")
+            
+            # Para Carros, quantidade é sempre 1 e nome é gerado automaticamente
+            if categoria_atual == "Carros":
+                quantidade = 1
+                # Renderiza campos específicos da categoria
+                marca = None
+                modelo = None
+                placa = None
+                ano = None
+                
+                for campo in campos_categoria:
+                    campo_key = f"{campo}_{form_key}"
+                    campo_lower = campo.lower()
+                    
+                    # Tratamento especial para campos conhecidos de Carros
+                    if campo == 'Marca':
+                        marca = st.selectbox(f"{campo} *", options=MARCAS_CARROS, index=0, key=campo_key)
+                        campos_dinamicos[campo] = marca
+                    elif campo == 'Modelo':
+                        modelo = st.text_input(f"{campo} *", placeholder="Ex: Uno, Gol, Celta, Corolla...", value="", key=campo_key)
+                        campos_dinamicos[campo] = modelo
+                    elif campo == 'Placa':
+                        placa = st.text_input(f"{campo} *", placeholder="ABC-1234", value="", max_chars=10, key=campo_key)
+                        campos_dinamicos[campo] = placa
+                    elif campo == 'Ano' or 'ano' in campo_lower or 'year' in campo_lower:
+                        ano = st.number_input(f"{campo} *", min_value=1900, max_value=2100, value=2020, step=1, key=campo_key)
+                        campos_dinamicos[campo] = ano
+                    else:
+                        # Outros campos como texto
+                        campos_dinamicos[campo] = st.text_input(f"{campo} *", placeholder=f"Digite {campo.lower()}...", value="", key=campo_key)
+                
+                # Gera nome automaticamente como "Marca Modelo" se ambos existirem
+                if marca and modelo:
+                    nome = f"{marca} {modelo}".strip()
+                else:
+                    nome = ""
+                
+                descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Carro em bom estado, revisado recentemente...", value="", key=f"descricao_{form_key}")
+            else:
+                # Para outras categorias com campos específicos
+                nome = st.text_input("Nome do Item *", placeholder="Ex: Nome do item...", value="", key=f"nome_{form_key}")
+                quantidade = st.number_input("Quantidade Total *", min_value=1, value=1, step=1, key=f"quantidade_{form_key}")
+                
+                # Renderiza campos específicos da categoria
+                for campo in campos_categoria:
+                    campo_key = f"{campo}_{form_key}"
+                    # Tenta inferir o tipo de campo pelo nome
+                    campo_lower = campo.lower()
+                    if 'ano' in campo_lower or 'year' in campo_lower:
+                        campos_dinamicos[campo] = st.number_input(f"{campo} *", min_value=1900, max_value=2100, value=2020, step=1, key=campo_key)
+                    elif 'quantidade' in campo_lower or 'qtd' in campo_lower or 'amount' in campo_lower:
+                        campos_dinamicos[campo] = st.number_input(f"{campo} *", min_value=1, value=1, step=1, key=campo_key)
+                    elif 'data' in campo_lower or 'date' in campo_lower:
+                        campos_dinamicos[campo] = st.date_input(f"{campo} *", value=date.today(), key=campo_key)
+                    else:
+                        # Campo de texto por padrão
+                        campos_dinamicos[campo] = st.text_input(f"{campo} *", placeholder=f"Digite {campo.lower()}...", value="", key=campo_key)
+                
+                descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Descrição do item...", value="", key=f"descricao_{form_key}")
+                marca = None
+                placa = None
+                modelo = None
+                ano = None
+        elif categoria_atual == "Carros":
+            # Lógica hardcoded para Carros quando não há aba específica (compatibilidade)
             st.markdown("**Informações do Veículo**")
             # Para carros, quantidade é sempre 1 (cada veículo é único)
             quantidade = 1
@@ -726,7 +882,11 @@ elif menu == "Registrar Item":
             
             # Gera nome automaticamente como "Marca Modelo"
             nome = f"{marca} {modelo}".strip() if modelo else ""
+            
+            # Preenche campos dinâmicos para compatibilidade
+            campos_dinamicos = {'Placa': placa, 'Marca': marca, 'Modelo': modelo, 'Ano': ano}
         else:
+            # Categoria sem campos específicos (padrão)
             nome = st.text_input("Nome do Item *", placeholder="Ex: Alambrado, Mesa, Cadeira...", value="", key=f"nome_{form_key}")
             quantidade = st.number_input("Quantidade Total *", min_value=1, value=1, step=1, key=f"quantidade_{form_key}")
             descricao = st.text_area("Descrição (opcional)", placeholder="Ex: Mesa retangular de madeira, tamanho 3x2 metros...", value="", key=f"descricao_{form_key}")
@@ -748,24 +908,84 @@ elif menu == "Registrar Item":
         if submitted:
             # Validação básica
             campos_ok = nome.strip() and cidade.strip() and uf
-            if categoria == "Carros":
+            
+            if campos_categoria:
+                # Valida campos dinâmicos (incluindo Carros se tiver campos_categoria)
+                for campo in campos_categoria:
+                    valor = campos_dinamicos.get(campo)
+                    if valor is None or (isinstance(valor, str) and not valor.strip()) or valor == '':
+                        campos_ok = False
+                        break
+            elif categoria == "Carros":
+                # Validação hardcoded para Carros sem aba específica
                 campos_ok = campos_ok and marca and placa and modelo and ano
             
             if campos_ok:
                 try:
-                    item = db.criar_item(
-                        nome.strip(), 
-                        quantidade, 
-                        categoria,
-                        descricao.strip() if descricao else None, 
-                        cidade.strip(), 
-                        uf, 
-                        endereco.strip() if endereco else None,
-                        placa.strip() if placa else None,
-                        marca.strip() if marca else None,
-                        modelo.strip() if modelo else None,
-                        int(ano) if ano else None
-                    )
+                    # Prepara campos_categoria para passar para criar_item
+                    campos_cat_dict = None
+                    if campos_categoria and campos_dinamicos:
+                        campos_cat_dict = {}
+                        for campo in campos_categoria:
+                            valor = campos_dinamicos.get(campo)
+                            # Converte valores de data para string se necessário
+                            if isinstance(valor, date):
+                                campos_cat_dict[campo] = valor.strftime('%Y-%m-%d')
+                            elif isinstance(valor, (int, float)):
+                                campos_cat_dict[campo] = valor
+                            else:
+                                campos_cat_dict[campo] = str(valor).strip() if valor is not None else ''
+                    
+                    # Para Carros com campos_categoria, usa campos dinâmicos
+                    # Para Carros sem campos_categoria (hardcoded), usa parâmetros antigos
+                    if categoria == "Carros" and campos_categoria:
+                        # Usa campos dinâmicos
+                        item = db.criar_item(
+                            nome.strip(), 
+                            quantidade, 
+                            categoria,
+                            descricao.strip() if descricao else None, 
+                            cidade.strip(), 
+                            uf, 
+                            endereco.strip() if endereco else None,
+                            None,  # placa vem de campos_categoria
+                            None,  # marca vem de campos_categoria
+                            None,  # modelo vem de campos_categoria
+                            None,  # ano vem de campos_categoria
+                            campos_categoria=campos_cat_dict
+                        )
+                    elif categoria == "Carros":
+                        # Usa parâmetros hardcoded (compatibilidade)
+                        item = db.criar_item(
+                            nome.strip(), 
+                            quantidade, 
+                            categoria,
+                            descricao.strip() if descricao else None, 
+                            cidade.strip(), 
+                            uf, 
+                            endereco.strip() if endereco else None,
+                            placa.strip() if placa else None,
+                            marca.strip() if marca else None,
+                            modelo.strip() if modelo else None,
+                            int(ano) if ano else None,
+                            campos_categoria=None
+                        )
+                    else:
+                        # Outras categorias
+                        item = db.criar_item(
+                            nome.strip(), 
+                            quantidade, 
+                            categoria,
+                            descricao.strip() if descricao else None, 
+                            cidade.strip(), 
+                            uf, 
+                            endereco.strip() if endereco else None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            campos_categoria=campos_cat_dict
+                        )
                     # Incrementa contador para gerar nova key no próximo render
                     st.session_state['form_item_counter'] = st.session_state.get('form_item_counter', 0) + 1
                     st.session_state['item_registrado_sucesso'] = True
@@ -856,40 +1076,122 @@ elif menu == "Registrar Compromisso":
         # Gera uma key única baseada no contador para forçar reset dos campos
         form_key_comp = f"form_compromisso_{st.session_state.get('form_compromisso_counter', 0)}"
         
+        # Filtro por categoria FORA do form para permitir atualização dinâmica
+        categorias_disponiveis = sorted(set([getattr(item, 'categoria', '') or '' for item in itens if getattr(item, 'categoria', '')]))
+        
+        # Inicializa categoria no session_state se não existir
+        categoria_key_comp = f'categoria_compromisso_{form_key_comp}'
+        if categoria_key_comp not in st.session_state:
+            st.session_state[categoria_key_comp] = categorias_disponiveis[0] if categorias_disponiveis else ""
+        
+        if not categorias_disponiveis:
+            st.warning("⚠️ Não há categorias cadastradas.")
+            categoria_filtro = None
+            itens_filtrados = []
+        else:
+            # Selectbox de categoria FORA do form
+            categoria_index_comp = 0
+            if st.session_state[categoria_key_comp] in categorias_disponiveis:
+                categoria_index_comp = categorias_disponiveis.index(st.session_state[categoria_key_comp])
+            
+            categoria_filtro = st.selectbox(
+                "Categoria *", 
+                options=categorias_disponiveis, 
+                index=categoria_index_comp,
+                key=f"select_categoria_comp_{form_key_comp}"
+            )
+            
+            # Atualiza session_state quando categoria mudar e força rerun
+            if st.session_state[categoria_key_comp] != categoria_filtro:
+                st.session_state[categoria_key_comp] = categoria_filtro
+                st.rerun()
+            
+            # Usa a categoria do session_state
+            categoria_filtro_atual = st.session_state[categoria_key_comp]
+            
+            # Filtra itens pela categoria selecionada (com normalização de strings)
+            itens_filtrados = []
+            for item in itens:
+                categoria_item = (getattr(item, 'categoria', '') or '').strip()
+                categoria_filtro_stripped = categoria_filtro_atual.strip() if categoria_filtro_atual else ''
+                if categoria_item == categoria_filtro_stripped:
+                    itens_filtrados.append(item)
+        
         with st.form(form_key_comp):
-            # Filtro por categoria
-            categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
-            categoria_filtro = st.selectbox("Categoria *", options=categorias_disponiveis, index=0)
-            
-            # Filtra itens pela categoria selecionada
-            itens_filtrados = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro]
-            
-            if not itens_filtrados:
-                st.warning(f"⚠️ Não há itens cadastrados na categoria '{categoria_filtro}'.")
-            else:
-                # Seleção do item
-                if categoria_filtro == "Carros":
-                    # Para carros, mostra marca e modelo
-                    item_options = {}
-                    for item in itens_filtrados:
+            if not itens_filtrados and categoria_filtro_atual:
+                st.warning(f"⚠️ Não há itens cadastrados na categoria '{categoria_filtro_atual}'.")
+            elif itens_filtrados:
+                # Seleção do item - dinâmico baseado na categoria
+                item_options = {}
+                for item in itens_filtrados:
+                    # Verifica se o item realmente pertence à categoria selecionada
+                    categoria_item = (getattr(item, 'categoria', '') or '').strip()
+                    categoria_filtro_stripped = categoria_filtro_atual.strip() if categoria_filtro_atual else ''
+                    
+                    # Só adiciona se a categoria corresponder
+                    if categoria_item != categoria_filtro_stripped:
+                        continue
+                    
+                    dados_cat = getattr(item, 'dados_categoria', None)
+                    
+                    # Tenta construir nome descritivo baseado nos dados da categoria
+                    nome_display = item.nome
+                    
+                    if dados_cat and isinstance(dados_cat, dict):
+                        # Para categorias com dados específicos, tenta criar nome mais descritivo
+                        campos_chave = []
+                        # Ordem de prioridade para campos que aparecem no nome
+                        campos_prioridade = ['Marca', 'Modelo', 'Placa', 'Serial', 'Código']
+                        for campo_prioridade in campos_prioridade:
+                            if campo_prioridade in dados_cat and dados_cat[campo_prioridade]:
+                                campos_chave.append(str(dados_cat[campo_prioridade]))
+                        
+                        if campos_chave:
+                            nome_display = f"{item.nome} - {' '.join(campos_chave)}"
+                    
+                    # Compatibilidade: para Carros, usa carro se existir
+                    if categoria_item == "Carros":
                         carro = getattr(item, 'carro', None)
                         if carro:
                             marca = getattr(carro, 'marca', 'N/A')
                             modelo = carro.modelo
                             placa = carro.placa
-                            item_options[f"{marca} {modelo} - {placa}"] = item.id
-                        else:
-                            item_options[f"{item.nome}"] = item.id
-                else:
-                    item_options = {f"{item.nome} (Estoque: {item.quantidade_total})": item.id for item in itens_filtrados}
+                            nome_display = f"{marca} {modelo} - {placa}"
+                    
+                    # Adiciona quantidade se não for categoria que sempre tem quantidade 1
+                    # Verifica se há campos que indicam item único
+                    tem_campo_item_unico = False
+                    if dados_cat and isinstance(dados_cat, dict):
+                        campos_item_unico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único']
+                        tem_campo_item_unico = any(campo in dados_cat for campo in campos_item_unico)
+                    
+                    if categoria_item != "Carros" and not tem_campo_item_unico and hasattr(item, 'quantidade_total'):
+                        nome_display += f" (Estoque: {item.quantidade_total})"
+                    
+                    item_options[nome_display] = item.id
                 
                 item_selecionado = st.selectbox("Selecione o Item *", options=list(item_options.keys()))
                 item_id = item_options[item_selecionado]
                 
-                # Quantidade só aparece para Estrutura de Evento
-                if categoria_filtro == "Carros":
-                    quantidade = 1  # Carros sempre quantidade 1
-                    st.info("ℹ️ Para carros, a quantidade é sempre 1 (cada veículo é único).")
+                # Determina se a categoria tem quantidade fixa em 1 (itens únicos)
+                # Verifica se há campos que indicam item único (Placa, Serial, Código Único, etc.)
+                item_selecionado_obj = next((item for item in itens_filtrados if item.id == item_id), None)
+                quantidade_fixa_1 = False
+                
+                if item_selecionado_obj:
+                    dados_cat = getattr(item_selecionado_obj, 'dados_categoria', None)
+                    if dados_cat and isinstance(dados_cat, dict):
+                        # Campos que indicam item único
+                        campos_item_unico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único', 'Número de Série']
+                        quantidade_fixa_1 = any(campo in dados_cat for campo in campos_item_unico)
+                    
+                    # Compatibilidade: Carros sempre quantidade 1
+                    if categoria_filtro_atual == "Carros":
+                        quantidade_fixa_1 = True
+                
+                if quantidade_fixa_1:
+                    quantidade = 1
+                    st.info(f"ℹ️ Para {categoria_filtro_atual}, a quantidade é sempre 1 (cada item é único).")
                 else:
                     quantidade = st.number_input("Quantidade *", min_value=1, value=1, step=1)
             
@@ -958,12 +1260,12 @@ elif menu == "Verificar Disponibilidade":
             data_consulta = st.date_input("Data de Consulta", value=date.today())
         
         # Filtro por categoria
-        categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
+        categorias_disponiveis = sorted(set([getattr(item, 'categoria', '') or '' for item in itens if getattr(item, 'categoria', '')]))
         categoria_filtro = st.selectbox("Filtrar por Categoria (opcional)", options=["Todas as Categorias"] + categorias_disponiveis, index=0)
         
         # Filtra itens pela categoria se selecionada
         if categoria_filtro != "Todas as Categorias":
-            itens = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro]
+            itens = [item for item in itens if (getattr(item, 'categoria', '') or '') == categoria_filtro]
         
         # Filtro por localização (Cidade - UF)
         localizacoes_disponiveis = set()
@@ -989,119 +1291,176 @@ elif menu == "Verificar Disponibilidade":
             st.info("ℹ️ Nenhum item ou compromisso possui localização cadastrada.")
         
         if modo_consulta == "Item Específico":
-            # Mostra itens filtrados por categoria
-            if categoria_filtro == "Carros":
-                # Para carros, agrupa por marca+modelo
-                item_options = {}
+            # Determina campos de agrupamento para a categoria selecionada
+            campos_agrupamento = None
+            if categoria_filtro != "Todas as Categorias" and itens:
+                primeiro_item = itens[0]
+                dados_cat = getattr(primeiro_item, 'dados_categoria', None)
+                if dados_cat:
+                    campos_agrupamento = obter_campos_agrupamento(categoria_filtro, dados_cat)
+            
+            # Constrói opções de itens dinamicamente
+            item_options = {}
+            if campos_agrupamento:
+                # Agrupa por campos de agrupamento
+                grupos = {}
                 for item in itens:
-                    carro = getattr(item, 'carro', None)
-                    if carro:
-                        marca = getattr(carro, 'marca', 'N/A')
-                        modelo = carro.modelo
-                        item_options[f"{marca} {modelo}"] = item.id
+                    chave_agrupamento = obter_valor_campo_agrupamento(item, campos_agrupamento)
+                    if chave_agrupamento:
+                        if chave_agrupamento not in grupos:
+                            grupos[chave_agrupamento] = []
+                        grupos[chave_agrupamento].append(item)
                     else:
+                        # Se não tem campos de agrupamento, mostra individualmente
                         item_options[f"{item.nome}"] = item.id
+                
+                # Adiciona grupos ao item_options
+                for chave, items_grupo in grupos.items():
+                    item_options[chave] = items_grupo[0].id  # Usa o primeiro item do grupo como representante
             else:
-                item_options = {f"{item.nome}": item.id for item in itens}
+                # Sem agrupamento, mostra todos os itens individualmente
+                for item in itens:
+                    nome_display = item.nome
+                    dados_cat = getattr(item, 'dados_categoria', None)
+                    if dados_cat and isinstance(dados_cat, dict):
+                        # Adiciona campos identificadores se existirem
+                        campos_id = ['Placa', 'Serial', 'Código']
+                        valores_id = [str(dados_cat.get(c)) for c in campos_id if dados_cat.get(c)]
+                        if valores_id:
+                            nome_display += f" - {' '.join(valores_id)}"
+                    item_options[nome_display] = item.id
             
             item_selecionado = st.selectbox("Selecione o Item", options=list(item_options.keys()))
             item_id = item_options[item_selecionado]
             
             if st.button("Verificar Disponibilidade", type="primary"):
-                # Se for carro, busca todos os carros com a mesma marca+modelo
-                if categoria_filtro == "Carros":
-                    # Busca o item selecionado para obter marca e modelo
+                # Se há campos de agrupamento, busca todos os itens do mesmo grupo
+                if campos_agrupamento:
+                    # Busca o item selecionado para obter valores de agrupamento
                     item_selecionado_obj = next((item for item in itens if item.id == item_id), None)
                     if item_selecionado_obj:
-                        carro_selecionado = getattr(item_selecionado_obj, 'carro', None)
-                        if carro_selecionado:
-                            marca_selecionada = getattr(carro_selecionado, 'marca', 'N/A')
-                            modelo_selecionado = carro_selecionado.modelo
+                        chave_agrupamento_selecionada = obter_valor_campo_agrupamento(item_selecionado_obj, campos_agrupamento)
+                        
+                        # Busca todos os itens com a mesma chave de agrupamento
+                        itens_mesmo_grupo = []
+                        for item in itens:
+                            chave_item = obter_valor_campo_agrupamento(item, campos_agrupamento)
+                            if chave_item == chave_agrupamento_selecionada:
+                                itens_mesmo_grupo.append(item)
+                        
+                        # Verifica disponibilidade de todos os itens do mesmo grupo
+                        resultados_grupo = []
+                        for item_grupo in itens_mesmo_grupo:
+                            # Se há filtro de localização, verifica se o item está na localização
+                            if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                                cidade_uf = filtro_localizacao.split(" - ")
+                                if len(cidade_uf) == 2:
+                                    cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                    item_na_localizacao = (hasattr(item_grupo, 'cidade') and hasattr(item_grupo, 'uf')
+                                                           and item_grupo.cidade == cidade_filtro 
+                                                           and item_grupo.uf == uf_filtro.upper())
+                                    if not item_na_localizacao:
+                                        continue  # Pula itens que não estão na localização filtrada
                             
-                            # Busca todos os carros com a mesma marca+modelo
-                            carros_mesmo_modelo = [item for item in itens 
-                                                  if getattr(item, 'categoria', 'Estrutura de Evento') == 'Carros'
-                                                  and getattr(item, 'carro', None)
-                                                  and getattr(item.carro, 'marca', '') == marca_selecionada
-                                                  and item.carro.modelo == modelo_selecionado]
+                            disponibilidade_item = db.verificar_disponibilidade(
+                                item_grupo.id,
+                                data_consulta,
+                                filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None
+                            )
+                            if disponibilidade_item:
+                                resultados_grupo.append(disponibilidade_item)
+                        
+                        if resultados_grupo:
+                            st.subheader(f"Disponibilidade para '{chave_agrupamento_selecionada}' em {data_consulta.strftime('%d/%m/%Y')}")
                             
-                            # Verifica disponibilidade de todos os carros do mesmo modelo
-                            resultados_carros = []
-                            for item_carro in carros_mesmo_modelo:
-                                # Se há filtro de localização, verifica se o carro está na localização antes de verificar disponibilidade
-                                if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
-                                    cidade_uf = filtro_localizacao.split(" - ")
-                                    if len(cidade_uf) == 2:
-                                        cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                                        carro_na_localizacao = (hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf')
-                                                               and item_carro.cidade == cidade_filtro 
-                                                               and item_carro.uf == uf_filtro.upper())
-                                        if not carro_na_localizacao:
-                                            continue  # Pula carros que não estão na localização filtrada
-                                
-                                disponibilidade_carro = db.verificar_disponibilidade(
-                                    item_carro.id,
-                                    data_consulta,
-                                    filtro_localizacao if filtro_localizacao != "Todas as Localizações" else None
-                                )
-                                if disponibilidade_carro:
-                                    resultados_carros.append(disponibilidade_carro)
+                            if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                                st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
                             
-                            if resultados_carros:
-                                st.subheader(f"Disponibilidade para '{marca_selecionada} {modelo_selecionado}' em {data_consulta.strftime('%d/%m/%Y')}")
+                            # Calcula totais
+                            total_disponivel = sum(r['quantidade_disponivel'] for r in resultados_grupo)
+                            total_comprometido = sum(r['quantidade_comprometida'] for r in resultados_grupo)
+                            total_itens = len(resultados_grupo)
+                            
+                            # Determina ícone baseado na categoria
+                            categoria_item = getattr(resultados_grupo[0]['item'], 'categoria', '') or ''
+                            icone = "🚗" if categoria_item == "Carros" else "📦"
+                            
+                            with st.expander(f"{icone} **{chave_agrupamento_selecionada}** - {total_disponivel} disponível(is) de {total_itens} total"):
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Total de Itens", total_itens)
+                                with col2:
+                                    st.metric("Comprometidos", total_comprometido)
+                                with col3:
+                                    st.metric("Disponíveis", total_disponivel)
                                 
-                                if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
-                                    st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
+                                st.divider()
                                 
-                                # Agrupa carros
-                                total_disponivel = sum(r['quantidade_disponivel'] for r in resultados_carros)
-                                total_comprometido = sum(r['quantidade_comprometida'] for r in resultados_carros)
-                                total_veiculos = len(resultados_carros)
+                                # Determina campo identificador principal (Placa, Serial, etc.)
+                                campo_id_principal = None
+                                campos_id_possiveis = ['Placa', 'Serial', 'Código', 'Código Único', 'Número de Série']
                                 
-                                with st.expander(f"🚗 **{marca_selecionada} {modelo_selecionado}** - {total_disponivel} disponível(is) de {total_veiculos} total"):
-                                    col1, col2, col3 = st.columns(3)
-                                    with col1:
-                                        st.metric("Total de Veículos", total_veiculos)
-                                    with col2:
-                                        st.metric("Comprometidos", total_comprometido)
-                                    with col3:
-                                        st.metric("Disponíveis", total_disponivel)
+                                # Mostra detalhes de cada item do grupo
+                                for resultado in resultados_grupo:
+                                    item_resultado = resultado['item']
+                                    dados_cat = getattr(item_resultado, 'dados_categoria', None)
                                     
-                                    st.divider()
-                                    st.write("**Placas dos Veículos:**")
-                                    for resultado in resultados_carros:
-                                        carro = getattr(resultado['item'], 'carro', None)
-                                        item_carro = resultado['item']
-                                        if carro:
-                                            disponivel = resultado['quantidade_disponivel']
-                                            comprometido = resultado['quantidade_comprometida']
-                                            status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
-                                            
-                                            # Mostra placa e localização
-                                            info_placa = f"- **{carro.placa}** ({carro.ano}) - {status}"
-                                            if hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf') and item_carro.cidade and item_carro.uf:
-                                                localizacao_carro = f"{item_carro.cidade} - {item_carro.uf}"
-                                                if hasattr(item_carro, 'endereco') and item_carro.endereco:
-                                                    localizacao_carro += f" ({item_carro.endereco})"
-                                                info_placa += f" | 📍 {localizacao_carro}"
-                                            
-                                            st.write(info_placa)
-                                            if comprometido > 0:
-                                                st.caption(f"  Comprometido: {comprometido}")
+                                    # Determina campo identificador
+                                    if dados_cat and isinstance(dados_cat, dict):
+                                        for campo_id in campos_id_possiveis:
+                                            if campo_id in dados_cat and dados_cat[campo_id]:
+                                                campo_id_principal = campo_id
+                                                break
+                                    
+                                    disponivel = resultado['quantidade_disponivel']
+                                    comprometido = resultado['quantidade_comprometida']
+                                    status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
+                                    
+                                    # Constrói informação do item
+                                    if campo_id_principal and dados_cat:
+                                        valor_id = dados_cat.get(campo_id_principal, '')
+                                        info_item = f"- **{campo_id_principal}: {valor_id}**"
+                                        
+                                        # Adiciona outros campos relevantes
+                                        campos_adicionais = ['Ano', 'Modelo']
+                                        for campo_add in campos_adicionais:
+                                            if campo_add in dados_cat and dados_cat[campo_add]:
+                                                info_item += f" ({campo_add}: {dados_cat[campo_add]})"
+                                        
+                                        info_item += f" - {status}"
+                                    else:
+                                        info_item = f"- **{item_resultado.nome}** - {status}"
+                                    
+                                    # Adiciona localização
+                                    if hasattr(item_resultado, 'cidade') and hasattr(item_resultado, 'uf') and item_resultado.cidade and item_resultado.uf:
+                                        localizacao_item = f"{item_resultado.cidade} - {item_resultado.uf}"
+                                        if hasattr(item_resultado, 'endereco') and item_resultado.endereco:
+                                            localizacao_item += f" ({item_resultado.endereco})"
+                                        info_item += f" | 📍 {localizacao_item}"
+                                    
+                                    st.write(info_item)
+                                    if comprometido > 0:
+                                        st.caption(f"  Comprometido: {comprometido}")
                                 
                                 # Mostra compromissos ativos
                                 todos_compromissos = []
-                                for resultado in resultados_carros:
+                                for resultado in resultados_grupo:
                                     todos_compromissos.extend(resultado.get('compromissos_ativos', []))
                                 
                                 if todos_compromissos:
+                                    st.divider()
                                     st.subheader("Compromissos Ativos nesta Data")
                                     for comp in todos_compromissos:
                                         with st.expander(f"Compromisso #{comp.id} - {comp.quantidade} unidades ({comp.data_inicio} a {comp.data_fim})"):
                                             st.write(f"**Item:** {comp.item.nome}")
-                                            carro_comp = getattr(comp.item, 'carro', None)
-                                            if carro_comp:
-                                                st.write(f"**Placa:** {carro_comp.placa}")
+                                            
+                                            # Mostra campos identificadores se existirem
+                                            dados_cat_comp = getattr(comp.item, 'dados_categoria', None)
+                                            if dados_cat_comp and isinstance(dados_cat_comp, dict):
+                                                for campo_id in campos_id_possiveis:
+                                                    if campo_id in dados_cat_comp and dados_cat_comp[campo_id]:
+                                                        st.write(f"**{campo_id}:** {dados_cat_comp[campo_id]}")
+                                            
                                             st.write(f"**Quantidade:** {comp.quantidade}")
                                             st.write(f"**Período:** {comp.data_inicio.strftime('%d/%m/%Y')} a {comp.data_fim.strftime('%d/%m/%Y')}")
                                             if hasattr(comp, 'descricao') and comp.descricao:
@@ -1115,14 +1474,12 @@ elif menu == "Verificar Disponibilidade":
                                                 st.write(f"**Contratante:** {comp.contratante}")
                                 else:
                                     st.info("ℹ️ Nenhum compromisso ativo nesta data.")
-                            else:
-                                st.error("❌ Nenhum carro encontrado.")
                         else:
-                            st.error("❌ Carro não encontrado.")
+                            st.error(f"❌ Nenhum item encontrado para '{chave_agrupamento_selecionada}'.")
                     else:
                         st.error("❌ Item não encontrado.")
                 else:
-                    # Para itens de Estrutura de Evento, comportamento normal
+                    # Para itens sem agrupamento, comportamento normal
                     disponibilidade = db.verificar_disponibilidade(
                         item_id, 
                         data_consulta, 
@@ -1192,138 +1549,174 @@ elif menu == "Verificar Disponibilidade":
                     st.info(f"📍 **Filtro aplicado:** Localização '{filtro_localizacao}'")
                 
                 if resultados:
-                    # Separa carros e itens de estrutura
-                    carros_resultados = []
-                    estrutura_resultados = []
+                    # Agrupa resultados por categoria e depois por campos de agrupamento
+                    resultados_por_categoria = {}
                     
                     for resultado in resultados:
-                        categoria_item = getattr(resultado['item'], 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
-                        if categoria_item == 'Carros':
-                            carros_resultados.append(resultado)
-                        else:
-                            estrutura_resultados.append(resultado)
+                        item = resultado['item']
+                        categoria_item = getattr(item, 'categoria', '') or ''
+                        
+                        if categoria_item not in resultados_por_categoria:
+                            resultados_por_categoria[categoria_item] = []
+                        resultados_por_categoria[categoria_item].append(resultado)
                     
-                    # Agrupa carros por marca+modelo
-                    if carros_resultados:
-                        # Se há filtro de localização, remove carros que não estão na localização
+                    # Processa cada categoria
+                    for categoria_nome, resultados_categoria in resultados_por_categoria.items():
+                        # Aplica filtro de localização se necessário
                         if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
                             cidade_uf = filtro_localizacao.split(" - ")
                             if len(cidade_uf) == 2:
                                 cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                                carros_resultados = [r for r in carros_resultados 
-                                                   if hasattr(r['item'], 'cidade') and hasattr(r['item'], 'uf')
-                                                   and r['item'].cidade == cidade_filtro 
-                                                   and r['item'].uf == uf_filtro.upper()]
+                                resultados_categoria = [r for r in resultados_categoria 
+                                                       if hasattr(r['item'], 'cidade') and hasattr(r['item'], 'uf')
+                                                       and r['item'].cidade == cidade_filtro 
+                                                       and r['item'].uf == uf_filtro.upper()]
                         
-                        carros_agrupados = {}
-                        for resultado in carros_resultados:
-                            item = resultado['item']
-                            carro = getattr(item, 'carro', None)
-                            if carro:
-                                marca = getattr(carro, 'marca', 'N/A')
-                                modelo = carro.modelo
-                                chave = f"{marca} {modelo}"
+                        if not resultados_categoria:
+                            continue
+                        
+                        # Determina campos de agrupamento para esta categoria
+                        primeiro_item = resultados_categoria[0]['item']
+                        dados_cat = getattr(primeiro_item, 'dados_categoria', None)
+                        campos_agrupamento = obter_campos_agrupamento(categoria_nome, dados_cat) if dados_cat else None
+                        
+                        # Determina ícone baseado na categoria
+                        icone = "🚗" if categoria_nome == "Carros" else "📦"
+                        
+                        if campos_agrupamento:
+                            # Agrupa por campos de agrupamento
+                            grupos_agrupados = {}
+                            for resultado in resultados_categoria:
+                                item = resultado['item']
+                                chave_agrupamento = obter_valor_campo_agrupamento(item, campos_agrupamento)
                                 
-                                if chave not in carros_agrupados:
-                                    carros_agrupados[chave] = {
-                                        'marca': marca,
-                                        'modelo': modelo,
+                                if not chave_agrupamento:
+                                    chave_agrupamento = item.nome  # Fallback para nome do item
+                                
+                                if chave_agrupamento not in grupos_agrupados:
+                                    grupos_agrupados[chave_agrupamento] = {
                                         'itens': [],
                                         'total_disponivel': 0,
                                         'total_comprometido': 0
                                     }
                                 
-                                carros_agrupados[chave]['itens'].append({
+                                grupos_agrupados[chave_agrupamento]['itens'].append({
                                     'item': item,
-                                    'carro': carro,
+                                    'dados_categoria': getattr(item, 'dados_categoria', None),
                                     'disponivel': resultado['quantidade_disponivel'],
                                     'comprometido': resultado['quantidade_comprometida']
                                 })
-                                carros_agrupados[chave]['total_disponivel'] += resultado['quantidade_disponivel']
-                                carros_agrupados[chave]['total_comprometido'] += resultado['quantidade_comprometida']
-                        
-                        # Mostra carros agrupados
-                        for chave, grupo in sorted(carros_agrupados.items()):
-                            with st.expander(f"🚗 **{chave}** - {grupo['total_disponivel']} disponível(is) de {len(grupo['itens'])} total"):
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("Total de Veículos", len(grupo['itens']))
-                                with col2:
-                                    st.metric("Comprometidos", grupo['total_comprometido'])
-                                with col3:
-                                    st.metric("Disponíveis", grupo['total_disponivel'])
-                                
-                                st.divider()
-                                st.write("**Placas dos Veículos:**")
-                                for item_info in grupo['itens']:
-                                    carro = item_info['carro']
-                                    item_carro = item_info['item']
-                                    disponivel = item_info['disponivel']
-                                    comprometido = item_info['comprometido']
-                                    status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
-                                    
-                                    # Mostra placa e localização
-                                    info_placa = f"- **{carro.placa}** ({carro.ano}) - {status}"
-                                    if hasattr(item_carro, 'cidade') and hasattr(item_carro, 'uf') and item_carro.cidade and item_carro.uf:
-                                        localizacao_carro = f"{item_carro.cidade} - {item_carro.uf}"
-                                        if hasattr(item_carro, 'endereco') and item_carro.endereco:
-                                            localizacao_carro += f" ({item_carro.endereco})"
-                                        info_placa += f" | 📍 {localizacao_carro}"
-                                    
-                                    st.write(info_placa)
-                                    if comprometido > 0:
-                                        st.caption(f"  Comprometido: {comprometido}")
-                    
-                    # Mostra itens de Estrutura de Evento
-                    if estrutura_resultados:
-                        # Se há filtro de localização, remove itens que não estão na localização
-                        if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
-                            cidade_uf = filtro_localizacao.split(" - ")
-                            if len(cidade_uf) == 2:
-                                cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                                estrutura_resultados = [r for r in estrutura_resultados 
-                                                      if hasattr(r['item'], 'cidade') and hasattr(r['item'], 'uf')
-                                                      and r['item'].cidade == cidade_filtro 
-                                                      and r['item'].uf == uf_filtro.upper()]
-                        
-                        for resultado in estrutura_resultados:
-                            item_nome = resultado['item'].nome
-                            disponivel = resultado['quantidade_disponivel']
-                            total = resultado['quantidade_total']
-                            comprometido = resultado['quantidade_comprometida']
+                                grupos_agrupados[chave_agrupamento]['total_disponivel'] += resultado['quantidade_disponivel']
+                                grupos_agrupados[chave_agrupamento]['total_comprometido'] += resultado['quantidade_comprometida']
                             
-                            with st.expander(f"📦 **{item_nome}** - {disponivel} disponível(is) de {total} total"):
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("Quantidade Total", total)
-                                with col2:
-                                    st.metric("Comprometidos", comprometido)
-                                with col3:
-                                    st.metric("Disponíveis", disponivel)
-                                
-                                st.divider()
-                                
-                                # Mostra localização do item se disponível
-                                if hasattr(resultado['item'], 'cidade') and hasattr(resultado['item'], 'uf') and resultado['item'].cidade and resultado['item'].uf:
-                                    localizacao_str = f"{resultado['item'].cidade} - {resultado['item'].uf}"
-                                    if hasattr(resultado['item'], 'endereco') and resultado['item'].endereco:
-                                        localizacao_str += f" ({resultado['item'].endereco})"
-                                    st.write(f"**Localização:** {localizacao_str}")
-                                
-                                # Mostra aviso se item não está na localização filtrada
-                                if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
-                                    cidade_uf = filtro_localizacao.split(" - ")
-                                    if len(cidade_uf) == 2:
-                                        cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                                        item_na_localizacao = (hasattr(resultado['item'], 'cidade') and hasattr(resultado['item'], 'uf') and 
-                                                              resultado['item'].cidade == cidade_filtro and resultado['item'].uf == uf_filtro.upper())
-                                        if not item_na_localizacao:
-                                            st.warning("⚠️ Este item não está na localização filtrada.")
-                                
-                                # Mostra descrição se disponível
-                                if hasattr(resultado['item'], 'descricao') and resultado['item'].descricao:
+                            # Mostra grupos agrupados
+                            for chave, grupo in sorted(grupos_agrupados.items()):
+                                with st.expander(f"{icone} **{chave}** - {grupo['total_disponivel']} disponível(is) de {len(grupo['itens'])} total"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Total de Itens", len(grupo['itens']))
+                                    with col2:
+                                        st.metric("Comprometidos", grupo['total_comprometido'])
+                                    with col3:
+                                        st.metric("Disponíveis", grupo['total_disponivel'])
+                                    
                                     st.divider()
-                                    st.write(f"**Descrição:** {resultado['item'].descricao}")
+                                    
+                                    # Determina campo identificador principal
+                                    campo_id_principal = None
+                                    campos_id_possiveis = ['Placa', 'Serial', 'Código', 'Código Único', 'Número de Série']
+                                    
+                                    # Mostra detalhes de cada item do grupo
+                                    for item_info in grupo['itens']:
+                                        item_grupo = item_info['item']
+                                        dados_cat_item = item_info['dados_categoria']
+                                        
+                                        # Determina campo identificador
+                                        if dados_cat_item and isinstance(dados_cat_item, dict):
+                                            for campo_id in campos_id_possiveis:
+                                                if campo_id in dados_cat_item and dados_cat_item[campo_id]:
+                                                    campo_id_principal = campo_id
+                                                    break
+                                        
+                                        disponivel = item_info['disponivel']
+                                        comprometido = item_info['comprometido']
+                                        status = "✅ Disponível" if disponivel > 0 else "❌ Indisponível"
+                                        
+                                        # Constrói informação do item
+                                        if campo_id_principal and dados_cat_item:
+                                            valor_id = dados_cat_item.get(campo_id_principal, '')
+                                            info_item = f"- **{campo_id_principal}: {valor_id}**"
+                                            
+                                            # Adiciona outros campos relevantes
+                                            campos_adicionais = ['Ano', 'Modelo']
+                                            for campo_add in campos_adicionais:
+                                                if campo_add in dados_cat_item and dados_cat_item[campo_add]:
+                                                    info_item += f" ({campo_add}: {dados_cat_item[campo_add]})"
+                                            
+                                            info_item += f" - {status}"
+                                        else:
+                                            info_item = f"- **{item_grupo.nome}** - {status}"
+                                        
+                                        # Adiciona localização
+                                        if hasattr(item_grupo, 'cidade') and hasattr(item_grupo, 'uf') and item_grupo.cidade and item_grupo.uf:
+                                            localizacao_item = f"{item_grupo.cidade} - {item_grupo.uf}"
+                                            if hasattr(item_grupo, 'endereco') and item_grupo.endereco:
+                                                localizacao_item += f" ({item_grupo.endereco})"
+                                            info_item += f" | 📍 {localizacao_item}"
+                                        
+                                        st.write(info_item)
+                                        if comprometido > 0:
+                                            st.caption(f"  Comprometido: {comprometido}")
+                        else:
+                            # Sem agrupamento, mostra individualmente
+                            for resultado in resultados_categoria:
+                                item_resultado = resultado['item']
+                                item_nome = item_resultado.nome
+                                disponivel = resultado['quantidade_disponivel']
+                                total = resultado['quantidade_total']
+                                comprometido = resultado['quantidade_comprometida']
+                                
+                                with st.expander(f"{icone} **{item_nome}** - {disponivel} disponível(is) de {total} total"):
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Quantidade Total", total)
+                                    with col2:
+                                        st.metric("Comprometidos", comprometido)
+                                    with col3:
+                                        st.metric("Disponíveis", disponivel)
+                                    
+                                    st.divider()
+                                    
+                                    # Mostra dados específicos da categoria se existirem
+                                    dados_cat = getattr(item_resultado, 'dados_categoria', None)
+                                    if dados_cat and isinstance(dados_cat, dict):
+                                        st.write(f"**Detalhes de {categoria_nome}:**")
+                                        for campo, valor in dados_cat.items():
+                                            if campo not in ['ID', 'Item ID', ''] and valor:
+                                                st.write(f"**{campo}:** {valor}")
+                                        st.divider()
+                                    
+                                    # Mostra localização do item se disponível
+                                    if hasattr(item_resultado, 'cidade') and hasattr(item_resultado, 'uf') and item_resultado.cidade and item_resultado.uf:
+                                        localizacao_str = f"{item_resultado.cidade} - {item_resultado.uf}"
+                                        if hasattr(item_resultado, 'endereco') and item_resultado.endereco:
+                                            localizacao_str += f" ({item_resultado.endereco})"
+                                        st.write(f"**Localização:** {localizacao_str}")
+                                    
+                                    # Mostra aviso se item não está na localização filtrada
+                                    if filtro_localizacao and filtro_localizacao != "Todas as Localizações":
+                                        cidade_uf = filtro_localizacao.split(" - ")
+                                        if len(cidade_uf) == 2:
+                                            cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
+                                            item_na_localizacao = (hasattr(item_resultado, 'cidade') and hasattr(item_resultado, 'uf') and 
+                                                                  item_resultado.cidade == cidade_filtro and item_resultado.uf == uf_filtro.upper())
+                                            if not item_na_localizacao:
+                                                st.warning("⚠️ Este item não está na localização filtrada.")
+                                    
+                                    # Mostra descrição se disponível
+                                    if hasattr(item_resultado, 'descricao') and item_resultado.descricao:
+                                        st.divider()
+                                        st.write(f"**Descrição:** {item_resultado.descricao}")
                 else:
                     st.info("ℹ️ Nenhum item cadastrado ou disponível.")
 
@@ -1333,7 +1726,7 @@ elif menu == "Visualizar Dados":
     
     # Filtro por categoria
     itens = db.listar_itens()
-    categorias_disponiveis = sorted(set([getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento' for item in itens]))
+    categorias_disponiveis = sorted(set([getattr(item, 'categoria', '') or '' for item in itens if getattr(item, 'categoria', '')]))
     categoria_filtro_viz = st.selectbox("Filtrar por Categoria (opcional)", options=["Todas as Categorias"] + categorias_disponiveis, index=0, key="filtro_categoria_viz")
     
     tab1, tab2 = st.tabs(["Itens", "Compromissos"])
@@ -1350,7 +1743,7 @@ elif menu == "Visualizar Dados":
         
         # Filtra por categoria se selecionada
         if categoria_filtro_viz != "Todas as Categorias":
-            itens = [item for item in itens if (getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento') == categoria_filtro_viz]
+            itens = [item for item in itens if (getattr(item, 'categoria', '') or '') == categoria_filtro_viz]
         
         # Carrega compromissos UMA vez para evitar múltiplas chamadas à API
         compromissos_todos = db.listar_compromissos()
@@ -1372,37 +1765,69 @@ elif menu == "Visualizar Dados":
         
         if itens:
             for item in itens:
-                categoria_item = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                categoria_item = getattr(item, 'categoria', '') or ''
                 # Título do expander muda baseado na categoria
-                if categoria_item == 'Carros':
-                    carro = getattr(item, 'carro', None)
-                    if carro:
-                        titulo_expander = f"🚗 {item.nome} - {carro.placa}"
-                    else:
-                        titulo_expander = f"🚗 {item.nome}"
+                # Determina ícone baseado na categoria (🚗 para Carros, 📦 para outros)
+                icone = "🚗" if categoria_item == 'Carros' else "📦"
+                
+                # Para categorias com dados específicos, tenta adicionar identificador
+                dados_cat = getattr(item, 'dados_categoria', None)
+                identificador = ""
+                if dados_cat and isinstance(dados_cat, dict):
+                    campos_id = ['Placa', 'Serial', 'Código']
+                    for campo_id in campos_id:
+                        if campo_id in dados_cat and dados_cat[campo_id]:
+                            identificador = f" - {dados_cat[campo_id]}"
+                            break
+                
+                if categoria_item == 'Carros' and identificador:
+                    titulo_expander = f"{icone} {item.nome}{identificador}"
+                elif categoria_item and categoria_item != 'Carros':
+                    titulo_expander = f"{icone} {item.nome} - Estoque Total: {item.quantidade_total}"
                 else:
-                    titulo_expander = f"📦 {item.nome} - Estoque Total: {item.quantidade_total}"
+                    titulo_expander = f"{icone} {item.nome}"
                 
                 with st.expander(titulo_expander):
                     col1, col2 = st.columns([3, 1])
                     
                     with col1:
                         st.write(f"**ID:** {item.id}")
-                        categoria_item = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                        categoria_item = getattr(item, 'categoria', '') or ''
                         st.write(f"**Categoria:** {categoria_item}")
                         st.write(f"**Nome:** {item.nome}")
-                        # Quantidade só aparece para Estrutura de Evento
-                        if categoria_item != 'Carros':
+                        # Quantidade só aparece se não for categoria que sempre tem quantidade 1
+                        # Verifica se há campos que indicam item único
+                        dados_cat_viz = getattr(item, 'dados_categoria', None)
+                        tem_campo_item_unico_viz = False
+                        if dados_cat_viz and isinstance(dados_cat_viz, dict):
+                            campos_item_unico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único']
+                            tem_campo_item_unico_viz = any(campo in dados_cat_viz for campo in campos_item_unico)
+                        
+                        if categoria_item != 'Carros' and not tem_campo_item_unico_viz:
                             st.write(f"**Quantidade Total:** {item.quantidade_total}")
                         
-                        # Mostra campos específicos de carro se aplicável
+                        # Mostra campos específicos da categoria se aplicável
+                        dados_cat = getattr(item, 'dados_categoria', None)
+                        if dados_cat and isinstance(dados_cat, dict):
+                            # Exibe todos os campos da categoria dinamicamente
+                            st.divider()
+                            st.write(f"**Detalhes de {categoria_item}:**")
+                            for campo, valor in dados_cat.items():
+                                # Pula campos padrão que não são específicos da categoria
+                                if campo not in ['ID', 'Item ID', '']:
+                                    if valor:  # Só mostra se tiver valor
+                                        st.write(f"**{campo}:** {valor}")
+                        
+                        # Compatibilidade: mostra campos de carro se existir (para código antigo)
                         if categoria_item == 'Carros':
                             carro = getattr(item, 'carro', None)
                             if carro:
-                                st.write(f"**Marca:** {getattr(carro, 'marca', 'N/A')}")
-                                st.write(f"**Modelo:** {carro.modelo}")
-                                st.write(f"**Placa:** {carro.placa}")
-                                st.write(f"**Ano:** {carro.ano}")
+                                # Só mostra se não foi mostrado acima via dados_categoria
+                                if not dados_cat or not isinstance(dados_cat, dict) or not dados_cat.get('Marca'):
+                                    st.write(f"**Marca:** {getattr(carro, 'marca', 'N/A')}")
+                                    st.write(f"**Modelo:** {carro.modelo}")
+                                    st.write(f"**Placa:** {carro.placa}")
+                                    st.write(f"**Ano:** {carro.ano}")
                         
                         if hasattr(item, 'descricao') and item.descricao:
                             st.write(f"**Descrição:** {item.descricao}")
@@ -1446,16 +1871,33 @@ elif menu == "Visualizar Dados":
                         st.divider()
                         st.write("**Editar Item**")
                         with st.form(f"form_edit_item_{item.id}"):
-                            # Determina categoria atual
-                            categoria_atual = getattr(item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
-                            categoria_index = 0 if categoria_atual == 'Estrutura de Evento' else 1
-                            edit_categoria = st.selectbox("Categoria *", options=["Estrutura de Evento", "Carros"], index=categoria_index, key=f"input_categoria_{item.id}")
+                            # Determina categoria atual e obtém todas as categorias disponíveis
+                            categoria_atual = getattr(item, 'categoria', '') or ''
+                            todas_categorias = db.obter_categorias() if USE_GOOGLE_SHEETS else sorted(set([getattr(i, 'categoria', '') or '' for i in db.listar_itens() if getattr(i, 'categoria', '')]))
+                            
+                            if not todas_categorias:
+                                st.warning("⚠️ Não há categorias cadastradas.")
+                            else:
+                                categoria_index = todas_categorias.index(categoria_atual) if categoria_atual in todas_categorias else 0
+                                edit_categoria = st.selectbox("Categoria *", options=todas_categorias, index=categoria_index, key=f"input_categoria_{item.id}")
                             
                             edit_nome = st.text_input("Nome do Item", value=st.session_state.get(f'edit_nome_{item.id}', item.nome), key=f"input_nome_{item.id}")
                             
-                            # Quantidade só aparece para Estrutura de Evento
-                            if edit_categoria == "Carros":
-                                # Para carros, quantidade é sempre 1
+                            # Determina se a categoria tem quantidade fixa em 1 (itens únicos)
+                            campos_categoria_edit = []
+                            try:
+                                if USE_GOOGLE_SHEETS:
+                                    campos_categoria_edit = db.obter_campos_categoria(edit_categoria)
+                            except Exception:
+                                pass
+                            
+                            tem_campo_item_unico_edit = False
+                            if campos_categoria_edit:
+                                campos_item_unico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único']
+                                tem_campo_item_unico_edit = any(campo in campos_categoria_edit for campo in campos_item_unico)
+                            
+                            if edit_categoria == "Carros" or tem_campo_item_unico_edit:
+                                # Para categorias com itens únicos, quantidade é sempre 1
                                 edit_quantidade = 1
                             else:
                                 edit_quantidade = st.number_input("Quantidade Total", min_value=1, value=st.session_state.get(f'edit_quantidade_{item.id}', item.quantidade_total), key=f"input_quantidade_{item.id}")
@@ -1591,7 +2033,7 @@ elif menu == "Visualizar Dados":
                     with col1:
                         st.write(f"**ID:** {comp.id}")
                         if comp.item:
-                            categoria_item_comp = getattr(comp.item, 'categoria', 'Estrutura de Evento') or 'Estrutura de Evento'
+                            categoria_item_comp = getattr(comp.item, 'categoria', '') or ''
                             st.write(f"**Categoria:** {categoria_item_comp}")
                         st.write(f"**Item:** {comp.item.nome if comp.item else 'Item Deletado (ID: ' + str(comp.item_id) + ')'}")
                         st.write(f"**Quantidade:** {comp.quantidade}")
