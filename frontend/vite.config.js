@@ -11,5 +11,9 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  build: {
+    // Garante que o arquivo _redirects seja copiado para dist
+    copyPublicDir: true,
   }
 })
