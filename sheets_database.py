@@ -437,7 +437,7 @@ def buscar_item_por_id(item_id):
     return None
 
 
-def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
+def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
     """Atualiza um item existente
     
     Args:
@@ -449,10 +449,11 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         cidade: Cidade onde o item está localizado (obrigatório)
         uf: UF onde o item está localizado (obrigatório)
         endereco: Endereço opcional do item
-        placa: Placa do carro (obrigatório se categoria='Carros')
-        marca: Marca do carro (obrigatório se categoria='Carros')
-        modelo: Modelo do carro (obrigatório se categoria='Carros')
-        ano: Ano do carro (obrigatório se categoria='Carros')
+        placa: Placa do carro (obrigatório se categoria='Carros' e não usar campos_categoria)
+        marca: Marca do carro (obrigatório se categoria='Carros' e não usar campos_categoria)
+        modelo: Modelo do carro (obrigatório se categoria='Carros' e não usar campos_categoria)
+        ano: Ano do carro (obrigatório se categoria='Carros' e não usar campos_categoria)
+        campos_categoria: Dicionário com campos específicos da categoria {nome_campo: valor}
     """
     if not cidade or not uf:
         raise ValueError("Cidade e UF são obrigatórios")
@@ -487,38 +488,111 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         # Atualiza a linha do item (incluindo categoria)
         sheet_itens.update(f'A{row_to_update}:H{row_to_update}', [[item_id, nome, quantidade_total, categoria, descricao or '', cidade, uf.upper()[:2], endereco or '']])
         
-        # Gerencia dados de carro
-        sheet_carros = sheets['sheet_carros']
-        try:
-            carros_records = sheet_carros.get_all_records()
-            carro_row = None
-            for idx, carro_record in enumerate(carros_records, start=2):
-                if carro_record and str(carro_record.get('Item ID')) == str(item_id):
-                    carro_row = idx
-                    break
-            
-            if categoria == 'Carros':
-                if carro_row:
-                    # Atualiza carro existente (colunas C, D, E, F: Placa, Marca, Modelo, Ano)
-                    sheet_carros.update(f'C{carro_row}:F{carro_row}', [[placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)]])
-                else:
-                    # Cria novo registro de carro
+        # Gerencia dados específicos da categoria (carros ou campos_categoria)
+        if campos_categoria or categoria == 'Carros':
+            try:
+                sheet_categoria = obter_ou_criar_aba_categoria(categoria)
+                categoria_records = sheet_categoria.get_all_records()
+                categoria_row = None
+                
+                # Busca linha existente na aba da categoria
+                for idx, record in enumerate(categoria_records, start=2):
+                    if record and str(record.get('Item ID')) == str(item_id):
+                        categoria_row = idx
+                        break
+                
+                if categoria == 'Carros':
+                    # Para Carros, usa campos antigos se campos_categoria não fornecido
+                    if not campos_categoria:
+                        campos_categoria = {
+                            'Placa': placa.upper().strip() if placa else '',
+                            'Marca': marca.strip() if marca else '',
+                            'Modelo': modelo.strip() if modelo else '',
+                            'Ano': int(ano) if ano else ''
+                        }
+                    
+                    if categoria_row:
+                        # Atualiza registro existente
+                        headers = sheet_categoria.row_values(1)
+                        valores = []
+                        for header in headers[2:]:  # Pula ID e Item ID
+                            valores.append(campos_categoria.get(header, ''))
+                        # Atualiza a partir da coluna C (índice 3)
+                        col_inicio = 3
+                        col_fim = col_inicio + len(valores) - 1
+                        sheet_categoria.update(f'{chr(64 + col_inicio)}{categoria_row}:{chr(64 + col_fim)}{categoria_row}', [valores])
+                    else:
+                        # Cria novo registro
+                        try:
+                            all_records = sheet_categoria.get_all_records()
+                            if all_records:
+                                valid_ids = [int(r.get('ID', 0)) for r in all_records if r and r.get('ID')]
+                                next_cat_id = max(valid_ids) + 1 if valid_ids else 1
+                            else:
+                                next_cat_id = 1
+                        except (IndexError, KeyError, ValueError):
+                            next_cat_id = 1
+                        
+                        headers = sheet_categoria.row_values(1)
+                        valores = [next_cat_id, item_id]
+                        for header in headers[2:]:
+                            valores.append(campos_categoria.get(header, ''))
+                        sheet_categoria.append_row(valores)
+                elif campos_categoria:
+                    # Para outras categorias com campos_categoria
+                    if categoria_row:
+                        # Atualiza registro existente
+                        headers = sheet_categoria.row_values(1)
+                        valores = []
+                        for header in headers[2:]:
+                            valores.append(campos_categoria.get(header, ''))
+                        col_inicio = 3
+                        col_fim = col_inicio + len(valores) - 1
+                        sheet_categoria.update(f'{chr(64 + col_inicio)}{categoria_row}:{chr(64 + col_fim)}{categoria_row}', [valores])
+                    else:
+                        # Cria novo registro
+                        try:
+                            all_records = sheet_categoria.get_all_records()
+                            if all_records:
+                                valid_ids = [int(r.get('ID', 0)) for r in all_records if r and r.get('ID')]
+                                next_cat_id = max(valid_ids) + 1 if valid_ids else 1
+                            else:
+                                next_cat_id = 1
+                        except (IndexError, KeyError, ValueError):
+                            next_cat_id = 1
+                        
+                        headers = sheet_categoria.row_values(1)
+                        valores = [next_cat_id, item_id]
+                        for header in headers[2:]:
+                            valores.append(campos_categoria.get(header, ''))
+                        sheet_categoria.append_row(valores)
+                
+                # Se mudou de categoria, remove registro da categoria antiga
+                if categoria_atual != categoria and categoria_atual:
                     try:
-                        all_carros = sheet_carros.get_all_records()
-                        if all_carros:
-                            valid_carro_ids = [int(record.get('ID', 0)) for record in all_carros if record and record.get('ID')]
-                            next_carro_id = max(valid_carro_ids) + 1 if valid_carro_ids else 1
-                        else:
-                            next_carro_id = 1
-                    except (IndexError, KeyError, ValueError):
-                        next_carro_id = 1
-                    sheet_carros.append_row([next_carro_id, item_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano)])
-            elif carro_row:
-                # Remove registro de carro se mudou de categoria
-                sheet_carros.delete_rows(carro_row)
-        except (IndexError, KeyError, ValueError, gspread.exceptions.APIError):
-            # Se houver erro ao gerenciar carros, continua
-            pass
+                        sheet_categoria_antiga = obter_ou_criar_aba_categoria(categoria_atual)
+                        records_antiga = sheet_categoria_antiga.get_all_records()
+                        for idx, record in enumerate(records_antiga, start=2):
+                            if record and str(record.get('Item ID')) == str(item_id):
+                                sheet_categoria_antiga.delete_rows(idx)
+                                break
+                    except:
+                        pass
+            except (IndexError, KeyError, ValueError, gspread.exceptions.APIError) as e:
+                # Se houver erro ao gerenciar categoria, continua
+                pass
+        else:
+            # Se não há campos_categoria e mudou de categoria, remove registro da categoria antiga
+            if categoria_atual != categoria and categoria_atual:
+                try:
+                    sheet_categoria_antiga = obter_ou_criar_aba_categoria(categoria_atual)
+                    records_antiga = sheet_categoria_antiga.get_all_records()
+                    for idx, record in enumerate(records_antiga, start=2):
+                        if record and str(record.get('Item ID')) == str(item_id):
+                            sheet_categoria_antiga.delete_rows(idx)
+                            break
+                except:
+                    pass
         
         _clear_cache()
         return buscar_item_por_id(item_id)

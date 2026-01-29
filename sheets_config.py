@@ -20,22 +20,55 @@ def get_sheets_client():
     - Variável de ambiente GOOGLE_CREDENTIALS (JSON como string)
     - Ou arquivo credentials.json na raiz do projeto
     """
-    credentials_path = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
     credentials_json = os.getenv('GOOGLE_CREDENTIALS')
     
     if credentials_json:
         # Usa credenciais da variável de ambiente
         creds_dict = json.loads(credentials_json)
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    elif os.path.exists(credentials_path):
-        # Usa arquivo de credenciais
-        creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
     else:
-        raise FileNotFoundError(
-            f"Arquivo de credenciais não encontrado: {credentials_path}\n"
-            "Por favor, configure as credenciais do Google Sheets.\n"
-            "Veja GOOGLE_SHEETS_SETUP.md para instruções."
-        )
+        # Tenta encontrar credentials.json na raiz do projeto
+        # Primeiro tenta o caminho padrão (raiz do projeto)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = script_dir  # sheets_config.py está na raiz
+        credentials_path = os.path.join(root_dir, 'credentials.json')
+        
+        # Se não encontrar, tenta o caminho customizado da variável de ambiente
+        if not os.path.exists(credentials_path):
+            custom_path = os.getenv('GOOGLE_CREDENTIALS_PATH')
+            if custom_path and os.path.exists(custom_path):
+                credentials_path = custom_path
+            else:
+                        # Tenta vários caminhos possíveis
+                possible_paths = [
+                    os.path.join(root_dir, 'credentials.json'),  # Raiz do projeto (onde está sheets_config.py)
+                    os.path.join(os.getcwd(), 'credentials.json'),  # Diretório atual
+                    os.path.join(os.path.dirname(os.getcwd()), 'credentials.json'),  # Um nível acima
+                ]
+                
+                # Adiciona caminho do backend se estiver rodando de lá
+                if 'backend' in os.getcwd():
+                    backend_parent = os.path.dirname(os.getcwd())
+                    possible_paths.append(os.path.join(backend_parent, 'credentials.json'))
+                
+                credentials_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        credentials_path = path
+                        break
+        
+        if credentials_path and os.path.exists(credentials_path):
+            # Usa arquivo de credenciais
+            creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
+        else:
+            searched_paths = '\n'.join([f"  - {p}" for p in possible_paths])
+            raise FileNotFoundError(
+                f"Arquivo de credenciais não encontrado.\n"
+                f"Procurado em:\n{searched_paths}\n"
+                f"Por favor, coloque o arquivo credentials.json na raiz do projeto.\n"
+                f"Diretório atual: {os.getcwd()}\n"
+                f"Diretório do script: {root_dir}"
+            )
     
     return gspread.authorize(creds)
 

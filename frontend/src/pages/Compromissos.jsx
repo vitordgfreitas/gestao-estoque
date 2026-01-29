@@ -1,0 +1,415 @@
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { compromissosAPI, itensAPI, categoriasAPI, disponibilidadeAPI } from '../services/api'
+import { Calendar, Plus, Info } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+
+export default function Compromissos() {
+  const [itens, setItens] = useState([])
+  const [categorias, setCategorias] = useState([])
+  const [categoriaFiltro, setCategoriaFiltro] = useState('')
+  const [itensFiltrados, setItensFiltrados] = useState([])
+  const [itemSelecionado, setItemSelecionado] = useState(null)
+  const [quantidadeFixa, setQuantidadeFixa] = useState(false)
+  const [formData, setFormData] = useState({
+    item_id: '',
+    quantidade: 1,
+    data_inicio: new Date().toISOString().split('T')[0],
+    data_fim: new Date().toISOString().split('T')[0],
+    descricao: '',
+    cidade: '',
+    uf: 'SP',
+    endereco: '',
+    contratante: '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [loadingItens, setLoadingItens] = useState(true)
+
+  useEffect(() => {
+    loadCategorias()
+    loadItens()
+  }, [])
+
+  // Filtra itens quando categoria muda
+  useEffect(() => {
+    if (categoriaFiltro && categoriaFiltro !== 'Todas as Categorias') {
+      const filtrados = itens.filter(item => 
+        (item.categoria || '').trim() === categoriaFiltro.trim()
+      )
+      setItensFiltrados(filtrados)
+    } else {
+      setItensFiltrados(itens)
+    }
+    // Limpa item selecionado quando categoria muda
+    setFormData(prev => ({ ...prev, item_id: '' }))
+    setItemSelecionado(null)
+  }, [categoriaFiltro, itens])
+
+  // Atualiza quantidade fixa quando item selecionado muda
+  useEffect(() => {
+    if (formData.item_id) {
+      const item = itensFiltrados.find(i => i.id === parseInt(formData.item_id))
+      if (item) {
+        setItemSelecionado(item)
+        const dadosCat = item.dados_categoria || {}
+        const camposItemUnico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único', 'Número de Série']
+        const temCampoItemUnico = Object.keys(dadosCat).some(campo => camposItemUnico.includes(campo))
+        const isCarros = item.categoria === 'Carros'
+        const fixa = isCarros || temCampoItemUnico
+        setQuantidadeFixa(fixa)
+        if (fixa) {
+          setFormData(prev => ({ ...prev, quantidade: 1 }))
+        }
+      }
+    } else {
+      setItemSelecionado(null)
+      setQuantidadeFixa(false)
+    }
+  }, [formData.item_id, itensFiltrados])
+
+  const loadCategorias = async () => {
+    try {
+      const response = await categoriasAPI.listar()
+      const cats = response.data || []
+      setCategorias(cats)
+      if (cats.length > 0) {
+        setCategoriaFiltro(cats[0])
+      } else {
+        setCategoriaFiltro('Todas as Categorias')
+      }
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error)
+      setCategorias([])
+      setCategoriaFiltro('Todas as Categorias')
+    }
+  }
+
+  const loadItens = async () => {
+    try {
+      setLoadingItens(true)
+      const response = await itensAPI.listar()
+      setItens(response.data)
+    } catch (error) {
+      toast.error('Erro ao carregar itens')
+    } finally {
+      setLoadingItens(false)
+    }
+  }
+
+  const construirNomeItem = (item) => {
+    let nomeDisplay = item.nome
+    
+    // Adiciona identificadores se existirem
+    const dadosCat = item.dados_categoria || {}
+    const camposPrioridade = ['Marca', 'Modelo', 'Placa', 'Serial', 'Código']
+    const camposChave = []
+    
+    for (const campo of camposPrioridade) {
+      if (dadosCat[campo]) {
+        camposChave.push(String(dadosCat[campo]))
+      }
+    }
+    
+    if (camposChave.length > 0) {
+      nomeDisplay = `${item.nome} - ${camposChave.join(' ')}`
+    }
+    
+    // Compatibilidade: para Carros, usa carro se existir
+    if (item.categoria === 'Carros' && item.carro) {
+      nomeDisplay = `${item.carro.marca || ''} ${item.carro.modelo || ''} - ${item.carro.placa || ''}`.trim()
+    }
+    
+    // Adiciona estoque se não for item único
+    const camposItemUnico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único']
+    const temCampoItemUnico = Object.keys(dadosCat).some(campo => camposItemUnico.includes(campo))
+    if (item.categoria !== 'Carros' && !temCampoItemUnico && item.quantidade_total) {
+      nomeDisplay += ` (Estoque: ${item.quantidade_total})`
+    }
+    
+    return nomeDisplay
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      // Verifica disponibilidade antes de criar
+      const disponibilidade = await disponibilidadeAPI.verificar({
+        item_id: parseInt(formData.item_id),
+        data_consulta: formData.data_inicio,
+      })
+
+      const disponivelMinimo = disponibilidade.data.quantidade_disponivel
+      const quantidadeSolicitada = parseInt(formData.quantidade)
+
+      if (disponivelMinimo < quantidadeSolicitada) {
+        toast.error(`Quantidade insuficiente! Disponível: ${disponivelMinimo}, Solicitado: ${quantidadeSolicitada}`)
+        setLoading(false)
+        return
+      }
+
+      await compromissosAPI.criar({
+        ...formData,
+        item_id: parseInt(formData.item_id),
+        quantidade: parseInt(formData.quantidade),
+      })
+      toast.success('Compromisso registrado com sucesso!')
+      setFormData({
+        item_id: '',
+        quantidade: 1,
+        data_inicio: new Date().toISOString().split('T')[0],
+        data_fim: new Date().toISOString().split('T')[0],
+        descricao: '',
+        cidade: '',
+        uf: 'SP',
+        endereco: '',
+        contratante: '',
+      })
+      setItemSelecionado(null)
+      setQuantidadeFixa(false)
+    } catch (error) {
+      if (error.response?.status === 400 && error.response?.data?.detail?.includes('insuficiente')) {
+        toast.error(error.response.data.detail)
+      } else {
+        toast.error(error.response?.data?.detail || 'Erro ao registrar compromisso')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleChange = (e) => {
+    const value = e.target.value
+    setFormData({
+      ...formData,
+      [e.target.name]: value
+    })
+
+    if (e.target.name === 'data_inicio' && value > formData.data_fim) {
+      setFormData(prev => ({ ...prev, data_fim: value }))
+    }
+  }
+
+  if (loadingItens) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-dark-50 mb-2">Registrar Compromisso</h1>
+        <p className="text-dark-400">Registre um novo aluguel ou compromisso para um item do estoque</p>
+      </div>
+
+      <motion.form
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        onSubmit={handleSubmit}
+        className="card space-y-6"
+      >
+        {/* Filtro por categoria */}
+        <div>
+          <label className="label">Categoria *</label>
+          <select
+            value={categoriaFiltro}
+            onChange={(e) => setCategoriaFiltro(e.target.value)}
+            required
+            className="input"
+          >
+            <option value="Todas as Categorias">Todas as Categorias</option>
+            {categorias.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Seleção do item */}
+        <div>
+          <label className="label">Item *</label>
+          {itensFiltrados.length === 0 ? (
+            <div className="p-4 bg-yellow-600/20 border border-yellow-600/30 rounded-lg">
+              <p className="text-sm text-yellow-400">
+                ⚠️ Não há itens cadastrados na categoria selecionada.
+              </p>
+            </div>
+          ) : (
+            <select
+              name="item_id"
+              value={formData.item_id}
+              onChange={handleChange}
+              required
+              className="input"
+            >
+              <option value="">Selecione um item</option>
+              {itensFiltrados.map(item => (
+                <option key={item.id} value={item.id}>
+                  {construirNomeItem(item)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Quantidade */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="label">Quantidade *</label>
+            {quantidadeFixa ? (
+              <div>
+                <input
+                  type="number"
+                  name="quantidade"
+                  value={1}
+                  disabled
+                  className="input opacity-50"
+                />
+                <div className="mt-2 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Info className="text-primary-400 mt-0.5" size={16} />
+                    <p className="text-xs text-primary-400">
+                      Para {itemSelecionado?.categoria || 'esta categoria'}, a quantidade é sempre 1 (cada item é único).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <input
+                type="number"
+                name="quantidade"
+                value={formData.quantidade}
+                onChange={handleChange}
+                required
+                min="1"
+                max={itemSelecionado?.quantidade_total || undefined}
+                className="input"
+              />
+            )}
+          </div>
+
+          <div>
+            <label className="label">Data de Início *</label>
+            <input
+              type="date"
+              name="data_inicio"
+              value={formData.data_inicio}
+              onChange={handleChange}
+              required
+              className="input"
+            />
+          </div>
+
+          <div>
+            <label className="label">Data de Fim *</label>
+            <input
+              type="date"
+              name="data_fim"
+              value={formData.data_fim}
+              onChange={handleChange}
+              required
+              min={formData.data_inicio}
+              className="input"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Descrição (opcional)</label>
+          <textarea
+            name="descricao"
+            value={formData.descricao}
+            onChange={handleChange}
+            rows="3"
+            className="input resize-none"
+            placeholder="Ex: Evento corporativo, Licitação pública..."
+          />
+        </div>
+
+        <div className="space-y-4 pt-6 border-t border-dark-700">
+          <h3 className="text-lg font-semibold text-dark-50 flex items-center gap-2">
+            <div className="w-1 h-6 bg-primary-500 rounded-full"></div>
+            Localização do Compromisso
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Cidade *</label>
+              <input
+                type="text"
+                name="cidade"
+                value={formData.cidade}
+                onChange={handleChange}
+                required
+                className="input"
+                placeholder="Ex: São Paulo, Rio de Janeiro..."
+              />
+            </div>
+
+            <div>
+              <label className="label">UF *</label>
+              <select
+                name="uf"
+                value={formData.uf}
+                onChange={handleChange}
+                required
+                className="input"
+              >
+                {UFS.map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Endereço (opcional)</label>
+            <input
+              type="text"
+              name="endereco"
+              value={formData.endereco}
+              onChange={handleChange}
+              className="input"
+              placeholder="Ex: Rua das Flores, 123 - Centro..."
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Contratante (opcional)</label>
+          <input
+            type="text"
+            name="contratante"
+            value={formData.contratante}
+            onChange={handleChange}
+            className="input"
+            placeholder="Ex: Empresa ABC, Prefeitura de Cidade..."
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading || itensFiltrados.length === 0}
+          className="btn btn-primary w-full flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+              Registrando...
+            </>
+          ) : (
+            <>
+              <Calendar size={20} />
+              Registrar Compromisso
+            </>
+          )}
+        </button>
+      </motion.form>
+    </div>
+  )
+}

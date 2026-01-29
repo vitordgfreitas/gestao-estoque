@@ -1,115 +1,128 @@
-# Sistema de Gestão de Estoque - Aluguel de Itens
+# Sistema de Gestão de Estoque - CRM Profissional
 
-Sistema de gestão de estoque para empresas de aluguel de itens de eventos, desenvolvido com Python e Streamlit.
+Sistema de gestão de estoque para empresas de aluguel de itens de eventos, desenvolvido com **FastAPI** (backend) e **React** (frontend).
+
+## Arquitetura
+
+- **Backend**: FastAPI (Python) - API RESTful
+- **Frontend**: React + Vite + Tailwind CSS
+- **Banco de Dados**: SQLite ou Google Sheets (configurável)
 
 ## Funcionalidades
 
-- ➕ **Registrar Itens**: Cadastre itens com nome e quantidade total
-- 📅 **Registrar Compromissos**: Registre aluguéis com período de início e fim
-- 🔍 **Verificar Disponibilidade**: Consulte a disponibilidade de itens em datas específicas
-- 📊 **Visualizar Dados**: Veja todos os itens e compromissos cadastrados
+- 📊 **Dashboard**: Visão geral com KPIs e gráficos
+- ➕ **Registrar Itens**: Cadastre itens com campos dinâmicos por categoria
+- 📅 **Registrar Compromissos**: Registre aluguéis com período e localização
+- 🔍 **Verificar Disponibilidade**: Consulte disponibilidade com filtros e agrupamento
+- 📅 **Calendário**: Visualize compromissos em formato mensal, semanal ou diário
+- 📋 **Visualizar Dados**: Gerencie itens e compromissos com edição e exclusão
 
-## Como Usar
+## Pré-requisitos
 
-### Pré-requisitos
+- Python 3.8 ou superior
+- Node.js 16+ e npm
+- Google Sheets API (opcional, se usar Google Sheets)
 
-- Python 3.8 ou superior instalado
-- Make (opcional, mas recomendado) ou use os scripts `.bat` no Windows
+## Instalação e Execução
 
-### Executando o Sistema
+### 1. Backend
 
-#### Opção 1: Usando Make (Windows/Linux/Mac)
+```bash
+cd backend
+python -m venv venv
+.\venv\Scripts\activate  # Windows
+# ou
+source venv/bin/activate  # Linux/Mac
 
-1. **Primeira vez - Configurar ambiente**:
-   ```bash
-   make api
-   ```
-   Isso criará o ambiente virtual e instalará as dependências automaticamente.
+pip install -r requirements.txt
+python run.py
+```
 
-2. **Próximas vezes - Apenas rodar**:
-   ```bash
-   make run
-   ```
+O backend estará disponível em `http://localhost:8000`
 
-#### Opção 2: Usando Scripts (Windows)
+### 2. Frontend
 
-1. **Primeira vez - Configurar ambiente**:
-   ```bash
-   setup.bat
-   ```
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-2. **Rodar aplicação**:
-   ```bash
-   run.bat
-   ```
-   Ou simplesmente:
-   ```bash
-   make api
-   ```
+O frontend estará disponível em `http://localhost:5173`
 
-#### Opção 3: Manualmente
+### 3. Executar Tudo (Windows)
 
-1. **Criar ambiente virtual**:
-   ```bash
-   python -m venv env
-   ```
+Use os scripts fornecidos:
 
-2. **Ativar ambiente virtual**:
-   - Windows: `env\Scripts\activate`
-   - Linux/Mac: `source env/bin/activate`
+```bash
+start-dev.bat
+```
 
-3. **Instalar dependências**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+ou PowerShell:
 
-4. **Rodar aplicação**:
-   ```bash
-   streamlit run app.py
-   ```
+```powershell
+.\start-dev.ps1
+```
 
-5. **Acesse a aplicação**:
-   Abra seu navegador em `http://localhost:8501`
+Isso iniciará tanto o backend quanto o frontend simultaneamente.
 
-### Comandos Make Disponíveis
+## Configuração
 
-- `make api` - Configura ambiente (se necessário) e inicia a aplicação
-- `make setup` - Cria e configura o ambiente virtual
-- `make install` - Instala/atualiza dependências no ambiente virtual
-- `make run` - Roda a aplicação Streamlit
+### Google Sheets (Opcional)
+
+1. Coloque o arquivo `credentials.json` na raiz do projeto
+2. Configure a variável de ambiente `GOOGLE_SHEET_ID` com o ID da planilha
+3. O sistema detectará automaticamente e usará Google Sheets
+
+### SQLite (Padrão)
+
+Se não configurar Google Sheets, o sistema usará SQLite automaticamente. O banco será criado em `data/estoque.db`.
 
 ## Estrutura do Projeto
 
 ```
-.
-├── app.py              # Aplicação Streamlit principal
-├── models.py           # Modelos de dados (SQLAlchemy)
-├── database.py         # Funções de acesso ao banco de dados
-├── requirements.txt    # Dependências Python
-├── Makefile           # Comandos Make
-├── setup.bat          # Script de setup para Windows
-├── run.bat            # Script para rodar no Windows
-├── setup.sh           # Script de setup para Linux/Mac
-├── env/               # Ambiente virtual (criado automaticamente)
-└── data/              # Diretório do banco de dados (criado automaticamente)
+GestaoCarro/
+├── backend/           # API FastAPI
+│   ├── main.py       # Aplicação principal
+│   ├── run.py        # Script de execução
+│   └── requirements.txt
+├── frontend/          # Aplicação React
+│   ├── src/
+│   │   ├── pages/     # Páginas da aplicação
+│   │   ├── components/ # Componentes reutilizáveis
+│   │   └── services/  # Serviços de API
+│   └── package.json
+├── models.py          # Modelos SQLAlchemy
+├── database.py        # Acesso SQLite
+├── sheets_database.py # Acesso Google Sheets
+└── sheets_config.py   # Configuração Google Sheets
 ```
 
-## Banco de Dados
+## API Endpoints
 
-O sistema utiliza SQLite como banco de dados. O arquivo `estoque.db` é criado automaticamente no diretório `data/` na primeira execução.
+- `GET /api/itens` - Listar itens
+- `POST /api/itens` - Criar item
+- `PUT /api/itens/{id}` - Atualizar item
+- `DELETE /api/itens/{id}` - Deletar item
+- `GET /api/compromissos` - Listar compromissos
+- `POST /api/compromissos` - Criar compromisso
+- `GET /api/categorias` - Listar categorias
+- `GET /api/categorias/{categoria}/campos` - Obter campos da categoria
+- `POST /api/disponibilidade` - Verificar disponibilidade
+- `GET /api/stats` - Estatísticas gerais
 
-## Exemplo de Uso
+Documentação interativa disponível em `http://localhost:8000/docs`
 
-1. **Registrar um item**: 
-   - Nome: "Alambrado"
-   - Quantidade: 300
+## Desenvolvimento
 
-2. **Registrar um compromisso**:
-   - Item: Alambrado
-   - Quantidade: 200
-   - Data Início: 01/01/2024
-   - Data Fim: 05/01/2024
+O projeto usa:
+- **FastAPI** para backend rápido e moderno
+- **React** com hooks e componentes funcionais
+- **Tailwind CSS** para estilização
+- **Framer Motion** para animações
+- **Recharts** para gráficos
+- **React Hot Toast** para notificações
 
-3. **Verificar disponibilidade**:
-   - Data: 03/01/2024
-   - Resultado: 100 alambrados disponíveis (300 total - 200 comprometidos)
+## Licença
+
+Este projeto é de uso interno.
