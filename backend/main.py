@@ -262,14 +262,76 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 # ============= AUTENTICAÇÃO =============
 
 # Credenciais - lê DIRETAMENTE do ambiente (Render ou .env)
+# IMPORTANTE: NUNCA use valores padrão hardcoded em produção!
 # No Render: configure em Settings → Environment → Add Environment Variable
-APP_USUARIO = os.getenv('APP_USUARIO') or 'star'
-APP_SENHA = os.getenv('APP_SENHA') or 'maiko'
+app_usuario_raw = os.getenv('APP_USUARIO')
+app_senha_raw = os.getenv('APP_SENHA')
 
-# Debug simples
-print(f"🔐 Login configurado - Usuário: {APP_USUARIO} | Senha: {'***' if APP_SENHA else 'NÃO DEFINIDA'}")
-if APP_USUARIO == 'star' and APP_SENHA == 'maiko':
-    print("⚠️ Usando credenciais padrão. Configure APP_USUARIO e APP_SENHA no Render!")
+# Verifica se está em produção (Render, Heroku, etc)
+# Render define várias variáveis, vamos verificar todas
+is_production = (
+    os.getenv('RENDER') is not None or 
+    os.getenv('DYNO') is not None or
+    os.getenv('RENDER_SERVICE_NAME') is not None or
+    os.getenv('RENDER_EXTERNAL_URL') is not None
+)
+
+if is_production:
+    # Em produção, EXIGE que as variáveis estejam configuradas
+    if not app_usuario_raw or not app_senha_raw:
+        raise ValueError(
+            "ERRO CRÍTICO: APP_USUARIO e APP_SENHA devem estar configuradas no Render!\n"
+            "Configure em: Settings → Environment → Add Environment Variable"
+        )
+    APP_USUARIO = app_usuario_raw.strip()
+    APP_SENHA = app_senha_raw.strip()
+else:
+    # Em desenvolvimento local, permite valores padrão apenas para facilitar
+    # Mas ainda recomenda usar .env
+    if not app_usuario_raw or not app_senha_raw:
+        print("⚠️ AVISO: APP_USUARIO e APP_SENHA não configuradas!")
+        print("   Configure no arquivo .env na raiz do projeto:")
+        print("   APP_USUARIO=seu_usuario")
+        print("   APP_SENHA=sua_senha")
+        print("   O servidor não iniciará sem essas variáveis configuradas.")
+        raise ValueError(
+            "APP_USUARIO e APP_SENHA devem estar configuradas no arquivo .env "
+            "ou como variáveis de ambiente."
+        )
+    APP_USUARIO = app_usuario_raw.strip()
+    APP_SENHA = app_senha_raw.strip()
+
+# Debug detalhado
+print(f"\n{'='*60}")
+print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
+print(f"{'='*60}")
+print(f"Ambiente: {'PRODUÇÃO (Render)' if is_production else 'DESENVOLVIMENTO'}")
+print(f"Variáveis Render detectadas:")
+print(f"  RENDER: {os.getenv('RENDER')}")
+print(f"  RENDER_SERVICE_NAME: {os.getenv('RENDER_SERVICE_NAME')}")
+print(f"  RENDER_EXTERNAL_URL: {os.getenv('RENDER_EXTERNAL_URL')}")
+print(f"APP_USUARIO (os.getenv): {repr(app_usuario_raw)}")
+print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_raw else 'NÃO DEFINIDA'}")
+if app_usuario_raw:
+    print(f"Usuário final: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
+if app_senha_raw:
+    print(f"Senha final: DEFINIDA (len={len(APP_SENHA)})")
+else:
+    print(f"Senha final: NÃO DEFINIDA")
+if is_production:
+    if app_usuario_raw and app_senha_raw:
+        print("✅ Usando credenciais do Render (produção)")
+    else:
+        print("❌ ERRO CRÍTICO: Variáveis não configuradas no Render!")
+        print("   Configure em: Settings → Environment → Add Environment Variable")
+        print("   Variáveis necessárias: APP_USUARIO e APP_SENHA")
+else:
+    if app_usuario_raw and app_senha_raw:
+        print("✅ Usando credenciais do .env (desenvolvimento)")
+    else:
+        print("❌ ERRO: Variáveis não configuradas!")
+        print("   Configure no arquivo .env na raiz do projeto")
+print(f"{'='*60}\n")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
@@ -285,18 +347,35 @@ class LoginRequest(BaseModel):
 @app.post("/api/auth/login")
 async def login(credentials: LoginRequest):
     """Endpoint de login"""
-    if credentials.usuario == APP_USUARIO and credentials.senha == APP_SENHA:
+    # Remove espaços extras e normaliza
+    usuario_recebido = credentials.usuario.strip() if credentials.usuario else ""
+    senha_recebida = credentials.senha.strip() if credentials.senha else ""
+    usuario_esperado = APP_USUARIO.strip() if APP_USUARIO else ""
+    senha_esperada = APP_SENHA.strip() if APP_SENHA else ""
+    
+    # Debug (sem mostrar senha completa)
+    print(f"[LOGIN] Tentativa de login:")
+    print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)})")
+    print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)})")
+    print(f"  Senha recebida: {'*' * len(senha_recebida)} (len={len(senha_recebida)})")
+    print(f"  Senha esperada: {'*' * len(senha_esperada)} (len={len(senha_esperada)})")
+    print(f"  Match usuario: {usuario_recebido == usuario_esperado}")
+    print(f"  Match senha: {senha_recebida == senha_esperada}")
+    
+    if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
         token = generate_token()
         active_tokens[token] = {
             "usuario": credentials.usuario,
             "created_at": datetime.now()
         }
+        print(f"[LOGIN] Login bem-sucedido para usuario: {usuario_recebido}")
         return {
             "success": True,
             "token": token,
             "usuario": credentials.usuario
         }
     else:
+        print(f"[LOGIN] Login FALHOU - Credenciais incorretas")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuário ou senha incorretos"
