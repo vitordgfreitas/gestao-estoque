@@ -136,7 +136,9 @@ else:
     # Lista explícita (FastAPI não suporta wildcards)
     allow_origins = [
         "https://crm-frontend-nbrm.onrender.com",
-        "http://crm-frontend-nbrm.onrender.com",  # Caso use HTTP
+        "https://crm-frontend-wtcf.onrender.com",  # Nova URL do frontend
+        "http://crm-frontend-nbrm.onrender.com",
+        "http://crm-frontend-wtcf.onrender.com",
     ]
     # Se tiver FRONTEND_URL configurado, adiciona também
     frontend_url = os.getenv('FRONTEND_URL')
