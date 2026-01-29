@@ -15,24 +15,33 @@ from pydantic import BaseModel
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
 
-# Carrega variáveis de ambiente do arquivo .env ANTES de usar os.getenv
+# Carrega variáveis de ambiente do arquivo .env (apenas em desenvolvimento local)
+# No Render, as variáveis vêm do painel Environment Variables
 try:
     from dotenv import load_dotenv
-    # Tenta carregar .env da raiz do projeto
+    # Tenta carregar .env da raiz do projeto (apenas se existir)
     env_path = os.path.join(root_dir, '.env')
     if os.path.exists(env_path):
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=False)  # override=False: não sobrescreve variáveis já definidas
         print(f"✅ Carregado .env da raiz: {env_path}")
     # Também tenta carregar .env do backend
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     backend_env = os.path.join(backend_dir, '.env')
     if os.path.exists(backend_env):
-        load_dotenv(backend_env)
+        load_dotenv(backend_env, override=False)
         print(f"✅ Carregado .env do backend: {backend_env}")
 except ImportError:
-    print("⚠️ python-dotenv não instalado, usando apenas variáveis de ambiente do sistema")
+    print("ℹ️ python-dotenv não instalado, usando apenas variáveis de ambiente do sistema")
 except Exception as e:
     print(f"⚠️ Erro ao carregar .env: {e}")
+
+# Debug: mostra variáveis de ambiente importantes (sem valores sensíveis)
+print(f"🔍 DEBUG - Variáveis de ambiente:")
+print(f"   USE_GOOGLE_SHEETS: {os.getenv('USE_GOOGLE_SHEETS', 'não definido')}")
+print(f"   APP_USUARIO definido: {'sim' if os.getenv('APP_USUARIO') else 'não'}")
+print(f"   APP_SENHA definido: {'sim' if os.getenv('APP_SENHA') else 'não'}")
+print(f"   GOOGLE_SHEET_ID definido: {'sim' if os.getenv('GOOGLE_SHEET_ID') else 'não'}")
+print(f"   GOOGLE_CREDENTIALS definido: {'sim' if os.getenv('GOOGLE_CREDENTIALS') else 'não'}")
 
 from models import Item, Compromisso, Carro
 
@@ -265,16 +274,27 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 # ============= AUTENTICAÇÃO =============
 
 # Credenciais - lê do ambiente ou usa valores padrão
-# O .env já foi carregado no início do arquivo
+# O .env já foi carregado no início do arquivo (se existir)
+# No Render, as variáveis devem estar configuradas no painel Environment Variables
 APP_USUARIO = os.getenv('APP_USUARIO', 'star')
 APP_SENHA = os.getenv('APP_SENHA', 'maiko')
 
-# Debug: mostra qual usuário está configurado (sem mostrar senha)
-print(f"🔐 Credenciais carregadas - Usuário: {APP_USUARIO}")
+# Debug detalhado
+print(f"\n{'='*60}")
+print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
+print(f"{'='*60}")
+print(f"APP_USUARIO (variável de ambiente): {os.getenv('APP_USUARIO', 'NÃO DEFINIDA')}")
+print(f"APP_SENHA (variável de ambiente): {'DEFINIDA' if os.getenv('APP_SENHA') else 'NÃO DEFINIDA'}")
+print(f"Usuário final usado: {APP_USUARIO}")
 if APP_USUARIO != 'star' or APP_SENHA != 'maiko':
-    print("✅ Usando credenciais do .env ou variáveis de ambiente")
+    print("✅ Usando credenciais personalizadas do ambiente")
 else:
-    print("⚠️ Usando credenciais padrão (star/maiko)")
+    print("⚠️ ATENÇÃO: Usando credenciais padrão (star/maiko)")
+    print("   Para usar credenciais personalizadas no Render:")
+    print("   1. Vá em Settings → Environment")
+    print("   2. Adicione: APP_USUARIO = seu_usuario")
+    print("   3. Adicione: APP_SENHA = sua_senha")
+print(f"{'='*60}\n")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
