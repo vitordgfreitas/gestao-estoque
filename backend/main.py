@@ -10,9 +10,29 @@ import os
 import sys
 import secrets
 from pydantic import BaseModel
+
 # Adiciona o diretório raiz ao path
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
+
+# Carrega variáveis de ambiente do arquivo .env ANTES de usar os.getenv
+try:
+    from dotenv import load_dotenv
+    # Tenta carregar .env da raiz do projeto
+    env_path = os.path.join(root_dir, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"✅ Carregado .env da raiz: {env_path}")
+    # Também tenta carregar .env do backend
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_env = os.path.join(backend_dir, '.env')
+    if os.path.exists(backend_env):
+        load_dotenv(backend_env)
+        print(f"✅ Carregado .env do backend: {backend_env}")
+except ImportError:
+    print("⚠️ python-dotenv não instalado, usando apenas variáveis de ambiente do sistema")
+except Exception as e:
+    print(f"⚠️ Erro ao carregar .env: {e}")
 
 from models import Item, Compromisso, Carro
 
@@ -244,24 +264,17 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 
 # ============= AUTENTICAÇÃO =============
 
-# Carrega variáveis de ambiente do arquivo .env se existir
-try:
-    from dotenv import load_dotenv
-    # Tenta carregar .env da raiz do projeto (root_dir já foi definido acima)
-    env_path = os.path.join(root_dir, '.env')
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-    # Também tenta carregar .env do backend
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_env = os.path.join(backend_dir, '.env')
-    if os.path.exists(backend_env):
-        load_dotenv(backend_env)
-except ImportError:
-    pass  # python-dotenv não instalado, continua sem ele
-
 # Credenciais - lê do ambiente ou usa valores padrão
+# O .env já foi carregado no início do arquivo
 APP_USUARIO = os.getenv('APP_USUARIO', 'star')
 APP_SENHA = os.getenv('APP_SENHA', 'maiko')
+
+# Debug: mostra qual usuário está configurado (sem mostrar senha)
+print(f"🔐 Credenciais carregadas - Usuário: {APP_USUARIO}")
+if APP_USUARIO != 'star' or APP_SENHA != 'maiko':
+    print("✅ Usando credenciais do .env ou variáveis de ambiente")
+else:
+    print("⚠️ Usando credenciais padrão (star/maiko)")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
