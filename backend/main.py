@@ -15,50 +15,21 @@ from pydantic import BaseModel
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
 
-# Carrega variáveis de ambiente do arquivo .env (apenas em desenvolvimento local)
-# No Render, as variáveis vêm do painel Environment Variables e têm PRIORIDADE
-# override=False garante que variáveis do sistema (Render) não sejam sobrescritas por .env
+# IMPORTANTE: No Render, as variáveis DEVEM estar no painel Settings → Environment
+# O código lê DIRETAMENTE de os.getenv() - funciona tanto local quanto no Render
+# Carrega .env apenas em desenvolvimento local (se existir)
 try:
     from dotenv import load_dotenv
-    # Verifica se estamos em ambiente de produção (Render, Heroku, etc)
-    is_production = os.getenv('RENDER') is not None or os.getenv('DYNO') is not None
-    
-    if not is_production:
-        # Apenas carrega .env em desenvolvimento local
+    # Só carrega .env se não estiver no Render (onde variáveis vêm do painel)
+    if not os.getenv('RENDER'):
         env_path = os.path.join(root_dir, '.env')
         if os.path.exists(env_path):
-            load_dotenv(env_path, override=False)  # override=False: não sobrescreve variáveis já definidas
-            print(f"✅ Carregado .env da raiz (desenvolvimento): {env_path}")
-        # Também tenta carregar .env do backend
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        backend_env = os.path.join(backend_dir, '.env')
+            load_dotenv(env_path)
+        backend_env = os.path.join(os.path.dirname(__file__), '.env')
         if os.path.exists(backend_env):
-            load_dotenv(backend_env, override=False)
-            print(f"✅ Carregado .env do backend (desenvolvimento): {backend_env}")
-    else:
-        print("ℹ️ Ambiente de produção detectado - usando apenas variáveis do sistema (Render)")
-except ImportError:
-    print("ℹ️ python-dotenv não instalado, usando apenas variáveis de ambiente do sistema")
-except Exception as e:
-    print(f"⚠️ Erro ao carregar .env: {e}")
-
-# Debug: mostra variáveis de ambiente importantes (sem valores sensíveis)
-print(f"\n{'='*60}")
-print(f"🔍 DEBUG - Variáveis de Ambiente")
-print(f"{'='*60}")
-print(f"   USE_GOOGLE_SHEETS: {os.getenv('USE_GOOGLE_SHEETS', 'não definido')}")
-app_usuario_raw = os.getenv('APP_USUARIO')
-app_senha_raw = os.getenv('APP_SENHA')
-print(f"   APP_USUARIO (raw): {repr(app_usuario_raw)}")
-print(f"   APP_SENHA definido: {'sim' if app_senha_raw else 'não'}")
-print(f"   GOOGLE_SHEET_ID definido: {'sim' if os.getenv('GOOGLE_SHEET_ID') else 'não'}")
-google_creds = os.getenv('GOOGLE_CREDENTIALS')
-if google_creds:
-    print(f"   GOOGLE_CREDENTIALS: definido ({len(google_creds)} caracteres)")
-    print(f"   Primeiros 50 chars: {google_creds[:50]}...")
-else:
-    print(f"   GOOGLE_CREDENTIALS: não definido")
-print(f"{'='*60}\n")
+            load_dotenv(backend_env)
+except:
+    pass  # Ignora erros, usa apenas variáveis do sistema
 
 from models import Item, Compromisso, Carro
 
@@ -290,43 +261,15 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 
 # ============= AUTENTICAÇÃO =============
 
-# Credenciais - lê do ambiente ou usa valores padrão
-# IMPORTANTE: No Render, as variáveis DEVEM estar configuradas no painel Settings → Environment
-# O código lê diretamente de os.getenv(), que funciona tanto com .env local quanto com variáveis do Render
+# Credenciais - lê DIRETAMENTE do ambiente (Render ou .env)
+# No Render: configure em Settings → Environment → Add Environment Variable
+APP_USUARIO = os.getenv('APP_USUARIO') or 'star'
+APP_SENHA = os.getenv('APP_SENHA') or 'maiko'
 
-# Lê as variáveis diretamente do ambiente (sem defaults primeiro para debug)
-app_usuario_env = os.getenv('APP_USUARIO')
-app_senha_env = os.getenv('APP_SENHA')
-
-# Usa valores padrão apenas se não estiverem definidos
-APP_USUARIO = app_usuario_env if app_usuario_env is not None else 'star'
-APP_SENHA = app_senha_env if app_senha_env is not None else 'maiko'
-
-# Debug detalhado
-print(f"\n{'='*60}")
-print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
-print(f"{'='*60}")
-print(f"APP_USUARIO (os.getenv): {repr(app_usuario_env)}")
-print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_env else 'NÃO DEFINIDA'}")
-print(f"Usuário final usado: {repr(APP_USUARIO)}")
-print(f"Senha final usada: {'DEFINIDA' if APP_SENHA else 'NÃO DEFINIDA'}")
-
-if app_usuario_env is not None or app_senha_env is not None:
-    print("✅ Usando credenciais do ambiente (Render ou .env)")
-    if app_usuario_env is None:
-        print("   ⚠️ APP_USUARIO não definido, usando padrão 'star'")
-    if app_senha_env is None:
-        print("   ⚠️ APP_SENHA não definido, usando padrão 'maiko'")
-else:
-    print("⚠️ ATENÇÃO: Nenhuma credencial definida no ambiente!")
-    print("   Usando credenciais padrão (star/maiko)")
-    print("   Para configurar no Render:")
-    print("   1. Vá em Settings → Environment")
-    print("   2. Clique em 'Add Environment Variable'")
-    print("   3. Key: APP_USUARIO, Value: seu_usuario")
-    print("   4. Key: APP_SENHA, Value: sua_senha")
-    print("   5. Salve e reinicie o serviço")
-print(f"{'='*60}\n")
+# Debug simples
+print(f"🔐 Login configurado - Usuário: {APP_USUARIO} | Senha: {'***' if APP_SENHA else 'NÃO DEFINIDA'}")
+if APP_USUARIO == 'star' and APP_SENHA == 'maiko':
+    print("⚠️ Usando credenciais padrão. Configure APP_USUARIO e APP_SENHA no Render!")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
@@ -826,10 +769,25 @@ async def obter_estatisticas():
 async def obter_info():
     """Retorna informações sobre a API e conexão"""
     try:
+        # Debug: mostra TODAS as variáveis de ambiente relacionadas
+        env_debug = {
+            "APP_USUARIO": os.getenv('APP_USUARIO'),
+            "APP_SENHA": "***" if os.getenv('APP_SENHA') else None,
+            "USE_GOOGLE_SHEETS": os.getenv('USE_GOOGLE_SHEETS'),
+            "GOOGLE_SHEET_ID": os.getenv('GOOGLE_SHEET_ID'),
+            "RENDER": os.getenv('RENDER'),  # Indica se está no Render
+            "PORT": os.getenv('PORT'),
+        }
+        
         db_type = "Google Sheets" if USE_GOOGLE_SHEETS else "SQLite"
         info = {
             "database": db_type,
-            "use_google_sheets": USE_GOOGLE_SHEETS
+            "use_google_sheets": USE_GOOGLE_SHEETS,
+            "env_vars": env_debug,
+            "credentials_configured": {
+                "usuario": APP_USUARIO,
+                "senha_defined": bool(os.getenv('APP_SENHA'))
+            }
         }
         if USE_GOOGLE_SHEETS and sheets_info:
             info["spreadsheet_url"] = sheets_info.get('spreadsheet_url', None)
