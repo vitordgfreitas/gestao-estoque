@@ -16,32 +16,49 @@ root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
 
 # Carrega variáveis de ambiente do arquivo .env (apenas em desenvolvimento local)
-# No Render, as variáveis vêm do painel Environment Variables
+# No Render, as variáveis vêm do painel Environment Variables e têm PRIORIDADE
+# override=False garante que variáveis do sistema (Render) não sejam sobrescritas por .env
 try:
     from dotenv import load_dotenv
-    # Tenta carregar .env da raiz do projeto (apenas se existir)
-    env_path = os.path.join(root_dir, '.env')
-    if os.path.exists(env_path):
-        load_dotenv(env_path, override=False)  # override=False: não sobrescreve variáveis já definidas
-        print(f"✅ Carregado .env da raiz: {env_path}")
-    # Também tenta carregar .env do backend
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_env = os.path.join(backend_dir, '.env')
-    if os.path.exists(backend_env):
-        load_dotenv(backend_env, override=False)
-        print(f"✅ Carregado .env do backend: {backend_env}")
+    # Verifica se estamos em ambiente de produção (Render, Heroku, etc)
+    is_production = os.getenv('RENDER') is not None or os.getenv('DYNO') is not None
+    
+    if not is_production:
+        # Apenas carrega .env em desenvolvimento local
+        env_path = os.path.join(root_dir, '.env')
+        if os.path.exists(env_path):
+            load_dotenv(env_path, override=False)  # override=False: não sobrescreve variáveis já definidas
+            print(f"✅ Carregado .env da raiz (desenvolvimento): {env_path}")
+        # Também tenta carregar .env do backend
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_env = os.path.join(backend_dir, '.env')
+        if os.path.exists(backend_env):
+            load_dotenv(backend_env, override=False)
+            print(f"✅ Carregado .env do backend (desenvolvimento): {backend_env}")
+    else:
+        print("ℹ️ Ambiente de produção detectado - usando apenas variáveis do sistema (Render)")
 except ImportError:
     print("ℹ️ python-dotenv não instalado, usando apenas variáveis de ambiente do sistema")
 except Exception as e:
     print(f"⚠️ Erro ao carregar .env: {e}")
 
 # Debug: mostra variáveis de ambiente importantes (sem valores sensíveis)
-print(f"🔍 DEBUG - Variáveis de ambiente:")
+print(f"\n{'='*60}")
+print(f"🔍 DEBUG - Variáveis de Ambiente")
+print(f"{'='*60}")
 print(f"   USE_GOOGLE_SHEETS: {os.getenv('USE_GOOGLE_SHEETS', 'não definido')}")
-print(f"   APP_USUARIO definido: {'sim' if os.getenv('APP_USUARIO') else 'não'}")
-print(f"   APP_SENHA definido: {'sim' if os.getenv('APP_SENHA') else 'não'}")
+app_usuario_raw = os.getenv('APP_USUARIO')
+app_senha_raw = os.getenv('APP_SENHA')
+print(f"   APP_USUARIO (raw): {repr(app_usuario_raw)}")
+print(f"   APP_SENHA definido: {'sim' if app_senha_raw else 'não'}")
 print(f"   GOOGLE_SHEET_ID definido: {'sim' if os.getenv('GOOGLE_SHEET_ID') else 'não'}")
-print(f"   GOOGLE_CREDENTIALS definido: {'sim' if os.getenv('GOOGLE_CREDENTIALS') else 'não'}")
+google_creds = os.getenv('GOOGLE_CREDENTIALS')
+if google_creds:
+    print(f"   GOOGLE_CREDENTIALS: definido ({len(google_creds)} caracteres)")
+    print(f"   Primeiros 50 chars: {google_creds[:50]}...")
+else:
+    print(f"   GOOGLE_CREDENTIALS: não definido")
+print(f"{'='*60}\n")
 
 from models import Item, Compromisso, Carro
 
@@ -274,26 +291,41 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 # ============= AUTENTICAÇÃO =============
 
 # Credenciais - lê do ambiente ou usa valores padrão
-# O .env já foi carregado no início do arquivo (se existir)
-# No Render, as variáveis devem estar configuradas no painel Environment Variables
-APP_USUARIO = os.getenv('APP_USUARIO', 'star')
-APP_SENHA = os.getenv('APP_SENHA', 'maiko')
+# IMPORTANTE: No Render, as variáveis DEVEM estar configuradas no painel Settings → Environment
+# O código lê diretamente de os.getenv(), que funciona tanto com .env local quanto com variáveis do Render
+
+# Lê as variáveis diretamente do ambiente (sem defaults primeiro para debug)
+app_usuario_env = os.getenv('APP_USUARIO')
+app_senha_env = os.getenv('APP_SENHA')
+
+# Usa valores padrão apenas se não estiverem definidos
+APP_USUARIO = app_usuario_env if app_usuario_env is not None else 'star'
+APP_SENHA = app_senha_env if app_senha_env is not None else 'maiko'
 
 # Debug detalhado
 print(f"\n{'='*60}")
 print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
 print(f"{'='*60}")
-print(f"APP_USUARIO (variável de ambiente): {os.getenv('APP_USUARIO', 'NÃO DEFINIDA')}")
-print(f"APP_SENHA (variável de ambiente): {'DEFINIDA' if os.getenv('APP_SENHA') else 'NÃO DEFINIDA'}")
-print(f"Usuário final usado: {APP_USUARIO}")
-if APP_USUARIO != 'star' or APP_SENHA != 'maiko':
-    print("✅ Usando credenciais personalizadas do ambiente")
+print(f"APP_USUARIO (os.getenv): {repr(app_usuario_env)}")
+print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_env else 'NÃO DEFINIDA'}")
+print(f"Usuário final usado: {repr(APP_USUARIO)}")
+print(f"Senha final usada: {'DEFINIDA' if APP_SENHA else 'NÃO DEFINIDA'}")
+
+if app_usuario_env is not None or app_senha_env is not None:
+    print("✅ Usando credenciais do ambiente (Render ou .env)")
+    if app_usuario_env is None:
+        print("   ⚠️ APP_USUARIO não definido, usando padrão 'star'")
+    if app_senha_env is None:
+        print("   ⚠️ APP_SENHA não definido, usando padrão 'maiko'")
 else:
-    print("⚠️ ATENÇÃO: Usando credenciais padrão (star/maiko)")
-    print("   Para usar credenciais personalizadas no Render:")
+    print("⚠️ ATENÇÃO: Nenhuma credencial definida no ambiente!")
+    print("   Usando credenciais padrão (star/maiko)")
+    print("   Para configurar no Render:")
     print("   1. Vá em Settings → Environment")
-    print("   2. Adicione: APP_USUARIO = seu_usuario")
-    print("   3. Adicione: APP_SENHA = sua_senha")
+    print("   2. Clique em 'Add Environment Variable'")
+    print("   3. Key: APP_USUARIO, Value: seu_usuario")
+    print("   4. Key: APP_SENHA, Value: sua_senha")
+    print("   5. Salve e reinicie o serviço")
 print(f"{'='*60}\n")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
