@@ -7,12 +7,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 import os
+import sys
 import secrets
 from pydantic import BaseModel
-
-# Importa módulos existentes
-import sys
-import os
 # Adiciona o diretório raiz ao path
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
@@ -247,9 +244,24 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
 
 # ============= AUTENTICAÇÃO =============
 
-# Credenciais fixas
-APP_USUARIO = "star"
-APP_SENHA = "maiko"
+# Carrega variáveis de ambiente do arquivo .env se existir
+try:
+    from dotenv import load_dotenv
+    # Tenta carregar .env da raiz do projeto (root_dir já foi definido acima)
+    env_path = os.path.join(root_dir, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+    # Também tenta carregar .env do backend
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_env = os.path.join(backend_dir, '.env')
+    if os.path.exists(backend_env):
+        load_dotenv(backend_env)
+except ImportError:
+    pass  # python-dotenv não instalado, continua sem ele
+
+# Credenciais - lê do ambiente ou usa valores padrão
+APP_USUARIO = os.getenv('APP_USUARIO', 'star')
+APP_SENHA = os.getenv('APP_SENHA', 'maiko')
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
