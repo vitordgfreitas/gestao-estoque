@@ -27,8 +27,15 @@ export default function Login() {
         toast.error('Usuário ou senha incorretos')
       }
     } catch (error) {
-      toast.error('Erro ao fazer login. Verifique suas credenciais.')
       console.error('Erro no login:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Erro ao fazer login'
+      toast.error(errorMessage)
+      
+      // Debug adicional
+      if (error.response) {
+        console.error('Status:', error.response.status)
+        console.error('Data:', error.response.data)
+      }
     } finally {
       setLoading(false)
     }

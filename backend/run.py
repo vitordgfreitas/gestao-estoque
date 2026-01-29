@@ -24,8 +24,8 @@ except ImportError:
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    print(f"\n🚀 Iniciando servidor FastAPI na porta {port}")
-    print(f"📁 Diretório raiz: {root_dir}")
-    print(f"🌐 Acesse: http://localhost:{port}")
-    print(f"📚 Docs: http://localhost:{port}/docs\n")
+    print(f"\n[INFO] Iniciando servidor FastAPI na porta {port}")
+    print(f"[INFO] Diretorio raiz: {root_dir}")
+    print(f"[INFO] Acesse: http://localhost:{port}")
+    print(f"[INFO] Docs: http://localhost:{port}/docs\n")
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

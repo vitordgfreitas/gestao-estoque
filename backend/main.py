@@ -22,14 +22,23 @@ try:
     from dotenv import load_dotenv
     # Só carrega .env se não estiver no Render (onde variáveis vêm do painel)
     if not os.getenv('RENDER'):
+        # Tenta carregar .env da raiz do projeto
         env_path = os.path.join(root_dir, '.env')
         if os.path.exists(env_path):
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
+            print(f"✅ Carregado .env da raiz: {env_path}")
+        else:
+            print(f"⚠️ Arquivo .env não encontrado em: {env_path}")
+        
+        # Também tenta carregar .env do backend
         backend_env = os.path.join(os.path.dirname(__file__), '.env')
         if os.path.exists(backend_env):
-            load_dotenv(backend_env)
-except:
-    pass  # Ignora erros, usa apenas variáveis do sistema
+            load_dotenv(backend_env, override=True)
+            print(f"✅ Carregado .env do backend: {backend_env}")
+except ImportError:
+    print("⚠️ python-dotenv não instalado. Instale com: pip install python-dotenv")
+except Exception as e:
+    print(f"⚠️ Erro ao carregar .env: {e}")
 
 from models import Item, Compromisso, Carro
 
@@ -102,9 +111,28 @@ app = FastAPI(
 )
 
 # CORS - permite requisições do frontend
+# Em desenvolvimento, permite qualquer origem localhost
+is_dev = not os.getenv('RENDER')
+if is_dev:
+    # Desenvolvimento: permite qualquer porta do localhost
+    allow_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+        "http://127.0.0.1:5173",
+    ]
+else:
+    # Produção: permite apenas o frontend do Render
+    frontend_url = os.getenv('FRONTEND_URL', 'https://crm-frontend-nbrm.onrender.com')
+    allow_origins = [frontend_url]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -283,8 +311,16 @@ if is_production:
             "ERRO CRÍTICO: APP_USUARIO e APP_SENHA devem estar configuradas no Render!\n"
             "Configure em: Settings → Environment → Add Environment Variable"
         )
-    APP_USUARIO = app_usuario_raw.strip()
-    APP_SENHA = app_senha_raw.strip()
+    # Remove espaços extras e caracteres invisíveis
+    APP_USUARIO = app_usuario_raw.strip() if app_usuario_raw else ""
+    APP_SENHA = app_senha_raw.strip() if app_senha_raw else ""
+    
+    # Debug: mostra exatamente o que foi lido (sem mostrar senha completa)
+    print(f"[DEBUG] APP_USUARIO lido: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
+    if APP_SENHA:
+        print(f"[DEBUG] APP_SENHA lido: len={len(APP_SENHA)}, primeiro_char={repr(APP_SENHA[0])}, ultimo_char={repr(APP_SENHA[-1])}")
+    else:
+        print(f"[DEBUG] APP_SENHA lido: None")
 else:
     # Em desenvolvimento local, permite valores padrão apenas para facilitar
     # Mas ainda recomenda usar .env
@@ -353,14 +389,17 @@ async def login(credentials: LoginRequest):
     usuario_esperado = APP_USUARIO.strip() if APP_USUARIO else ""
     senha_esperada = APP_SENHA.strip() if APP_SENHA else ""
     
-    # Debug (sem mostrar senha completa)
-    print(f"[LOGIN] Tentativa de login:")
-    print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)})")
-    print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)})")
-    print(f"  Senha recebida: {'*' * len(senha_recebida)} (len={len(senha_recebida)})")
-    print(f"  Senha esperada: {'*' * len(senha_esperada)} (len={len(senha_esperada)})")
+    # Debug detalhado (sem mostrar senha completa, mas mostra primeiros/last chars para debug)
+    print(f"\n[LOGIN] ========== TENTATIVA DE LOGIN ==========")
+    print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)}, repr={repr(usuario_recebido)})")
+    print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)}, repr={repr(usuario_esperado)})")
+    print(f"  Senha recebida: len={len(senha_recebida)}, primeiro_char={repr(senha_recebida[0]) if senha_recebida else 'None'}, ultimo_char={repr(senha_recebida[-1]) if senha_recebida else 'None'}")
+    print(f"  Senha esperada: len={len(senha_esperada)}, primeiro_char={repr(senha_esperada[0]) if senha_esperada else 'None'}, ultimo_char={repr(senha_esperada[-1]) if senha_esperada else 'None'}")
     print(f"  Match usuario: {usuario_recebido == usuario_esperado}")
     print(f"  Match senha: {senha_recebida == senha_esperada}")
+    print(f"  APP_USUARIO original: {repr(APP_USUARIO)}")
+    print(f"  APP_SENHA original (primeiros 2 chars): {repr(APP_SENHA[:2]) if APP_SENHA else 'None'}...")
+    print(f"[LOGIN] =========================================\n")
     
     if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
         token = generate_token()

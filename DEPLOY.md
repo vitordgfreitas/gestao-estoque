@@ -165,12 +165,39 @@ Este guia mostra como fazer deploy gratuito da aplicação usando serviços grat
 ## Configuração de Variáveis de Ambiente
 
 ### Backend (.env ou no painel do serviço):
+
+**⚠️ IMPORTANTE:** No Render, configure as variáveis no painel **Settings → Environment**, não em arquivo `.env`!
+
 ```env
+# Autenticação (OBRIGATÓRIO para produção)
+APP_USUARIO=seu_usuario_aqui
+APP_SENHA=sua_senha_aqui
+
+# Google Sheets (opcional - se não usar, será SQLite)
 USE_GOOGLE_SHEETS=true
 GOOGLE_SHEET_ID=seu_id_aqui
-GOOGLE_CREDENTIALS={"type":"service_account",...}  # JSON completo em uma linha
-PORT=8000  # Alguns serviços definem automaticamente
+GOOGLE_CREDENTIALS={"type":"service_account",...}  # JSON completo em uma linha SEM quebras
+
+# Porta (geralmente definida automaticamente pelo Render)
+PORT=8000
 ```
+
+**Como configurar no Render:**
+1. Vá no seu serviço backend no Render
+2. Clique em **Settings** → **Environment**
+3. Clique em **Add Environment Variable**
+4. Adicione cada variável:
+   - **Key**: `APP_USUARIO` → **Value**: `` (ou seu usuário)
+   - **Key**: `APP_SENHA` → **Value**: `` (ou sua senha)
+   - **Key**: `USE_GOOGLE_SHEETS` → **Value**: `true` ou `false`
+   - **Key**: `GOOGLE_SHEET_ID` → **Value**: seu ID da planilha
+   - **Key**: `GOOGLE_CREDENTIALS` → **Value**: JSON completo em uma linha (sem quebras!)
+
+**⚠️ Sobre GOOGLE_CREDENTIALS:**
+- O JSON deve estar em **uma única linha**, sem quebras
+- Remova todas as quebras de linha (`\n`) do JSON
+- Exemplo correto: `{"type":"service_account","project_id":"...","private_key":"..."}`
+- Exemplo ERRADO: `{\n  "type": "service_account",\n  ...\n}`
 
 ### Frontend (variáveis de ambiente):
 ```env
@@ -214,7 +241,11 @@ web: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 python-3.11.0
 ```
-**Por quê?** Python 3.13 pode ter problemas compilando algumas dependências (como pydantic-core). Python 3.11 é mais estável e tem melhor suporte.
+**Por quê?** Python 3.13 pode ter problemas de compatibilidade com SQLAlchemy 2.0.23 e outras dependências. Python 3.11 é mais estável e tem melhor suporte.
+
+**⚠️ IMPORTANTE:** Se o `runtime.txt` não funcionar, configure manualmente no Render:
+- Vá em **Settings** → **Python Version**
+- Selecione **Python 3.11** (não 3.13!)
 
 ---
 
@@ -326,5 +357,44 @@ Quando você conecta um repositório GitHub ao Render:
 4. Anote a URL do backend
 5. Configure `VITE_API_URL` no frontend
 6. Faça deploy do frontend
-7. Teste a aplicação!
-8. **A partir de agora, qualquer push no GitHub atualiza automaticamente! 🚀**
+7. Configure domínio customizado (opcional - veja abaixo)
+8. Teste a aplicação!
+9. **A partir de agora, qualquer push no GitHub atualiza automaticamente! 🚀**
+
+---
+
+## Configurar Domínio Customizado no Render
+
+### Como mudar o domínio do seu app:
+
+**Opção 1: Personalizar nome do serviço (Gratuito)**
+- Vá em **Settings** → **Name**
+- Mude para algo mais amigável
+- Nova URL: `seu-nome.onrender.com`
+
+**Opção 2: Domínio customizado (Recomendado para produção)**
+
+1. **No Render:**
+   - Vá em **Settings** do serviço
+   - Seção **"Custom Domains"**
+   - Clique em **"Add Custom Domain"**
+   - Digite seu domínio (ex: `api.seudominio.com`)
+
+2. **Configure DNS:**
+   - Adicione registro CNAME no seu provedor DNS:
+     ```
+     Tipo: CNAME
+     Nome: api (ou app)
+     Valor: crm-backend-ghly.onrender.com
+     ```
+
+3. **Aguarde propagação:**
+   - DNS pode levar até 48 horas
+   - Render verificará automaticamente
+   - SSL será configurado automaticamente
+
+4. **Atualize frontend:**
+   - Se mudar domínio do backend, atualize `VITE_API_URL`
+   - Use o novo domínio: `https://api.seudominio.com`
+
+**Veja `DOMINIO_CUSTOMIZADO.md` para guia completo!**

@@ -41,12 +41,20 @@ Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
 No painel do Render, vá em **Environment** e adicione:
 
 ```
+# Autenticação (OBRIGATÓRIO)
+APP_USUARIO = seu_usuario_aqui
+APP_SENHA = sua_senha_aqui
+
+# Google Sheets (opcional - se não usar, será SQLite)
 USE_GOOGLE_SHEETS = true
 GOOGLE_SHEET_ID = seu_id_aqui
 GOOGLE_CREDENTIALS = {"type":"service_account",...}  # JSON completo em uma linha
 ```
 
-**Nota:** O `GOOGLE_CREDENTIALS` deve ser o JSON completo em uma única linha. Se tiver quebras de linha, remova-as ou substitua por `\n`.
+**⚠️ IMPORTANTE:**
+- `APP_USUARIO` e `APP_SENHA` são **obrigatórias** para o login funcionar
+- O `GOOGLE_CREDENTIALS` deve ser o JSON completo em uma única linha. Se tiver quebras de linha, remova-as ou use um minificador JSON online.
+- Veja `RENDER_ENV_FIX.md` para instruções detalhadas sobre como corrigir problemas com variáveis de ambiente.
 
 ## Verificação
 

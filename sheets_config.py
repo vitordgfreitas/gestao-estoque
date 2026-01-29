@@ -24,8 +24,49 @@ def get_sheets_client():
     
     if credentials_json:
         # Usa credenciais da variável de ambiente
-        creds_dict = json.loads(credentials_json)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        try:
+            # Remove espaços em branco e quebras de linha extras
+            credentials_json = credentials_json.strip()
+            
+            # Tenta fazer parse do JSON
+            # Se falhar, tenta remover quebras de linha e espaços extras
+            try:
+                creds_dict = json.loads(credentials_json)
+            except json.JSONDecodeError:
+                # Tenta corrigir: remove quebras de linha e espaços extras entre chaves
+                import re
+                # Remove quebras de linha e espaços extras, mas mantém estrutura
+                fixed_json = re.sub(r'\s+', ' ', credentials_json)
+                fixed_json = fixed_json.replace('{ ', '{').replace(' }', '}')
+                fixed_json = fixed_json.replace('[ ', '[').replace(' ]', ']')
+                try:
+                    creds_dict = json.loads(fixed_json)
+                except json.JSONDecodeError:
+                    # Última tentativa: tenta parse linha por linha se tiver quebras
+                    if '\n' in credentials_json:
+                        # Remove todas as quebras de linha
+                        single_line = credentials_json.replace('\n', '').replace('\r', '')
+                        creds_dict = json.loads(single_line)
+                    else:
+                        raise
+            
+            creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        except json.JSONDecodeError as e:
+            error_msg = (
+                f"ERRO: GOOGLE_CREDENTIALS tem JSON invalido!\n"
+                f"Detalhes: {str(e)}\n"
+                f"SOLUCAO:\n"
+                f"1. Acesse: https://www.freeformatter.com/json-formatter.html\n"
+                f"2. Cole seu JSON completo\n"
+                f"3. Clique em 'Minify' (compactar em uma linha)\n"
+                f"4. Copie o resultado\n"
+                f"5. No Render: Settings -> Environment -> GOOGLE_CREDENTIALS\n"
+                f"6. Cole o JSON minificado (uma linha so)\n"
+                f"Primeiros 100 caracteres recebidos: {credentials_json[:100]}..."
+            )
+            raise ValueError(error_msg)
+        except Exception as e:
+            raise ValueError(f"Erro ao processar GOOGLE_CREDENTIALS: {str(e)}")
     else:
         # Tenta encontrar credentials.json na raiz do projeto
         # Primeiro tenta o caminho padrão (raiz do projeto)
