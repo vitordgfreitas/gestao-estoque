@@ -13,34 +13,54 @@ Este guia mostra como fazer deploy gratuito da aplicação usando serviços grat
 4. Configure:
    - **Name**: `crm-backend` (ou qualquer nome)
    - **Environment**: `Python 3`
+   - **Root Directory**: `backend` ⚠️ **IMPORTANTE: Configure isso primeiro!**
    - **Build Command**: 
      ```bash
-     cd backend && pip install -r requirements.txt
+     pip install -r requirements.txt
      ```
+     (Não precisa de `cd backend` se Root Directory estiver configurado)
    - **Start Command**: 
      ```bash
-     cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+     uvicorn main:app --host 0.0.0.0 --port $PORT
      ```
-   - **Root Directory**: `backend`
+     (Não precisa de `cd backend` se Root Directory estiver configurado)
 5. Adicione variáveis de ambiente:
    - `USE_GOOGLE_SHEETS`: `true` ou `false`
    - `GOOGLE_SHEET_ID`: (se usar Google Sheets)
-   - `GOOGLE_CREDENTIALS`: (JSON completo das credenciais, se usar Google Sheets)
+   - `GOOGLE_CREDENTIALS`: (JSON completo das credenciais em uma linha, se usar Google Sheets)
+   - `PORT`: `8000` (alguns serviços definem automaticamente)
 6. Clique em "Create Web Service"
+
+**⚠️ IMPORTANTE:** Se você já criou o serviço e está dando erro:
+1. Vá em **Settings** do serviço
+2. Configure **Root Directory** como `backend`
+3. Atualize **Build Command** para apenas: `pip install -r requirements.txt`
+4. Atualize **Start Command** para apenas: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+5. Salve e faça um novo deploy
 
 **Frontend (React):**
 1. No Render, clique em "New +" → "Static Site"
 2. Conecte o mesmo repositório
 3. Configure:
    - **Name**: `crm-frontend`
+   - **Root Directory**: `frontend` ⚠️ **IMPORTANTE: Configure isso primeiro!**
    - **Build Command**: 
      ```bash
-     cd frontend && npm install && npm run build
+     npm install && npm run build
      ```
-   - **Publish Directory**: `frontend/dist`
+     (Não precisa de `cd frontend` se Root Directory estiver configurado)
+   - **Publish Directory**: `dist`
+     (Não precisa de `frontend/dist` se Root Directory estiver configurado)
 4. Adicione variável de ambiente:
-   - `VITE_API_URL`: URL do backend (ex: `https://crm-backend.onrender.com`)
+   - `VITE_API_URL`: URL do backend (ex: `https://crm-backend-ghly.onrender.com`)
 5. Clique em "Create Static Site"
+
+**⚠️ IMPORTANTE:** Se você já criou o serviço e está dando erro:
+1. Vá em **Settings** do serviço
+2. Configure **Root Directory** como `frontend`
+3. Atualize **Build Command** para apenas: `npm install && npm run build`
+4. Atualize **Publish Directory** para apenas: `dist`
+5. Salve e faça um novo deploy
 
 **Limitações do Plano Gratuito:**
 - Backend pode "dormir" após 15 minutos de inatividade (primeira requisição pode demorar)
@@ -251,7 +271,53 @@ jobs:
 
 ---
 
-## Próximos Passos
+## Deploy Automático
+
+### ✅ Sim! O Render faz deploy automático!
+
+Quando você conecta um repositório GitHub ao Render:
+
+1. **Auto-Deploy está ativado por padrão**
+   - Qualquer push para a branch configurada (geralmente `main` ou `master`)
+   - O Render detecta automaticamente
+   - Inicia um novo build e deploy
+
+2. **Como funciona:**
+   - Você faz `git push` para o GitHub
+   - Render detecta a mudança
+   - Executa o Build Command
+   - Faz deploy da nova versão
+   - Serviço fica atualizado automaticamente
+
+3. **Verificar configuração:**
+   - Vá em **Settings** do seu serviço
+   - Seção **"Auto-Deploy"**
+   - Deve estar marcado como **"Yes"**
+   - Branch configurada (geralmente `main`)
+
+4. **Desativar auto-deploy (opcional):**
+   - Se quiser fazer deploy manual apenas
+   - Desmarque **"Auto-Deploy"** em Settings
+   - Use **"Manual Deploy"** quando quiser
+
+### ⚠️ Importante:
+
+- **Backend:** Pode levar 2-5 minutos para fazer build e deploy
+- **Frontend:** Geralmente mais rápido, 1-3 minutos
+- **Durante o deploy:** O serviço pode ficar temporariamente indisponível
+- **Notificações:** Você pode configurar email/Slack para receber notificações de deploy
+
+### 🔄 Workflow Recomendado:
+
+1. Faça suas alterações localmente
+2. Teste localmente (`npm run dev` / `python run.py`)
+3. Commit: `git add .` e `git commit -m "sua mensagem"`
+4. Push: `git push origin main`
+5. Render detecta e faz deploy automaticamente
+6. Aguarde alguns minutos
+7. Verifique se está funcionando na URL do Render
+
+**Próximos Passos:**
 
 1. Escolha uma opção de deploy
 2. Configure variáveis de ambiente
@@ -260,5 +326,4 @@ jobs:
 5. Configure `VITE_API_URL` no frontend
 6. Faça deploy do frontend
 7. Teste a aplicação!
-
-**Boa sorte com o deploy! 🚀**
+8. **A partir de agora, qualquer push no GitHub atualiza automaticamente! 🚀**
