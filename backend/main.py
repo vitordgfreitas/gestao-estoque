@@ -126,9 +126,23 @@ if is_dev:
         "http://127.0.0.1:5173",
     ]
 else:
-    # Produção: permite apenas o frontend do Render
-    frontend_url = os.getenv('FRONTEND_URL', 'https://crm-frontend-nbrm.onrender.com')
-    allow_origins = [frontend_url]
+    # Produção: permite o frontend do Render
+    # Lista explícita (FastAPI não suporta wildcards)
+    allow_origins = [
+        "https://crm-frontend-nbrm.onrender.com",
+        "http://crm-frontend-nbrm.onrender.com",  # Caso use HTTP
+    ]
+    # Se tiver FRONTEND_URL configurado, adiciona também
+    frontend_url = os.getenv('FRONTEND_URL')
+    if frontend_url:
+        if frontend_url not in allow_origins:
+            allow_origins.append(frontend_url)
+        # Adiciona versão HTTP também
+        http_url = frontend_url.replace('https://', 'http://')
+        if http_url not in allow_origins:
+            allow_origins.append(http_url)
+    
+    print(f"[CORS] Origens permitidas em produção: {allow_origins}")
 
 app.add_middleware(
     CORSMiddleware,
