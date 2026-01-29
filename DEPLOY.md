@@ -49,8 +49,8 @@ Este guia mostra como fazer deploy gratuito da aplicação usando serviços grat
      npm install && npm run build
      ```
      (Não precisa de `cd frontend` se Root Directory estiver configurado)
-   - **Publish Directory**: `dist`
-     (Não precisa de `frontend/dist` se Root Directory estiver configurado)
+   - **Publish Directory**: `dist` ⚠️ **NÃO use `frontend/dist`!**
+     (Se Root Directory = `frontend`, então Publish Directory = `dist`)
 4. Adicione variável de ambiente:
    - `VITE_API_URL`: URL do backend (ex: `https://crm-backend-ghly.onrender.com`)
 5. Clique em "Create Static Site"
@@ -210,10 +210,11 @@ export default {
 web: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-### 4. Criar `backend/runtime.txt` (se necessário):
+### 4. Criar `backend/runtime.txt` (RECOMENDADO para evitar problemas):
 ```
 python-3.11.0
 ```
+**Por quê?** Python 3.13 pode ter problemas compilando algumas dependências (como pydantic-core). Python 3.11 é mais estável e tem melhor suporte.
 
 ---
 

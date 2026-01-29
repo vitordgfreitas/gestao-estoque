@@ -88,8 +88,9 @@ bash: cd: No such file or directory
    - Use apenas: `npm install && npm run build`
 
 4. **Configure Publish Directory:**
-   - Deve ser: `dist`
-   - (Não precisa de `frontend/dist` se Root Directory estiver configurado)
+   - ⚠️ **MUITO IMPORTANTE:** Deve ser apenas: `dist`
+   - **NÃO** use `frontend/dist` (isso causa erro!)
+   - Se Root Directory = `frontend`, então Publish Directory = `dist`
 
 5. **Salve as alterações**
 
