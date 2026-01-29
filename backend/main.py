@@ -110,6 +110,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Handler explícito para OPTIONS (preflight requests)
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handler para requisições OPTIONS (preflight)"""
+    return {"message": "OK"}
+
 # CORS - permite requisições do frontend
 # Em desenvolvimento, permite qualquer origem localhost
 is_dev = not os.getenv('RENDER')
