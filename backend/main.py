@@ -41,6 +41,15 @@ except Exception as e:
     print(f"⚠️ Erro ao carregar .env: {e}")
 
 from models import Item, Compromisso, Carro
+import auditoria
+# Importa módulo de backup
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+try:
+    import backup
+except ImportError:
+    backup = None
 
 # Escolhe qual banco de dados usar baseado em variável de ambiente
 # Por padrão, tenta usar Google Sheets (mesmo comportamento do Streamlit)
@@ -526,6 +535,70 @@ async def listar_itens():
         error_detail = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_detail)
 
+@app.get("/api/itens/buscar", response_model=dict)
+async def buscar_itens(
+    q: Optional[str] = None,
+    categoria: Optional[str] = None,
+    cidade: Optional[str] = None,
+    uf: Optional[str] = None,
+    ordenar_por: Optional[str] = "nome",
+    ordem: Optional[str] = "asc",
+    pagina: Optional[int] = 1,
+    por_pagina: Optional[int] = 50
+):
+    """Busca avançada de itens com filtros e paginação"""
+    try:
+        itens = db_module.listar_itens()
+        
+        # Aplica filtros
+        itens_filtrados = itens
+        
+        if q:
+            q_lower = q.lower()
+            itens_filtrados = [
+                item for item in itens_filtrados
+                if q_lower in (item.nome or '').lower() or
+                   q_lower in (item.categoria or '').lower() or
+                   q_lower in (item.descricao or '').lower() or
+                   q_lower in (item.cidade or '').lower()
+            ]
+        
+        if categoria:
+            itens_filtrados = [item for item in itens_filtrados if (item.categoria or '').strip() == categoria.strip()]
+        
+        if cidade:
+            itens_filtrados = [item for item in itens_filtrados if (item.cidade or '').lower() == cidade.lower()]
+        
+        if uf:
+            itens_filtrados = [item for item in itens_filtrados if (item.uf or '').upper() == uf.upper()]
+        
+        # Ordenação
+        reverse_order = ordem.lower() == 'desc'
+        if ordenar_por == 'nome':
+            itens_filtrados.sort(key=lambda x: (x.nome or '').lower(), reverse=reverse_order)
+        elif ordenar_por == 'categoria':
+            itens_filtrados.sort(key=lambda x: (x.categoria or '').lower(), reverse=reverse_order)
+        elif ordenar_por == 'quantidade':
+            itens_filtrados.sort(key=lambda x: x.quantidade_total or 0, reverse=reverse_order)
+        elif ordenar_por == 'cidade':
+            itens_filtrados.sort(key=lambda x: (x.cidade or '').lower(), reverse=reverse_order)
+        
+        # Paginação
+        total = len(itens_filtrados)
+        inicio = (pagina - 1) * por_pagina
+        fim = inicio + por_pagina
+        itens_paginados = itens_filtrados[inicio:fim]
+        
+        return {
+            "itens": [item_to_dict(item) for item in itens_paginados],
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": por_pagina,
+            "total_paginas": (total + por_pagina - 1) // por_pagina
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/itens/{item_id}", response_model=dict)
 async def buscar_item(item_id: int):
     """Busca um item por ID"""
@@ -619,6 +692,101 @@ async def listar_compromissos():
         import traceback
         error_detail = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
         raise HTTPException(status_code=500, detail=error_detail)
+
+@app.get("/api/compromissos/buscar", response_model=dict)
+async def buscar_compromissos(
+    q: Optional[str] = None,
+    item_id: Optional[int] = None,
+    data_inicio_min: Optional[date] = None,
+    data_inicio_max: Optional[date] = None,
+    data_fim_min: Optional[date] = None,
+    data_fim_max: Optional[date] = None,
+    cidade: Optional[str] = None,
+    uf: Optional[str] = None,
+    contratante: Optional[str] = None,
+    ordenar_por: Optional[str] = "data_inicio",
+    ordem: Optional[str] = "asc",
+    pagina: Optional[int] = 1,
+    por_pagina: Optional[int] = 50
+):
+    """Busca avançada de compromissos com filtros e paginação"""
+    try:
+        compromissos = db_module.listar_compromissos()
+        
+        # Aplica filtros
+        compromissos_filtrados = compromissos
+        
+        if q:
+            q_lower = q.lower()
+            compromissos_filtrados = [
+                comp for comp in compromissos_filtrados
+                if q_lower in (comp.contratante or '').lower() or
+                   q_lower in (comp.descricao or '').lower() or
+                   (comp.item and q_lower in (comp.item.nome or '').lower())
+            ]
+        
+        if item_id:
+            compromissos_filtrados = [comp for comp in compromissos_filtrados if comp.item_id == item_id]
+        
+        if data_inicio_min:
+            compromissos_filtrados = [
+                comp for comp in compromissos_filtrados
+                if isinstance(comp.data_inicio, date) and comp.data_inicio >= data_inicio_min
+            ]
+        
+        if data_inicio_max:
+            compromissos_filtrados = [
+                comp for comp in compromissos_filtrados
+                if isinstance(comp.data_inicio, date) and comp.data_inicio <= data_inicio_max
+            ]
+        
+        if data_fim_min:
+            compromissos_filtrados = [
+                comp for comp in compromissos_filtrados
+                if isinstance(comp.data_fim, date) and comp.data_fim >= data_fim_min
+            ]
+        
+        if data_fim_max:
+            compromissos_filtrados = [
+                comp for comp in compromissos_filtrados
+                if isinstance(comp.data_fim, date) and comp.data_fim <= data_fim_max
+            ]
+        
+        if cidade:
+            compromissos_filtrados = [comp for comp in compromissos_filtrados if (comp.cidade or '').lower() == cidade.lower()]
+        
+        if uf:
+            compromissos_filtrados = [comp for comp in compromissos_filtrados if (comp.uf or '').upper() == uf.upper()]
+        
+        if contratante:
+            compromissos_filtrados = [comp for comp in compromissos_filtrados if (comp.contratante or '').lower() == contratante.lower()]
+        
+        # Ordenação
+        reverse_order = ordem.lower() == 'desc'
+        if ordenar_por == 'data_inicio':
+            compromissos_filtrados.sort(key=lambda x: x.data_inicio if isinstance(x.data_inicio, date) else date.min, reverse=reverse_order)
+        elif ordenar_por == 'data_fim':
+            compromissos_filtrados.sort(key=lambda x: x.data_fim if isinstance(x.data_fim, date) else date.min, reverse=reverse_order)
+        elif ordenar_por == 'quantidade':
+            compromissos_filtrados.sort(key=lambda x: x.quantidade or 0, reverse=reverse_order)
+        elif ordenar_por == 'contratante':
+            compromissos_filtrados.sort(key=lambda x: (x.contratante or '').lower(), reverse=reverse_order)
+        
+        # Paginação
+        total = len(compromissos_filtrados)
+        inicio = (pagina - 1) * por_pagina
+        fim = inicio + por_pagina
+        compromissos_paginados = compromissos_filtrados[inicio:fim]
+        
+        return {
+            "compromissos": [compromisso_to_dict(comp) for comp in compromissos_paginados],
+            "total": total,
+            "pagina": pagina,
+            "por_pagina": por_pagina,
+            "total_paginas": (total + por_pagina - 1) // por_pagina
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/compromissos/{compromisso_id}", response_model=dict)
 async def buscar_compromisso(compromisso_id: int):
@@ -903,6 +1071,77 @@ async def obter_estatisticas():
             "categorias": categorias_stats,
             "compromissos_mensais": compromissos_mensais
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/auditoria/{tabela}/{registro_id}", response_model=dict)
+async def obter_historico_auditoria(tabela: str, registro_id: int):
+    """Obtém histórico de mudanças de um registro"""
+    try:
+        historico = auditoria.obter_historico(tabela, registro_id)
+        return {"historico": historico}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/criar", response_model=dict)
+async def criar_backup():
+    """Cria backup manual da planilha"""
+    try:
+        if backup is None:
+            raise HTTPException(status_code=501, detail="Módulo de backup não disponível")
+        resultado = backup.criar_backup_google_sheets()
+        return resultado
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/backup/listar", response_model=dict)
+async def listar_backups(max_backups: Optional[int] = 50):
+    """Lista backups disponíveis"""
+    try:
+        if backup is None:
+            return {"backups": [], "total": 0}
+        backups = backup.listar_backups(max_backups=max_backups)
+        return {"backups": backups, "total": len(backups)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/restaurar/{backup_id}", response_model=dict)
+async def restaurar_backup_endpoint(backup_id: str):
+    """Restaura um backup específico"""
+    try:
+        if backup is None:
+            raise HTTPException(status_code=501, detail="Módulo de backup não disponível")
+        resultado = backup.restaurar_backup(backup_id)
+        return resultado
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/backup/exportar", response_model=dict)
+async def exportar_backup_json():
+    """Exporta todos os dados em formato JSON"""
+    try:
+        if backup is None:
+            raise HTTPException(status_code=501, detail="Módulo de backup não disponível")
+        json_data = backup.exportar_backup_json()
+        import json as json_lib
+        return {"dados": json_lib.loads(json_data), "formato": "json"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/backup/limpar", response_model=dict)
+async def limpar_backups_antigos_endpoint(dias_manter: Optional[int] = 30):
+    """Remove backups mais antigos que o número de dias especificado"""
+    try:
+        if backup is None:
+            return {"removidos": 0, "dias_manter": dias_manter}
+        removidos = backup.limpar_backups_antigos(dias_manter=dias_manter)
+        return {"removidos": removidos, "dias_manter": dias_manter}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

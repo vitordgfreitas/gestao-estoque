@@ -6,6 +6,8 @@ from datetime import date, datetime
 import os
 import time
 import gspread
+import validacoes
+import auditoria
 
 # Cache das planilhas
 _sheets_cache = None
@@ -159,6 +161,80 @@ def obter_ou_criar_aba_categoria(categoria):
         return worksheet
 
 
+def verificar_placa_existe(placa: str, excluir_item_id: int = None) -> bool:
+    """Verifica se uma placa já existe no sistema
+    
+    Args:
+        placa: Placa a verificar
+        excluir_item_id: ID do item a excluir da verificação (útil para atualizações)
+        
+    Returns:
+        True se a placa existe, False caso contrário
+    """
+    try:
+        sheets = get_sheets()
+        spreadsheet = sheets['spreadsheet']
+        
+        # Verifica na aba Carros
+        try:
+            sheet_carros = spreadsheet.worksheet("Carros")
+            records = sheet_carros.get_all_records()
+            
+            placa_upper = placa.upper().strip().replace('-', '').replace(' ', '')
+            
+            for record in records:
+                if record and record.get('Placa'):
+                    placa_existente = record.get('Placa').upper().strip().replace('-', '').replace(' ', '')
+                    item_id_existente = record.get('Item ID')
+                    
+                    if placa_existente == placa_upper:
+                        # Se está atualizando o mesmo item, não considera duplicata
+                        if excluir_item_id and item_id_existente == excluir_item_id:
+                            continue
+                        return True
+        except gspread.exceptions.WorksheetNotFound:
+            pass
+        
+        return False
+    except Exception:
+        return False
+
+
+def verificar_nome_categoria_existe(nome: str, categoria: str, excluir_item_id: int = None) -> bool:
+    """Verifica se um nome já existe na categoria
+    
+    Args:
+        nome: Nome do item
+        categoria: Categoria do item
+        excluir_item_id: ID do item a excluir da verificação (útil para atualizações)
+        
+    Returns:
+        True se o nome existe na categoria, False caso contrário
+    """
+    try:
+        sheets = get_sheets()
+        sheet_itens = sheets['sheet_itens']
+        records = sheet_itens.get_all_records()
+        
+        nome_lower = nome.lower().strip()
+        
+        for record in records:
+            if record and record.get('Nome') and record.get('Categoria'):
+                nome_existente = record.get('Nome').lower().strip()
+                categoria_existente = record.get('Categoria').strip()
+                item_id_existente = record.get('ID')
+                
+                if nome_existente == nome_lower and categoria_existente == categoria:
+                    # Se está atualizando o mesmo item, não considera duplicata
+                    if excluir_item_id and item_id_existente == excluir_item_id:
+                        continue
+                    return True
+        
+        return False
+    except Exception:
+        return False
+
+
 def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
     """Cria um novo item no estoque
     
@@ -176,13 +252,30 @@ def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=No
         ano: Ano do carro (obrigatório se categoria='Carros')
         campos_categoria: Dicionário com campos específicos da categoria {nome_campo: valor}
     """
-    if not cidade or not uf:
-        raise ValueError("Cidade e UF são obrigatórios")
+    # Validações robustas
+    valido, msg_erro = validacoes.validar_item_completo(
+        nome=nome,
+        categoria=categoria or '',
+        cidade=cidade or '',
+        uf=uf or '',
+        quantidade_total=quantidade_total,
+        placa=placa,
+        marca=marca,
+        modelo=modelo,
+        ano=ano,
+        campos_categoria=campos_categoria
+    )
     
-    # Validação para carros (mantém compatibilidade)
-    if categoria == 'Carros':
-        if not placa or not marca or not modelo or not ano:
-            raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+    if not valido:
+        raise ValueError(msg_erro)
+    
+    # Validação de duplicatas
+    if verificar_nome_categoria_existe(nome, categoria or ''):
+        raise ValueError(f"Item '{nome}' já existe na categoria '{categoria}'")
+    
+    if categoria == 'Carros' and placa:
+        if verificar_placa_existe(placa):
+            raise ValueError(f"Placa {placa} já cadastrada")
     
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
@@ -455,8 +548,40 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         ano: Ano do carro (obrigatório se categoria='Carros' e não usar campos_categoria)
         campos_categoria: Dicionário com campos específicos da categoria {nome_campo: valor}
     """
-    if not cidade or not uf:
-        raise ValueError("Cidade e UF são obrigatórios")
+    # Busca item atual para obter valores padrão
+    item_atual = buscar_item_por_id(item_id)
+    if not item_atual:
+        raise ValueError(f"Item com ID {item_id} não encontrado")
+    
+    # Usa valores atuais se não fornecidos
+    categoria_final = categoria if categoria is not None else (item_atual.categoria or '')
+    cidade_final = cidade if cidade else (item_atual.cidade or '')
+    uf_final = uf if uf else (item_atual.uf or '')
+    
+    # Validações robustas
+    valido, msg_erro = validacoes.validar_item_completo(
+        nome=nome,
+        categoria=categoria_final,
+        cidade=cidade_final,
+        uf=uf_final,
+        quantidade_total=quantidade_total,
+        placa=placa,
+        marca=marca,
+        modelo=modelo,
+        ano=ano,
+        campos_categoria=campos_categoria
+    )
+    
+    if not valido:
+        raise ValueError(msg_erro)
+    
+    # Validação de duplicatas (excluindo o item atual)
+    if verificar_nome_categoria_existe(nome, categoria_final, excluir_item_id=item_id):
+        raise ValueError(f"Item '{nome}' já existe na categoria '{categoria_final}'")
+    
+    if categoria_final == 'Carros' and placa:
+        if verificar_placa_existe(placa, excluir_item_id=item_id):
+            raise ValueError(f"Placa {placa} já cadastrada")
     
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
@@ -485,8 +610,49 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
             if not placa or not marca or not modelo or not ano:
                 raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
         
+        # Prepara valores antigos para auditoria
+        valores_antigos = {
+            'id': item_id,
+            'nome': item_atual.nome,
+            'quantidade_total': item_atual.quantidade_total,
+            'categoria': item_atual.categoria,
+            'descricao': item_atual.descricao,
+            'cidade': item_atual.cidade,
+            'uf': item_atual.uf,
+            'endereco': item_atual.endereco
+        }
+        if hasattr(item_atual, 'carro') and item_atual.carro:
+            valores_antigos.update({
+                'placa': item_atual.carro.placa,
+                'marca': item_atual.carro.marca,
+                'modelo': item_atual.carro.modelo,
+                'ano': item_atual.carro.ano
+            })
+        
         # Atualiza a linha do item (incluindo categoria)
         sheet_itens.update(f'A{row_to_update}:H{row_to_update}', [[item_id, nome, quantidade_total, categoria, descricao or '', cidade, uf.upper()[:2], endereco or '']])
+        
+        # Prepara valores novos para auditoria
+        valores_novos = {
+            'id': item_id,
+            'nome': nome,
+            'quantidade_total': quantidade_total,
+            'categoria': categoria_final,
+            'descricao': descricao,
+            'cidade': cidade_final,
+            'uf': uf_final,
+            'endereco': endereco
+        }
+        if categoria_final == 'Carros' and placa:
+            valores_novos.update({
+                'placa': placa,
+                'marca': marca,
+                'modelo': modelo,
+                'ano': ano
+            })
+        
+        # Registra auditoria
+        auditoria.registrar_auditoria('UPDATE', 'Itens', item_id, valores_antigos, valores_novos)
         
         # Gerencia dados específicos da categoria (carros ou campos_categoria)
         if campos_categoria or categoria == 'Carros':
@@ -651,6 +817,21 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None
             endereco or '',
             contratante or ''
         ])
+        
+        # Registra auditoria
+        valores_novos = {
+            'id': next_id,
+            'item_id': item_id,
+            'quantidade': quantidade,
+            'data_inicio': data_inicio_str,
+            'data_fim': data_fim_str,
+            'descricao': descricao,
+            'cidade': cidade,
+            'uf': uf,
+            'endereco': endereco,
+            'contratante': contratante
+        }
+        auditoria.registrar_auditoria('CREATE', 'Compromissos', next_id, valores_novos=valores_novos)
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "criar_compromisso (adicionar linha)")
     
@@ -961,6 +1142,28 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
 
 def deletar_item(item_id):
     """Deleta um item e todos os seus compromissos"""
+    # Verifica se o item existe
+    item = buscar_item_por_id(item_id)
+    if not item:
+        raise ValueError(f"Item com ID {item_id} não encontrado")
+    
+    # Verifica se há compromissos ativos
+    compromissos = listar_compromissos()
+    compromissos_ativos = [c for c in compromissos if c.item_id == item_id]
+    
+    if compromissos_ativos:
+        hoje = date.today()
+        compromissos_futuros = [
+            c for c in compromissos_ativos 
+            if isinstance(c.data_fim, date) and c.data_fim >= hoje
+        ]
+        
+        if compromissos_futuros:
+            raise ValueError(
+                f"Não é possível deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
+                f"Delete os compromissos primeiro ou aguarde sua conclusão."
+            )
+    
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
     
@@ -981,7 +1184,29 @@ def deletar_item(item_id):
             break
     
     if row_to_delete:
+        # Prepara valores antigos para auditoria antes de deletar
+        valores_antigos = {
+            'id': item.id,
+            'nome': item.nome,
+            'quantidade_total': item.quantidade_total,
+            'categoria': item.categoria,
+            'descricao': item.descricao,
+            'cidade': item.cidade,
+            'uf': item.uf,
+            'endereco': item.endereco
+        }
+        if hasattr(item, 'carro') and item.carro:
+            valores_antigos.update({
+                'placa': item.carro.placa,
+                'marca': item.carro.marca,
+                'modelo': item.carro.modelo,
+                'ano': item.carro.ano
+            })
+        
         sheet_itens.delete_rows(row_to_delete)
+        
+        # Registra auditoria
+        auditoria.registrar_auditoria('DELETE', 'Itens', item_id, valores_antigos=valores_antigos)
         
         # Deleta compromissos relacionados
         sheet_compromissos = sheets['sheet_compromissos']
@@ -1020,8 +1245,37 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
         endereco: Endereço opcional do compromisso
         contratante: Nome do contratante (opcional)
     """
-    if not cidade or not uf:
-        raise ValueError("Cidade e UF são obrigatórios")
+    # Verifica se o compromisso existe
+    compromissos = listar_compromissos()
+    compromisso_atual = next((c for c in compromissos if c.id == compromisso_id), None)
+    if not compromisso_atual:
+        raise ValueError(f"Compromisso com ID {compromisso_id} não encontrado")
+    
+    # Verifica se o item existe
+    item = buscar_item_por_id(item_id)
+    if not item:
+        raise ValueError(f"Item com ID {item_id} não encontrado")
+    
+    # Verifica disponibilidade (excluindo o compromisso atual)
+    disponibilidade = verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=compromisso_id)
+    if not disponibilidade:
+        raise ValueError(f"Erro ao verificar disponibilidade do item {item_id}")
+    
+    quantidade_disponivel = disponibilidade.get('disponivel_minimo', 0)
+    
+    # Validações robustas
+    valido, msg_erro = validacoes.validar_compromisso_completo(
+        item_id=item_id,
+        quantidade=quantidade,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        cidade=cidade or '',
+        uf=uf or '',
+        quantidade_disponivel=quantidade_disponivel
+    )
+    
+    if not valido:
+        raise ValueError(msg_erro)
     
     sheets = get_sheets()
     sheet_compromissos = sheets['sheet_compromissos']
@@ -1086,7 +1340,25 @@ def deletar_compromisso(compromisso_id):
     for idx, record in enumerate(records, start=2):  # Começa em 2 porque linha 1 é cabeçalho
         if record and str(record.get('ID')) == str(compromisso_id):
             try:
+                # Prepara valores antigos para auditoria antes de deletar
+                valores_antigos = {
+                    'id': compromisso_id,
+                    'item_id': record.get('Item ID'),
+                    'quantidade': record.get('Quantidade'),
+                    'data_inicio': record.get('Data Início'),
+                    'data_fim': record.get('Data Fim'),
+                    'descricao': record.get('Descrição'),
+                    'cidade': record.get('Cidade'),
+                    'uf': record.get('UF'),
+                    'endereco': record.get('Endereço'),
+                    'contratante': record.get('Contratante')
+                }
+                
                 sheet_compromissos.delete_rows(idx)
+                
+                # Registra auditoria
+                auditoria.registrar_auditoria('DELETE', 'Compromissos', compromisso_id, valores_antigos=valores_antigos)
+                
                 # Limpa cache para forçar atualização na próxima leitura
                 _clear_cache()
                 return True

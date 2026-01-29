@@ -2,6 +2,9 @@ from models import get_session, Item, Compromisso, Carro
 from datetime import date
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
+import validacoes
+import auditoria
+import auditoria
 
 def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
     """Cria um novo item no estoque
@@ -21,13 +24,39 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
     """
     session = get_session()
     try:
-        if not cidade or not uf:
-            raise ValueError("Cidade e UF são obrigatórios")
+        # Validações robustas
+        valido, msg_erro = validacoes.validar_item_completo(
+            nome=nome,
+            categoria=categoria or '',
+            cidade=cidade or '',
+            uf=uf or '',
+            quantidade_total=quantidade_total,
+            placa=placa,
+            marca=marca,
+            modelo=modelo,
+            ano=ano
+        )
         
-        # Validação para carros
-        if categoria == 'Carros':
-            if not placa or not marca or not modelo or not ano:
-                raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+        if not valido:
+            raise ValueError(msg_erro)
+        
+        # Validação de duplicatas
+        # Verifica nome + categoria único
+        item_existente = session.query(Item).filter(
+            and_(
+                Item.nome == nome,
+                Item.categoria == categoria
+            )
+        ).first()
+        
+        if item_existente:
+            raise ValueError(f"Item '{nome}' já existe na categoria '{categoria}'")
+        
+        # Validação de placa única para carros
+        if categoria == 'Carros' and placa:
+            carro_existente = session.query(Carro).filter(Carro.placa == placa.upper().strip()).first()
+            if carro_existente:
+                raise ValueError(f"Placa {placa} já cadastrada")
         
         item = Item(
             nome=nome, 
@@ -58,6 +87,27 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
             session.refresh(item.carro)
             session.expunge(item.carro)
         session.expunge(item)
+        
+        # Registra auditoria
+        valores_novos = {
+            'id': item.id,
+            'nome': nome,
+            'quantidade_total': quantidade_total,
+            'categoria': categoria,
+            'descricao': descricao,
+            'cidade': cidade,
+            'uf': uf,
+            'endereco': endereco
+        }
+        if categoria == 'Carros':
+            valores_novos.update({
+                'placa': placa,
+                'marca': marca,
+                'modelo': modelo,
+                'ano': ano
+            })
+        auditoria.registrar_auditoria('CREATE', 'Itens', item.id, valores_novos=valores_novos)
+        
         return item
     except Exception as e:
         session.rollback()
@@ -116,62 +166,147 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     session = get_session()
     try:
         item = session.query(Item).options(joinedload(Item.carro)).filter(Item.id == item_id).first()
-        if item:
-            if not cidade or not uf:
-                raise ValueError("Cidade e UF são obrigatórios")
+        if not item:
+            raise ValueError(f"Item com ID {item_id} não encontrado")
+        
+        # Usa valores atuais se não fornecidos
+        categoria_final = categoria if categoria is not None else (item.categoria or '')
+        cidade_final = cidade if cidade else (item.cidade or '')
+        uf_final = uf if uf else (item.uf or '')
+        
+        # Validações robustas
+        valido, msg_erro = validacoes.validar_item_completo(
+            nome=nome,
+            categoria=categoria_final,
+            cidade=cidade_final,
+            uf=uf_final,
+            quantidade_total=quantidade_total,
+            placa=placa,
+            marca=marca,
+            modelo=modelo,
+            ano=ano,
+            campos_categoria=campos_categoria
+        )
+        
+        if not valido:
+            raise ValueError(msg_erro)
+        
+        # Validação de duplicatas (excluindo o item atual)
+        item_existente = session.query(Item).filter(
+            and_(
+                Item.nome == nome,
+                Item.categoria == categoria_final,
+                Item.id != item_id
+            )
+        ).first()
+        
+        if item_existente:
+            raise ValueError(f"Item '{nome}' já existe na categoria '{categoria_final}'")
+        
+        # Validação de placa única para carros (excluindo o item atual)
+        if categoria_final == 'Carros' and placa:
+            carro_existente = session.query(Carro).join(Item).filter(
+                and_(
+                    Carro.placa == placa.upper().strip(),
+                    Carro.item_id != item_id
+                )
+            ).first()
+            if carro_existente:
+                raise ValueError(f"Placa {placa} já cadastrada")
+        
+        # Se categoria mudou ou foi especificada
+        if categoria:
+            item.categoria = categoria
             
-            # Se categoria mudou ou foi especificada
-            if categoria:
-                item.categoria = categoria
+            # Se mudou para Carros, cria registro de carro se não existir
+            if categoria == 'Carros':
+                if not placa or not marca or not modelo or not ano:
+                    raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
                 
-                # Se mudou para Carros, cria registro de carro se não existir
-                if categoria == 'Carros':
-                    if not placa or not marca or not modelo or not ano:
-                        raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
-                    
-                    if item.carro:
-                        # Atualiza carro existente
-                        item.carro.placa = placa.upper().strip()
-                        item.carro.marca = marca.strip()
-                        item.carro.modelo = modelo.strip()
-                        item.carro.ano = int(ano)
-                    else:
-                        # Cria novo registro de carro
-                        carro = Carro(
-                            item_id=item.id,
-                            placa=placa.upper().strip(),
-                            marca=marca.strip(),
-                            modelo=modelo.strip(),
-                            ano=int(ano)
-                        )
-                        session.add(carro)
-                elif item.carro:
-                    # Se mudou de Carros para outra categoria, remove o registro de carro
-                    session.delete(item.carro)
-            
-            # Atualiza campos do item
-            item.nome = nome
-            item.quantidade_total = quantidade_total
-            item.descricao = descricao
-            item.cidade = cidade
-            item.uf = uf.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
-            item.endereco = endereco
-            
-            # Se já é carro e não mudou categoria, atualiza dados do carro
-            if item.categoria == 'Carros' and item.carro and placa and marca and modelo and ano:
-                item.carro.placa = placa.upper().strip()
-                item.carro.marca = marca.strip()
-                item.carro.modelo = modelo.strip()
-                item.carro.ano = int(ano)
-            
-            session.commit()
-            session.refresh(item)
-            if item.carro:
-                session.refresh(item.carro)
-                session.expunge(item.carro)
-            session.expunge(item)
-            return item
-        return None
+                if item.carro:
+                    # Atualiza carro existente
+                    item.carro.placa = placa.upper().strip()
+                    item.carro.marca = marca.strip()
+                    item.carro.modelo = modelo.strip()
+                    item.carro.ano = int(ano)
+                else:
+                    # Cria novo registro de carro
+                    carro = Carro(
+                        item_id=item.id,
+                        placa=placa.upper().strip(),
+                        marca=marca.strip(),
+                        modelo=modelo.strip(),
+                        ano=int(ano)
+                    )
+                    session.add(carro)
+            elif item.carro:
+                # Se mudou de Carros para outra categoria, remove o registro de carro
+                session.delete(item.carro)
+        
+        # Atualiza campos do item
+        item.nome = nome
+        item.quantidade_total = quantidade_total
+        item.descricao = descricao
+        item.cidade = cidade_final
+        item.uf = uf_final.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
+        item.endereco = endereco
+        
+        # Se já é carro e não mudou categoria, atualiza dados do carro
+        if item.categoria == 'Carros' and item.carro and placa and marca and modelo and ano:
+            item.carro.placa = placa.upper().strip()
+            item.carro.marca = marca.strip()
+            item.carro.modelo = modelo.strip()
+            item.carro.ano = int(ano)
+        
+        # Prepara valores antigos para auditoria (antes do commit, mas após atualizar campos)
+        valores_antigos = {
+            'id': item.id,
+            'nome': item.nome,
+            'quantidade_total': item.quantidade_total,
+            'categoria': item.categoria,
+            'descricao': item.descricao,
+            'cidade': item.cidade,
+            'uf': item.uf,
+            'endereco': item.endereco
+        }
+        if item.carro:
+            valores_antigos.update({
+                'placa': item.carro.placa,
+                'marca': item.carro.marca,
+                'modelo': item.carro.modelo,
+                'ano': item.carro.ano
+            })
+        
+        session.commit()
+        session.refresh(item)
+        if item.carro:
+            session.refresh(item.carro)
+            session.expunge(item.carro)
+        session.expunge(item)
+        
+        # Prepara valores novos para auditoria
+        valores_novos = {
+            'id': item.id,
+            'nome': nome,
+            'quantidade_total': quantidade_total,
+            'categoria': categoria_final,
+            'descricao': descricao,
+            'cidade': cidade_final,
+            'uf': uf_final,
+            'endereco': endereco
+        }
+        if categoria_final == 'Carros' and item.carro:
+            valores_novos.update({
+                'placa': item.carro.placa,
+                'marca': item.carro.marca,
+                'modelo': item.carro.modelo,
+                'ano': item.carro.ano
+            })
+        
+        # Registra auditoria
+        auditoria.registrar_auditoria('UPDATE', 'Itens', item.id, valores_antigos, valores_novos)
+        
+        return item
     except Exception as e:
         session.rollback()
         raise e
@@ -218,6 +353,22 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None
         session.expunge(compromisso)
         if compromisso.item:
             session.expunge(compromisso.item)
+        
+        # Registra auditoria
+        valores_novos = {
+            'id': compromisso.id,
+            'item_id': item_id,
+            'quantidade': quantidade,
+            'data_inicio': data_inicio.isoformat() if isinstance(data_inicio, date) else str(data_inicio),
+            'data_fim': data_fim.isoformat() if isinstance(data_fim, date) else str(data_fim),
+            'descricao': descricao,
+            'cidade': cidade,
+            'uf': uf,
+            'endereco': endereco,
+            'contratante': contratante
+        }
+        auditoria.registrar_auditoria('CREATE', 'Compromissos', compromisso.id, valores_novos=valores_novos)
+        
         return compromisso
     except Exception as e:
         session.rollback()
@@ -440,12 +591,49 @@ def deletar_item(item_id):
     """Deleta um item e todos os seus compromissos"""
     session = get_session()
     try:
-        item = session.query(Item).filter(Item.id == item_id).first()
-        if item:
-            session.delete(item)
-            session.commit()
-            return True
-        return False
+        item = session.query(Item).options(joinedload(Item.compromissos)).filter(Item.id == item_id).first()
+        if not item:
+            raise ValueError(f"Item com ID {item_id} não encontrado")
+        
+        # Verifica se há compromissos ativos ou futuros
+        hoje = date.today()
+        compromissos_futuros = [
+            c for c in item.compromissos 
+            if isinstance(c.data_fim, date) and c.data_fim >= hoje
+        ]
+        
+            if compromissos_futuros:
+                raise ValueError(
+                    f"Não é possível deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
+                    f"Delete os compromissos primeiro ou aguarde sua conclusão."
+                )
+        
+        # Prepara valores antigos para auditoria antes de deletar
+        valores_antigos = {
+            'id': item.id,
+            'nome': item.nome,
+            'quantidade_total': item.quantidade_total,
+            'categoria': item.categoria,
+            'descricao': item.descricao,
+            'cidade': item.cidade,
+            'uf': item.uf,
+            'endereco': item.endereco
+        }
+        if hasattr(item, 'carro') and item.carro:
+            valores_antigos.update({
+                'placa': item.carro.placa,
+                'marca': item.carro.marca,
+                'modelo': item.carro.modelo,
+                'ano': item.carro.ano
+            })
+        
+        session.delete(item)
+        session.commit()
+        
+        # Registra auditoria
+        auditoria.registrar_auditoria('DELETE', 'Itens', item_id, valores_antigos=valores_antigos)
+        
+        return True
     except Exception as e:
         session.rollback()
         raise e
@@ -471,9 +659,36 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
     session = get_session()
     try:
         compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
+        if not compromisso:
+            raise ValueError(f"Compromisso com ID {compromisso_id} não encontrado")
+        
+        # Verifica se o item existe
+        item = session.query(Item).filter(Item.id == item_id).first()
+        if not item:
+            raise ValueError(f"Item com ID {item_id} não encontrado")
+        
+        # Verifica disponibilidade (excluindo o compromisso atual)
+        disponibilidade = verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=compromisso_id)
+        if not disponibilidade:
+            raise ValueError(f"Erro ao verificar disponibilidade do item {item_id}")
+        
+        quantidade_disponivel = disponibilidade.get('disponivel_minimo', 0)
+        
+        # Validações robustas
+        valido, msg_erro = validacoes.validar_compromisso_completo(
+            item_id=item_id,
+            quantidade=quantidade,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            cidade=cidade or '',
+            uf=uf or '',
+            quantidade_disponivel=quantidade_disponivel
+        )
+        
+        if not valido:
+            raise ValueError(msg_erro)
+        
         if compromisso:
-            if not cidade or not uf:
-                raise ValueError("Cidade e UF são obrigatórios")
             
             compromisso.item_id = item_id
             compromisso.quantidade = quantidade
@@ -484,12 +699,45 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
             compromisso.uf = uf.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
             compromisso.endereco = endereco
             compromisso.contratante = contratante
+            
+            # Prepara valores antigos para auditoria
+            valores_antigos = {
+                'id': compromisso.id,
+                'item_id': compromisso.item_id,
+                'quantidade': compromisso.quantidade,
+                'data_inicio': compromisso.data_inicio.isoformat() if isinstance(compromisso.data_inicio, date) else str(compromisso.data_inicio),
+                'data_fim': compromisso.data_fim.isoformat() if isinstance(compromisso.data_fim, date) else str(compromisso.data_fim),
+                'descricao': compromisso.descricao,
+                'cidade': compromisso.cidade,
+                'uf': compromisso.uf,
+                'endereco': compromisso.endereco,
+                'contratante': compromisso.contratante
+            }
+            
             session.commit()
             session.refresh(compromisso)
             compromisso.item  # Força o carregamento do relacionamento
             session.expunge(compromisso)
             if compromisso.item:
                 session.expunge(compromisso.item)
+            
+            # Prepara valores novos para auditoria
+            valores_novos = {
+                'id': compromisso.id,
+                'item_id': item_id,
+                'quantidade': quantidade,
+                'data_inicio': data_inicio.isoformat() if isinstance(data_inicio, date) else str(data_inicio),
+                'data_fim': data_fim.isoformat() if isinstance(data_fim, date) else str(data_fim),
+                'descricao': descricao,
+                'cidade': cidade,
+                'uf': uf,
+                'endereco': endereco,
+                'contratante': contratante
+            }
+            
+            # Registra auditoria
+            auditoria.registrar_auditoria('UPDATE', 'Compromissos', compromisso_id, valores_antigos, valores_novos)
+            
             return compromisso
         return None
     except Exception as e:
@@ -505,8 +753,26 @@ def deletar_compromisso(compromisso_id):
     try:
         compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
         if compromisso:
+            # Prepara valores antigos para auditoria antes de deletar
+            valores_antigos = {
+                'id': compromisso.id,
+                'item_id': compromisso.item_id,
+                'quantidade': compromisso.quantidade,
+                'data_inicio': compromisso.data_inicio.isoformat() if isinstance(compromisso.data_inicio, date) else str(compromisso.data_inicio),
+                'data_fim': compromisso.data_fim.isoformat() if isinstance(compromisso.data_fim, date) else str(compromisso.data_fim),
+                'descricao': compromisso.descricao,
+                'cidade': compromisso.cidade,
+                'uf': compromisso.uf,
+                'endereco': compromisso.endereco,
+                'contratante': compromisso.contratante
+            }
+            
             session.delete(compromisso)
             session.commit()
+            
+            # Registra auditoria
+            auditoria.registrar_auditoria('DELETE', 'Compromissos', compromisso_id, valores_antigos=valores_antigos)
+            
             return True
         return False
     except Exception as e:

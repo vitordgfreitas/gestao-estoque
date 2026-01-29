@@ -39,28 +39,41 @@ Este guia mostra como fazer deploy gratuito da aplicação usando serviços grat
 5. Salve e faça um novo deploy
 
 **Frontend (React):**
-1. No Render, clique em "New +" → "Static Site"
+1. No Render, clique em "New +" → **"Web Service"** (NÃO Static Site!)
 2. Conecte o mesmo repositório
 3. Configure:
    - **Name**: `crm-frontend`
+   - **Environment**: `Node`
    - **Root Directory**: `frontend` ⚠️ **IMPORTANTE: Configure isso primeiro!**
    - **Build Command**: 
      ```bash
      npm install && npm run build
      ```
-     (Não precisa de `cd frontend` se Root Directory estiver configurado)
-   - **Publish Directory**: `dist` ⚠️ **NÃO use `frontend/dist`!**
-     (Se Root Directory = `frontend`, então Publish Directory = `dist`)
+   - **Start Command**: 
+     ```bash
+     npm start
+     ```
+     (Isso executa `node server.js` que serve o SPA corretamente)
 4. Adicione variável de ambiente:
    - `VITE_API_URL`: URL do backend (ex: `https://crm-backend-ghly.onrender.com`)
-5. Clique em "Create Static Site"
+5. Clique em "Create Web Service"
 
-**⚠️ IMPORTANTE:** Se você já criou o serviço e está dando erro:
-1. Vá em **Settings** do serviço
-2. Configure **Root Directory** como `frontend`
-3. Atualize **Build Command** para apenas: `npm install && npm run build`
-4. Atualize **Publish Directory** para apenas: `dist`
-5. Salve e faça um novo deploy
+**⚠️ IMPORTANTE:** Use **Web Service**, não Static Site! O servidor Node.js garante que todas as rotas retornem `index.html`, resolvendo o problema de 404 ao dar F5.
+
+**⚠️ IMPORTANTE:** Se você já criou como Static Site e está dando 404 ao dar F5:
+
+**Opção A - Mudar para Web Service (RECOMENDADO):**
+1. Delete o Static Site atual
+2. Crie um novo **Web Service**:
+   - **Environment**: `Node`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Environment Variable**: `VITE_API_URL=https://crm-backend-ghly.onrender.com`
+3. Faça deploy
+
+**Opção B - Se quiser manter Static Site:**
+Use Vercel ao invés do Render para o frontend (Vercel tem suporte nativo para SPAs).
 
 **Limitações do Plano Gratuito:**
 - Backend pode "dormir" após 15 minutos de inatividade (primeira requisição pode demorar)
