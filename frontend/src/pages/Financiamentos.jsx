@@ -5,6 +5,7 @@ import { Plus, DollarSign, Calendar, Building2, Trash2, Edit, Eye } from 'lucide
 import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
+import ValorPresenteCard from '../components/ValorPresenteCard'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
