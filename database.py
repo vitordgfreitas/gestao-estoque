@@ -601,11 +601,11 @@ def deletar_item(item_id):
             if isinstance(c.data_fim, date) and c.data_fim >= hoje
         ]
         
-            if compromissos_futuros:
-                raise ValueError(
-                    f"N├úo ├® poss├¡vel deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
-                    f"Delete os compromissos primeiro ou aguarde sua conclus├úo."
-                )
+        if compromissos_futuros:
+            raise ValueError(
+                f"N├úo ├® poss├¡vel deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
+                f"Delete os compromissos primeiro ou aguarde sua conclus├úo."
+            )
         
         # Prepara valores antigos para auditoria antes de deletar
         valores_antigos = {
@@ -1207,15 +1207,31 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         if not item:
             raise ValueError(f"Item {item_id} n├úo encontrado")
         
-        # Calcula valor da parcela (fixo) - usado apenas se não houver parcelas customizadas
-        valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
+        # Calcula valor da parcela com juros (Sistema Price - parcelas fixas)
+        # PMT = PV * (i * (1+i)^n) / ((1+i)^n - 1)
+        # onde: PMT = valor da parcela, PV = valor financiado, i = taxa mensal, n = número de parcelas
+        if not parcelas_customizadas and taxa_juros > 0:
+            i = float(taxa_juros)  # Taxa mensal (ex: 0.01 para 1%)
+            n = numero_parcelas
+            if i > 0:
+                # Sistema Price (parcelas fixas com juros compostos)
+                valor_parcela = valor_total * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
+            else:
+                valor_parcela = valor_total / numero_parcelas
+        else:
+            valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
+        
+        # Calcula valor total a pagar (com juros)
+        valor_total_a_pagar = valor_parcela * numero_parcelas if not parcelas_customizadas else valor_total
         
         # Cria financiamento
+        # valor_total armazena o valor financiado (principal)
+        # valor_parcela já inclui os juros calculados acima
         financiamento = Financiamento(
             item_id=item_id,
-            valor_total=float(valor_total),
+            valor_total=float(valor_total),  # Valor financiado (principal)
             numero_parcelas=numero_parcelas,
-            valor_parcela=float(valor_parcela),
+            valor_parcela=float(valor_parcela),  # Valor da parcela com juros
             taxa_juros=float(taxa_juros),
             data_inicio=data_inicio,
             status='Ativo',

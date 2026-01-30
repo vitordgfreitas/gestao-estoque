@@ -1394,8 +1394,19 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     except (IndexError, KeyError, ValueError):
         next_id = 1
     
-    # Calcula valor da parcela (fixo)
-    valor_parcela = valor_total / numero_parcelas
+    # Calcula valor da parcela com juros (Sistema Price - parcelas fixas)
+    # PMT = PV * (i * (1+i)^n) / ((1+i)^n - 1)
+    # onde: PMT = valor da parcela, PV = valor financiado, i = taxa mensal, n = número de parcelas
+    if not parcelas_customizadas and taxa_juros > 0:
+        i = float(taxa_juros)  # Taxa mensal (ex: 0.01 para 1%)
+        n = numero_parcelas
+        if i > 0:
+            # Sistema Price (parcelas fixas com juros compostos)
+            valor_parcela = valor_total * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
+        else:
+            valor_parcela = valor_total / numero_parcelas
+    else:
+        valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
     
     # Formata data
     data_inicio_str = data_inicio.strftime('%Y-%m-%d') if isinstance(data_inicio, date) else str(data_inicio)
@@ -1415,23 +1426,60 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             observacoes or ''
         ])
         
-        # Gera parcelas automaticamente
+        # Gera parcelas
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
         parcelas_ids = []
         
-        for i in range(1, numero_parcelas + 1):
-            # Busca próximo ID de parcela
-            try:
-                all_parcelas = sheet_parcelas.get_all_records()
-                if all_parcelas:
-                    valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
-                    parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
-                else:
+        if parcelas_customizadas:
+            # Usa parcelas customizadas
+            for parcela_custom in parcelas_customizadas:
+                # Busca próximo ID de parcela
+                try:
+                    all_parcelas = sheet_parcelas.get_all_records()
+                    if all_parcelas:
+                        valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
+                        parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
+                    else:
+                        parcela_id = 1
+                except (IndexError, KeyError, ValueError):
                     parcela_id = 1
-            except (IndexError, KeyError, ValueError):
-                parcela_id = 1
-            
-            # Calcula data de vencimento (mes seguinte)
+                
+                # Converte data_vencimento se necessário
+                if isinstance(parcela_custom.get('data_vencimento'), str):
+                    data_vencimento = datetime.strptime(parcela_custom['data_vencimento'], '%Y-%m-%d').date()
+                else:
+                    data_vencimento = parcela_custom['data_vencimento']
+                
+                sheet_parcelas.append_row([
+                    parcela_id,
+                    next_id,
+                    parcela_custom['numero'],
+                    float(parcela_custom['valor']),
+                    0.0,  # Valor pago inicialmente 0
+                    data_vencimento.strftime('%Y-%m-%d'),
+                    '',  # Data pagamento vazia
+                    'Pendente',
+                    0.0,  # Juros
+                    0.0,  # Multa
+                    0.0,  # Desconto
+                    ''  # Link Boleto vazio
+                ])
+                parcelas_ids.append(parcela_id)
+        else:
+            # Gera parcelas automaticamente (fixas)
+            for i in range(1, numero_parcelas + 1):
+                # Busca próximo ID de parcela
+                try:
+                    all_parcelas = sheet_parcelas.get_all_records()
+                    if all_parcelas:
+                        valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
+                        parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
+                    else:
+                        parcela_id = 1
+                except (IndexError, KeyError, ValueError):
+                    parcela_id = 1
+                
+                # Calcula data de vencimento (mes seguinte)
             if i == 1:
                 data_vencimento = data_venc
             else:
@@ -1837,3 +1885,654 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
             return listar_parcelas_financiamento()[0] if listar_parcelas_financiamento() else None
     
     return None
+
+
+def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, valor_original=None, data_vencimento=None):
+    """Atualiza uma parcela de financiamento"""
+    sheets = get_sheets()
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    try:
+        records = sheet_parcelas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "atualizar_parcela_financiamento")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(parcela_id):
+            valores_antigos = record.copy()
+            
+            # Mapeia colunas (baseado nos headers)
+            # ID=1, Financiamento ID=2, Numero Parcela=3, Valor Original=4, Valor Pago=5, 
+            # Data Vencimento=6, Data Pagamento=7, Status=8, Juros=9, Multa=10, Desconto=11, Link Boleto=12
+            
+            if status is not None:
+                sheet_parcelas.update_cell(i, 8, status)  # Status
+            if link_boleto is not None:
+                sheet_parcelas.update_cell(i, 12, link_boleto)  # Link Boleto
+            if valor_original is not None:
+                sheet_parcelas.update_cell(i, 4, float(valor_original))  # Valor Original
+            if data_vencimento is not None:
+                if isinstance(data_vencimento, date):
+                    sheet_parcelas.update_cell(i, 6, data_vencimento.strftime('%Y-%m-%d'))  # Data Vencimento
+                else:
+                    sheet_parcelas.update_cell(i, 6, str(data_vencimento))
+            
+            auditoria.registrar_auditoria('UPDATE', 'Parcelas Financiamento', parcela_id, valores_antigos=valores_antigos, valores_novos={
+                'status': status,
+                'link_boleto': link_boleto,
+                'valor_original': valor_original,
+                'data_vencimento': str(data_vencimento) if data_vencimento else None
+            })
+            
+            _clear_cache()
+            parcelas_atualizadas = listar_parcelas_financiamento()
+            return next((p for p in parcelas_atualizadas if p.id == parcela_id), None)
+    
+    return None
+
+
+# ============= CONTAS A RECEBER =============
+
+def criar_conta_receber(compromisso_id, descricao, valor, data_vencimento, forma_pagamento=None, observacoes=None):
+    """Cria uma nova conta a receber vinculada a um compromisso"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_receber']
+    sheet_compromissos = sheets['sheet_compromissos']
+    
+    # Verifica se compromisso existe
+    try:
+        compromissos = sheet_compromissos.get_all_records()
+        compromisso_existe = any(str(c.get('ID')) == str(compromisso_id) for c in compromissos if c)
+        if not compromisso_existe:
+            raise ValueError(f"Compromisso {compromisso_id} não encontrado")
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_conta_receber")
+    
+    # Busca próximo ID
+    try:
+        all_records = sheet_contas.get_all_records()
+        if all_records:
+            valid_ids = [int(r.get('ID', 0)) for r in all_records if r and r.get('ID')]
+            next_id = max(valid_ids) + 1 if valid_ids else 1
+        else:
+            next_id = 1
+    except (IndexError, KeyError, ValueError):
+        next_id = 1
+    
+    # Calcula status inicial
+    hoje = date.today()
+    status = 'Vencido' if data_vencimento < hoje else 'Pendente'
+    
+    # Formata data
+    data_vencimento_str = data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento)
+    
+    try:
+        sheet_contas.append_row([
+            next_id,
+            compromisso_id,
+            descricao or '',
+            float(valor),
+            data_vencimento_str,
+            '',  # Data Pagamento vazia
+            status,
+            forma_pagamento or '',
+            observacoes or ''
+        ])
+        
+        auditoria.registrar_auditoria('CREATE', 'Contas a Receber', next_id, valores_novos={
+            'compromisso_id': compromisso_id,
+            'descricao': descricao,
+            'valor': valor,
+            'data_vencimento': data_vencimento_str
+        })
+        
+        _clear_cache()
+        
+        # Retorna objeto compatível
+        class ContaReceber:
+            def __init__(self, id, compromisso_id, descricao, valor, data_vencimento, data_pagamento, status, forma_pagamento, observacoes):
+                self.id = int(id) if id else None
+                self.compromisso_id = int(compromisso_id) if compromisso_id else None
+                self.descricao = descricao or ''
+                self.valor = float(valor) if valor else 0.0
+                if isinstance(data_vencimento, str) and data_vencimento:
+                    try:
+                        self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
+                    except ValueError:
+                        try:
+                            self.data_vencimento = datetime.strptime(data_vencimento, '%d/%m/%Y').date()
+                        except ValueError:
+                            self.data_vencimento = date.today()
+                else:
+                    self.data_vencimento = data_vencimento if isinstance(data_vencimento, date) else date.today()
+                self.data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date() if data_pagamento and isinstance(data_pagamento, str) else (data_pagamento if isinstance(data_pagamento, date) else None)
+                self.status = status or 'Pendente'
+                self.forma_pagamento = forma_pagamento or ''
+                self.observacoes = observacoes or ''
+        
+        return ContaReceber(next_id, compromisso_id, descricao, valor, data_vencimento_str, '', status, forma_pagamento, observacoes)
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_conta_receber")
+    except Exception as e:
+        raise Exception(f"Erro ao criar conta a receber: {str(e)}")
+
+
+def listar_contas_receber(status=None, data_inicio=None, data_fim=None, compromisso_id=None):
+    """Lista contas a receber com filtros opcionais"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_receber']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "listar_contas_receber")
+    except (IndexError, KeyError):
+        return []
+    
+    class ContaReceber:
+        def __init__(self, id, compromisso_id, descricao, valor, data_vencimento, data_pagamento, status, forma_pagamento, observacoes):
+            self.id = int(id) if id else None
+            self.compromisso_id = int(compromisso_id) if compromisso_id else None
+            self.descricao = descricao or ''
+            self.valor = float(valor) if valor else 0.0
+            if isinstance(data_vencimento, str) and data_vencimento:
+                try:
+                    self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_vencimento = datetime.strptime(data_vencimento, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_vencimento = date.today()
+            else:
+                self.data_vencimento = data_vencimento if isinstance(data_vencimento, date) else date.today()
+            self.data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date() if data_pagamento and isinstance(data_pagamento, str) else (data_pagamento if isinstance(data_pagamento, date) else None)
+            self.status = status or 'Pendente'
+            self.forma_pagamento = forma_pagamento or ''
+            self.observacoes = observacoes or ''
+    
+    contas = []
+    hoje = date.today()
+    
+    for record in records:
+        if not record or not record.get('ID'):
+            continue
+        
+        conta = ContaReceber(
+            record.get('ID'),
+            record.get('Compromisso ID'),
+            record.get('Descrição'),
+            record.get('Valor'),
+            record.get('Data Vencimento'),
+            record.get('Data Pagamento'),
+            record.get('Status'),
+            record.get('Forma Pagamento'),
+            record.get('Observações')
+        )
+        
+        # Recalcula status
+        if conta.data_pagamento:
+            conta.status = 'Pago'
+        elif conta.data_vencimento < hoje:
+            conta.status = 'Vencido'
+        else:
+            conta.status = 'Pendente'
+        
+        # Aplica filtros
+        if status and conta.status != status:
+            continue
+        if compromisso_id and conta.compromisso_id != compromisso_id:
+            continue
+        if data_inicio and conta.data_vencimento < data_inicio:
+            continue
+        if data_fim and conta.data_vencimento > data_fim:
+            continue
+        
+        contas.append(conta)
+    
+    return contas
+
+
+def atualizar_conta_receber(conta_id, descricao=None, valor=None, data_vencimento=None, data_pagamento=None, status=None, forma_pagamento=None, observacoes=None):
+    """Atualiza uma conta a receber"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_receber']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "atualizar_conta_receber")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(conta_id):
+            valores_antigos = record.copy()
+            
+            # Headers: ID=1, Compromisso ID=2, Descrição=3, Valor=4, Data Vencimento=5, 
+            # Data Pagamento=6, Status=7, Forma Pagamento=8, Observações=9
+            
+            if descricao is not None:
+                sheet_contas.update_cell(i, 3, descricao)
+            if valor is not None:
+                sheet_contas.update_cell(i, 4, float(valor))
+            if data_vencimento is not None:
+                if isinstance(data_vencimento, date):
+                    sheet_contas.update_cell(i, 5, data_vencimento.strftime('%Y-%m-%d'))
+                else:
+                    sheet_contas.update_cell(i, 5, str(data_vencimento))
+            if data_pagamento is not None:
+                if isinstance(data_pagamento, date):
+                    sheet_contas.update_cell(i, 6, data_pagamento.strftime('%Y-%m-%d'))
+                else:
+                    sheet_contas.update_cell(i, 6, str(data_pagamento) if data_pagamento else '')
+            if forma_pagamento is not None:
+                sheet_contas.update_cell(i, 8, forma_pagamento)
+            if observacoes is not None:
+                sheet_contas.update_cell(i, 9, observacoes)
+            
+            # Recalcula status
+            hoje = date.today()
+            if data_pagamento:
+                novo_status = 'Pago'
+            elif data_vencimento:
+                data_venc = data_vencimento if isinstance(data_vencimento, date) else datetime.strptime(str(data_vencimento), '%Y-%m-%d').date()
+                novo_status = 'Vencido' if data_venc < hoje else 'Pendente'
+            elif status:
+                novo_status = status
+            else:
+                # Usa data_vencimento do record atual
+                data_venc_str = record.get('Data Vencimento', '')
+                if data_venc_str:
+                    try:
+                        data_venc = datetime.strptime(data_venc_str, '%Y-%m-%d').date()
+                        novo_status = 'Vencido' if data_venc < hoje else 'Pendente'
+                    except:
+                        novo_status = record.get('Status', 'Pendente')
+                else:
+                    novo_status = record.get('Status', 'Pendente')
+            
+            sheet_contas.update_cell(i, 7, novo_status)
+            
+            auditoria.registrar_auditoria('UPDATE', 'Contas a Receber', conta_id, valores_antigos=valores_antigos, valores_novos={
+                'descricao': descricao,
+                'valor': valor,
+                'data_vencimento': str(data_vencimento) if data_vencimento else None,
+                'data_pagamento': str(data_pagamento) if data_pagamento else None,
+                'status': novo_status
+            })
+            
+            _clear_cache()
+            contas_atualizadas = listar_contas_receber()
+            return next((c for c in contas_atualizadas if c.id == conta_id), None)
+    
+    return None
+
+
+def marcar_conta_receber_paga(conta_id, data_pagamento=None, forma_pagamento=None):
+    """Marca uma conta a receber como paga"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    return atualizar_conta_receber(conta_id, data_pagamento=data_pagamento, status='Pago', forma_pagamento=forma_pagamento)
+
+
+def deletar_conta_receber(conta_id):
+    """Deleta uma conta a receber"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_receber']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "deletar_conta_receber")
+    except (IndexError, KeyError):
+        return False
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(conta_id):
+            valores_antigos = record.copy()
+            sheet_contas.delete_rows(i)
+            
+            auditoria.registrar_auditoria('DELETE', 'Contas a Receber', conta_id, valores_antigos=valores_antigos)
+            _clear_cache()
+            return True
+    
+    return False
+
+
+# ============= CONTAS A PAGAR =============
+
+def criar_conta_pagar(descricao, categoria, valor, data_vencimento, fornecedor=None, item_id=None, forma_pagamento=None, observacoes=None):
+    """Cria uma nova conta a pagar"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_pagar']
+    sheet_itens = sheets['sheet_itens']
+    
+    # Verifica se item existe (se fornecido)
+    if item_id:
+        try:
+            itens = sheet_itens.get_all_records()
+            item_existe = any(str(i.get('ID')) == str(item_id) for i in itens if i)
+            if not item_existe:
+                raise ValueError(f"Item {item_id} não encontrado")
+        except gspread.exceptions.APIError as e:
+            _handle_api_error(e, "criar_conta_pagar")
+    
+    # Busca próximo ID
+    try:
+        all_records = sheet_contas.get_all_records()
+        if all_records:
+            valid_ids = [int(r.get('ID', 0)) for r in all_records if r and r.get('ID')]
+            next_id = max(valid_ids) + 1 if valid_ids else 1
+        else:
+            next_id = 1
+    except (IndexError, KeyError, ValueError):
+        next_id = 1
+    
+    # Calcula status inicial
+    hoje = date.today()
+    status = 'Vencido' if data_vencimento < hoje else 'Pendente'
+    
+    # Formata data
+    data_vencimento_str = data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento)
+    
+    try:
+        sheet_contas.append_row([
+            next_id,
+            descricao or '',
+            categoria or '',
+            float(valor),
+            data_vencimento_str,
+            '',  # Data Pagamento vazia
+            status,
+            fornecedor or '',
+            item_id or '',
+            forma_pagamento or '',
+            observacoes or ''
+        ])
+        
+        auditoria.registrar_auditoria('CREATE', 'Contas a Pagar', next_id, valores_novos={
+            'descricao': descricao,
+            'categoria': categoria,
+            'valor': valor,
+            'data_vencimento': data_vencimento_str
+        })
+        
+        _clear_cache()
+        
+        # Retorna objeto compatível
+        class ContaPagar:
+            def __init__(self, id, descricao, categoria, valor, data_vencimento, data_pagamento, status, fornecedor, item_id, forma_pagamento, observacoes):
+                self.id = int(id) if id else None
+                self.descricao = descricao or ''
+                self.categoria = categoria or ''
+                self.valor = float(valor) if valor else 0.0
+                if isinstance(data_vencimento, str) and data_vencimento:
+                    try:
+                        self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
+                    except ValueError:
+                        try:
+                            self.data_vencimento = datetime.strptime(data_vencimento, '%d/%m/%Y').date()
+                        except ValueError:
+                            self.data_vencimento = date.today()
+                else:
+                    self.data_vencimento = data_vencimento if isinstance(data_vencimento, date) else date.today()
+                self.data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date() if data_pagamento and isinstance(data_pagamento, str) else (data_pagamento if isinstance(data_pagamento, date) else None)
+                self.status = status or 'Pendente'
+                self.fornecedor = fornecedor or ''
+                self.item_id = int(item_id) if item_id else None
+                self.forma_pagamento = forma_pagamento or ''
+                self.observacoes = observacoes or ''
+        
+        return ContaPagar(next_id, descricao, categoria, valor, data_vencimento_str, '', status, fornecedor, item_id, forma_pagamento, observacoes)
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_conta_pagar")
+    except Exception as e:
+        raise Exception(f"Erro ao criar conta a pagar: {str(e)}")
+
+
+def listar_contas_pagar(status=None, data_inicio=None, data_fim=None, categoria=None):
+    """Lista contas a pagar com filtros opcionais"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_pagar']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "listar_contas_pagar")
+    except (IndexError, KeyError):
+        return []
+    
+    class ContaPagar:
+        def __init__(self, id, descricao, categoria, valor, data_vencimento, data_pagamento, status, fornecedor, item_id, forma_pagamento, observacoes):
+            self.id = int(id) if id else None
+            self.descricao = descricao or ''
+            self.categoria = categoria or ''
+            self.valor = float(valor) if valor else 0.0
+            if isinstance(data_vencimento, str) and data_vencimento:
+                try:
+                    self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_vencimento = datetime.strptime(data_vencimento, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_vencimento = date.today()
+            else:
+                self.data_vencimento = data_vencimento if isinstance(data_vencimento, date) else date.today()
+            self.data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date() if data_pagamento and isinstance(data_pagamento, str) else (data_pagamento if isinstance(data_pagamento, date) else None)
+            self.status = status or 'Pendente'
+            self.fornecedor = fornecedor or ''
+            self.item_id = int(item_id) if item_id else None
+            self.forma_pagamento = forma_pagamento or ''
+            self.observacoes = observacoes or ''
+    
+    contas = []
+    hoje = date.today()
+    
+    for record in records:
+        if not record or not record.get('ID'):
+            continue
+        
+        conta = ContaPagar(
+            record.get('ID'),
+            record.get('Descrição'),
+            record.get('Categoria'),
+            record.get('Valor'),
+            record.get('Data Vencimento'),
+            record.get('Data Pagamento'),
+            record.get('Status'),
+            record.get('Fornecedor'),
+            record.get('Item ID'),
+            record.get('Forma Pagamento'),
+            record.get('Observações')
+        )
+        
+        # Recalcula status
+        if conta.data_pagamento:
+            conta.status = 'Pago'
+        elif conta.data_vencimento < hoje:
+            conta.status = 'Vencido'
+        else:
+            conta.status = 'Pendente'
+        
+        # Aplica filtros
+        if status and conta.status != status:
+            continue
+        if categoria and conta.categoria != categoria:
+            continue
+        if data_inicio and conta.data_vencimento < data_inicio:
+            continue
+        if data_fim and conta.data_vencimento > data_fim:
+            continue
+        
+        contas.append(conta)
+    
+    return contas
+
+
+def atualizar_conta_pagar(conta_id, descricao=None, categoria=None, valor=None, data_vencimento=None, data_pagamento=None, status=None, fornecedor=None, item_id=None, forma_pagamento=None, observacoes=None):
+    """Atualiza uma conta a pagar"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_pagar']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "atualizar_conta_pagar")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(conta_id):
+            valores_antigos = record.copy()
+            
+            # Headers: ID=1, Descrição=2, Categoria=3, Valor=4, Data Vencimento=5,
+            # Data Pagamento=6, Status=7, Fornecedor=8, Item ID=9, Forma Pagamento=10, Observações=11
+            
+            if descricao is not None:
+                sheet_contas.update_cell(i, 2, descricao)
+            if categoria is not None:
+                sheet_contas.update_cell(i, 3, categoria)
+            if valor is not None:
+                sheet_contas.update_cell(i, 4, float(valor))
+            if data_vencimento is not None:
+                if isinstance(data_vencimento, date):
+                    sheet_contas.update_cell(i, 5, data_vencimento.strftime('%Y-%m-%d'))
+                else:
+                    sheet_contas.update_cell(i, 5, str(data_vencimento))
+            if data_pagamento is not None:
+                if isinstance(data_pagamento, date):
+                    sheet_contas.update_cell(i, 6, data_pagamento.strftime('%Y-%m-%d'))
+                else:
+                    sheet_contas.update_cell(i, 6, str(data_pagamento) if data_pagamento else '')
+            if fornecedor is not None:
+                sheet_contas.update_cell(i, 8, fornecedor)
+            if item_id is not None:
+                sheet_contas.update_cell(i, 9, item_id if item_id else '')
+            if forma_pagamento is not None:
+                sheet_contas.update_cell(i, 10, forma_pagamento)
+            if observacoes is not None:
+                sheet_contas.update_cell(i, 11, observacoes)
+            
+            # Recalcula status
+            hoje = date.today()
+            if data_pagamento:
+                novo_status = 'Pago'
+            elif data_vencimento:
+                data_venc = data_vencimento if isinstance(data_vencimento, date) else datetime.strptime(str(data_vencimento), '%Y-%m-%d').date()
+                novo_status = 'Vencido' if data_venc < hoje else 'Pendente'
+            elif status:
+                novo_status = status
+            else:
+                # Usa data_vencimento do record atual
+                data_venc_str = record.get('Data Vencimento', '')
+                if data_venc_str:
+                    try:
+                        data_venc = datetime.strptime(data_venc_str, '%Y-%m-%d').date()
+                        novo_status = 'Vencido' if data_venc < hoje else 'Pendente'
+                    except:
+                        novo_status = record.get('Status', 'Pendente')
+                else:
+                    novo_status = record.get('Status', 'Pendente')
+            
+            sheet_contas.update_cell(i, 7, novo_status)
+            
+            auditoria.registrar_auditoria('UPDATE', 'Contas a Pagar', conta_id, valores_antigos=valores_antigos, valores_novos={
+                'descricao': descricao,
+                'categoria': categoria,
+                'valor': valor,
+                'data_vencimento': str(data_vencimento) if data_vencimento else None,
+                'data_pagamento': str(data_pagamento) if data_pagamento else None,
+                'status': novo_status
+            })
+            
+            _clear_cache()
+            contas_atualizadas = listar_contas_pagar()
+            return next((c for c in contas_atualizadas if c.id == conta_id), None)
+    
+    return None
+
+
+def marcar_conta_pagar_paga(conta_id, data_pagamento=None, forma_pagamento=None):
+    """Marca uma conta a pagar como paga"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    return atualizar_conta_pagar(conta_id, data_pagamento=data_pagamento, status='Pago', forma_pagamento=forma_pagamento)
+
+
+def deletar_conta_pagar(conta_id):
+    """Deleta uma conta a pagar"""
+    sheets = get_sheets()
+    sheet_contas = sheets['sheet_contas_pagar']
+    
+    try:
+        records = sheet_contas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "deletar_conta_pagar")
+    except (IndexError, KeyError):
+        return False
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(conta_id):
+            valores_antigos = record.copy()
+            sheet_contas.delete_rows(i)
+            
+            auditoria.registrar_auditoria('DELETE', 'Contas a Pagar', conta_id, valores_antigos=valores_antigos)
+            _clear_cache()
+            return True
+    
+    return False
+
+
+# ============= FUNÇÕES DE CÁLCULO FINANCEIRO =============
+
+def calcular_saldo_periodo(data_inicio, data_fim):
+    """Calcula saldo (receitas - despesas) em um período"""
+    receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
+    despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
+    
+    receitas_pagas = sum(c.valor for c in receitas if c.status == 'Pago')
+    despesas_pagas = sum(c.valor for c in despesas if c.status == 'Pago')
+    
+    return {
+        'receitas': receitas_pagas,
+        'despesas': despesas_pagas,
+        'saldo': receitas_pagas - despesas_pagas,
+        'total_receitas': len(receitas),
+        'total_despesas': len(despesas)
+    }
+
+
+def obter_fluxo_caixa(data_inicio, data_fim):
+    """Retorna fluxo de caixa por período (agrupado por mês)"""
+    receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
+    despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
+    
+    fluxo = {}
+    
+    for conta in receitas:
+        if conta.status == 'Pago':
+            mes = conta.data_pagamento.strftime('%Y-%m') if conta.data_pagamento else conta.data_vencimento.strftime('%Y-%m')
+            if mes not in fluxo:
+                fluxo[mes] = {'receitas': 0, 'despesas': 0}
+            fluxo[mes]['receitas'] += conta.valor
+    
+    for conta in despesas:
+        if conta.status == 'Pago':
+            mes = conta.data_pagamento.strftime('%Y-%m') if conta.data_pagamento else conta.data_vencimento.strftime('%Y-%m')
+            if mes not in fluxo:
+                fluxo[mes] = {'receitas': 0, 'despesas': 0}
+            fluxo[mes]['despesas'] += conta.valor
+    
+    # Converte para lista ordenada
+    resultado = []
+    for mes in sorted(fluxo.keys()):
+        resultado.append({
+            'mes': mes,
+            'receitas': fluxo[mes]['receitas'],
+            'despesas': fluxo[mes]['despesas'],
+            'saldo': fluxo[mes]['receitas'] - fluxo[mes]['despesas']
+        })
+    
+    return resultado

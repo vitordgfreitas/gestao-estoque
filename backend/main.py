@@ -373,12 +373,13 @@ class FluxoCaixaResponse(BaseModel):
 
 class FinanciamentoCreate(BaseModel):
     item_id: int
-    valor_total: float
+    valor_total: float  # Valor financiado (principal)
     numero_parcelas: int
-    taxa_juros: float
+    taxa_juros: float  # Taxa de juros mensal (ex: 0.01 para 1% ao mês)
     data_inicio: date
     instituicao_financeira: Optional[str] = None
     observacoes: Optional[str] = None
+    parcelas_customizadas: Optional[List[ParcelaCustomizada]] = None
 
 class FinanciamentoUpdate(BaseModel):
     valor_total: Optional[float] = None
@@ -446,12 +447,13 @@ class ParcelaUpdate(BaseModel):
 
 class FinanciamentoCreate(BaseModel):
     item_id: int
-    valor_total: float
+    valor_total: float  # Valor financiado (principal)
     numero_parcelas: int
-    taxa_juros: float
+    taxa_juros: float  # Taxa de juros mensal (ex: 0.01 para 1% ao mês)
     data_inicio: date
     instituicao_financeira: Optional[str] = None
     observacoes: Optional[str] = None
+    parcelas_customizadas: Optional[List[ParcelaCustomizada]] = None
 
 class FinanciamentoUpdate(BaseModel):
     valor_total: Optional[float] = None
