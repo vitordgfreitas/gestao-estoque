@@ -18,6 +18,8 @@ sys.path.insert(0, root_dir)
 # IMPORTANTE: No Render, as variáveis DEVEM estar no painel Settings → Environment
 # O código lê DIRETAMENTE de os.getenv() - funciona tanto local quanto no Render
 # Carrega .env apenas em desenvolvimento local (se existir)
+DEBUG_MODE = os.getenv('DEBUG', 'false').lower() == 'true'
+
 try:
     from dotenv import load_dotenv
     # Só carrega .env se não estiver no Render (onde variáveis vêm do painel)
@@ -26,19 +28,23 @@ try:
         env_path = os.path.join(root_dir, '.env')
         if os.path.exists(env_path):
             load_dotenv(env_path, override=True)
-            print(f"✅ Carregado .env da raiz: {env_path}")
-        else:
+            if DEBUG_MODE:
+                print(f"✅ Carregado .env da raiz: {env_path}")
+        elif DEBUG_MODE:
             print(f"⚠️ Arquivo .env não encontrado em: {env_path}")
         
         # Também tenta carregar .env do backend
         backend_env = os.path.join(os.path.dirname(__file__), '.env')
         if os.path.exists(backend_env):
             load_dotenv(backend_env, override=True)
-            print(f"✅ Carregado .env do backend: {backend_env}")
+            if DEBUG_MODE:
+                print(f"✅ Carregado .env do backend: {backend_env}")
 except ImportError:
-    print("⚠️ python-dotenv não instalado. Instale com: pip install python-dotenv")
+    if DEBUG_MODE:
+        print("⚠️ python-dotenv não instalado. Instale com: pip install python-dotenv")
 except Exception as e:
-    print(f"⚠️ Erro ao carregar .env: {e}")
+    if DEBUG_MODE:
+        print(f"⚠️ Erro ao carregar .env: {e}")
 
 from models import Item, Compromisso, Carro
 import auditoria
@@ -66,31 +72,36 @@ if USE_GOOGLE_SHEETS:
         try:
             sheets_info = db_module.get_sheets()
             spreadsheet_url = sheets_info.get('spreadsheet_url', 'N/A')
-            print(f"✅ Conectado ao Google Sheets: {spreadsheet_url}")
+            if DEBUG_MODE:
+                print(f"✅ Conectado ao Google Sheets: {spreadsheet_url}")
         except FileNotFoundError as e:
             error_msg = str(e)
             print(f"❌ Erro: Arquivo credentials.json não encontrado!")
-            print(f"   {error_msg}")
-            print(f"   Por favor, coloque o arquivo credentials.json na raiz do projeto.")
+            if DEBUG_MODE:
+                print(f"   {error_msg}")
+                print(f"   Por favor, coloque o arquivo credentials.json na raiz do projeto.")
             print("⚠️ Tentando usar SQLite como fallback...")
             USE_GOOGLE_SHEETS = False
             from models import init_db
             import database as db_module
             init_db()
-            print("✅ Usando SQLite local")
+            if DEBUG_MODE:
+                print("✅ Usando SQLite local")
         except Exception as e:
             error_msg = str(e)
             import traceback
             print(f"⚠️ Aviso: Erro ao conectar ao Google Sheets")
-            print(f"   Detalhes: {error_msg}")
-            print(f"   Traceback completo:")
-            traceback.print_exc()
+            if DEBUG_MODE:
+                print(f"   Detalhes: {error_msg}")
+                print(f"   Traceback completo:")
+                traceback.print_exc()
             print("⚠️ Tentando usar SQLite como fallback...")
             USE_GOOGLE_SHEETS = False
             from models import init_db
             import database as db_module
             init_db()
-            print("✅ Usando SQLite local")
+            if DEBUG_MODE:
+                print("✅ Usando SQLite local")
     except ImportError as e:
         print(f"❌ Erro ao importar sheets_database: {str(e)}")
         print("⚠️ Usando SQLite como fallback...")
@@ -98,7 +109,8 @@ if USE_GOOGLE_SHEETS:
         from models import init_db
         import database as db_module
         init_db()
-        print("✅ Usando SQLite local")
+        if DEBUG_MODE:
+            print("✅ Usando SQLite local")
     except Exception as e:
         print(f"❌ Erro inesperado: {str(e)}")
         print("⚠️ Usando SQLite como fallback...")
@@ -106,12 +118,14 @@ if USE_GOOGLE_SHEETS:
         from models import init_db
         import database as db_module
         init_db()
-        print("✅ Usando SQLite local")
+        if DEBUG_MODE:
+            print("✅ Usando SQLite local")
 else:
     from models import init_db
     import database as db_module
     init_db()
-    print("✅ Usando SQLite local (USE_GOOGLE_SHEETS=false)")
+    if DEBUG_MODE:
+        print("✅ Usando SQLite local (USE_GOOGLE_SHEETS=false)")
 
 app = FastAPI(
     title="CRM Gestão de Estoque",
@@ -369,37 +383,51 @@ else:
     APP_USUARIO = app_usuario_raw.strip()
     APP_SENHA = app_senha_raw.strip()
 
-# Debug detalhado
-print(f"\n{'='*60}")
-print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
-print(f"{'='*60}")
-print(f"Ambiente: {'PRODUÇÃO (Render)' if is_production else 'DESENVOLVIMENTO'}")
-print(f"Variáveis Render detectadas:")
-print(f"  RENDER: {os.getenv('RENDER')}")
-print(f"  RENDER_SERVICE_NAME: {os.getenv('RENDER_SERVICE_NAME')}")
-print(f"  RENDER_EXTERNAL_URL: {os.getenv('RENDER_EXTERNAL_URL')}")
-print(f"APP_USUARIO (os.getenv): {repr(app_usuario_raw)}")
-print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_raw else 'NÃO DEFINIDA'}")
-if app_usuario_raw:
-    print(f"Usuário final: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
-if app_senha_raw:
-    print(f"Senha final: DEFINIDA (len={len(APP_SENHA)})")
-else:
-    print(f"Senha final: NÃO DEFINIDA")
-if is_production:
-    if app_usuario_raw and app_senha_raw:
-        print("✅ Usando credenciais do Render (produção)")
+# Debug condicional - apenas se DEBUG ou DEBUG_AUTH estiver habilitado
+DEBUG_AUTH_INIT = os.getenv('DEBUG_AUTH', 'false').lower() == 'true' or DEBUG_MODE
+
+if DEBUG_AUTH_INIT:
+    print(f"\n{'='*60}")
+    print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
+    print(f"{'='*60}")
+    print(f"Ambiente: {'PRODUÇÃO (Render)' if is_production else 'DESENVOLVIMENTO'}")
+    if DEBUG_MODE:
+        print(f"Variáveis Render detectadas:")
+        print(f"  RENDER: {os.getenv('RENDER')}")
+        print(f"  RENDER_SERVICE_NAME: {os.getenv('RENDER_SERVICE_NAME')}")
+        print(f"  RENDER_EXTERNAL_URL: {os.getenv('RENDER_EXTERNAL_URL')}")
+        print(f"APP_USUARIO (os.getenv): {repr(app_usuario_raw)}")
+        print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_raw else 'NÃO DEFINIDA'}")
+        if app_usuario_raw:
+            print(f"Usuário final: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
+        if app_senha_raw:
+            print(f"Senha final: DEFINIDA (len={len(APP_SENHA)})")
+        else:
+            print(f"Senha final: NÃO DEFINIDA")
+    
+    # Sempre mostra status crítico (sucesso ou erro)
+    if is_production:
+        if app_usuario_raw and app_senha_raw:
+            print("✅ Usando credenciais do Render (produção)")
+        else:
+            print("❌ ERRO CRÍTICO: Variáveis não configuradas no Render!")
+            print("   Configure em: Settings → Environment → Add Environment Variable")
+            print("   Variáveis necessárias: APP_USUARIO e APP_SENHA")
     else:
-        print("❌ ERRO CRÍTICO: Variáveis não configuradas no Render!")
+        if app_usuario_raw and app_senha_raw:
+            print("✅ Usando credenciais do .env (desenvolvimento)")
+        else:
+            print("❌ ERRO: Variáveis não configuradas!")
+            print("   Configure no arquivo .env na raiz do projeto")
+    print(f"{'='*60}\n")
+elif not (app_usuario_raw and app_senha_raw):
+    # Sempre mostra erro crítico mesmo sem debug
+    if is_production:
+        print("❌ ERRO CRÍTICO: APP_USUARIO e APP_SENHA não configuradas no Render!")
         print("   Configure em: Settings → Environment → Add Environment Variable")
-        print("   Variáveis necessárias: APP_USUARIO e APP_SENHA")
-else:
-    if app_usuario_raw and app_senha_raw:
-        print("✅ Usando credenciais do .env (desenvolvimento)")
     else:
-        print("❌ ERRO: Variáveis não configuradas!")
+        print("❌ ERRO: APP_USUARIO e APP_SENHA não configuradas!")
         print("   Configure no arquivo .env na raiz do projeto")
-print(f"{'='*60}\n")
 
 # Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
 active_tokens = {}
@@ -415,23 +443,22 @@ class LoginRequest(BaseModel):
 @app.post("/api/auth/login")
 async def login(credentials: LoginRequest):
     """Endpoint de login"""
+    # Debug condicional - apenas se DEBUG_AUTH estiver habilitado
+    DEBUG_AUTH = os.getenv('DEBUG_AUTH', 'false').lower() == 'true'
+    
     # Remove espaços extras e normaliza
     usuario_recebido = credentials.usuario.strip() if credentials.usuario else ""
     senha_recebida = credentials.senha.strip() if credentials.senha else ""
     usuario_esperado = APP_USUARIO.strip() if APP_USUARIO else ""
     senha_esperada = APP_SENHA.strip() if APP_SENHA else ""
     
-    # Debug detalhado (sem mostrar senha completa, mas mostra primeiros/last chars para debug)
-    print(f"\n[LOGIN] ========== TENTATIVA DE LOGIN ==========")
-    print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)}, repr={repr(usuario_recebido)})")
-    print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)}, repr={repr(usuario_esperado)})")
-    print(f"  Senha recebida: len={len(senha_recebida)}, primeiro_char={repr(senha_recebida[0]) if senha_recebida else 'None'}, ultimo_char={repr(senha_recebida[-1]) if senha_recebida else 'None'}")
-    print(f"  Senha esperada: len={len(senha_esperada)}, primeiro_char={repr(senha_esperada[0]) if senha_esperada else 'None'}, ultimo_char={repr(senha_esperada[-1]) if senha_esperada else 'None'}")
-    print(f"  Match usuario: {usuario_recebido == usuario_esperado}")
-    print(f"  Match senha: {senha_recebida == senha_esperada}")
-    print(f"  APP_USUARIO original: {repr(APP_USUARIO)}")
-    print(f"  APP_SENHA original (primeiros 2 chars): {repr(APP_SENHA[:2]) if APP_SENHA else 'None'}...")
-    print(f"[LOGIN] =========================================\n")
+    # Debug detalhado apenas se habilitado
+    if DEBUG_AUTH:
+        print(f"\n[LOGIN] ========== TENTATIVA DE LOGIN ==========")
+        print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)})")
+        print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)})")
+        print(f"  Match usuario: {usuario_recebido == usuario_esperado}")
+        print(f"[LOGIN] =========================================\n")
     
     if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
         token = generate_token()
@@ -439,6 +466,7 @@ async def login(credentials: LoginRequest):
             "usuario": credentials.usuario,
             "created_at": datetime.now()
         }
+        # Log simples de sucesso (sempre)
         print(f"[LOGIN] Login bem-sucedido para usuario: {usuario_recebido}")
         return {
             "success": True,
@@ -446,6 +474,7 @@ async def login(credentials: LoginRequest):
             "usuario": credentials.usuario
         }
     else:
+        # Log simples de falha (sempre)
         print(f"[LOGIN] Login FALHOU - Credenciais incorretas")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

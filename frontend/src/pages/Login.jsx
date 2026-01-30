@@ -9,14 +9,28 @@ export default function Login() {
   const [usuario, setUsuario] = useState('')
   const [senha, setSenha] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('Entrando...')
+  const [showColdStartMessage, setShowColdStartMessage] = useState(false)
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setLoadingMessage('Entrando...')
+    setShowColdStartMessage(false)
+
+    // Mostra mensagem de cold start após 5 segundos
+    const coldStartTimer = setTimeout(() => {
+      if (loading) {
+        setLoadingMessage('Aguardando servidor...')
+        setShowColdStartMessage(true)
+      }
+    }, 5000)
 
     try {
       const response = await authAPI.login({ usuario, senha })
+      
+      clearTimeout(coldStartTimer)
       
       if (response.data.success) {
         localStorage.setItem('token', response.data.token)
@@ -27,8 +41,24 @@ export default function Login() {
         toast.error('Usuário ou senha incorretos')
       }
     } catch (error) {
+      clearTimeout(coldStartTimer)
       console.error('Erro no login:', error)
-      const errorMessage = error.response?.data?.detail || error.message || 'Erro ao fazer login'
+      
+      // Mensagens específicas para diferentes tipos de erro
+      let errorMessage = 'Erro ao fazer login'
+      
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = 'Tempo de espera esgotado. O servidor pode estar iniciando. Tente novamente.'
+      } else if (error.code === 'ERR_NETWORK' || !error.response) {
+        errorMessage = 'Erro de conexão. Verifique sua internet ou tente novamente em alguns instantes.'
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Usuário ou senha incorretos'
+      } else if (error.response?.status === 408) {
+        errorMessage = 'Tempo de espera esgotado. Tente novamente.'
+      } else {
+        errorMessage = error.response?.data?.detail || error.message || 'Erro ao fazer login'
+      }
+      
       toast.error(errorMessage)
       
       // Debug adicional
@@ -38,6 +68,8 @@ export default function Login() {
       }
     } finally {
       setLoading(false)
+      setLoadingMessage('Entrando...')
+      setShowColdStartMessage(false)
     }
   }
 
@@ -110,7 +142,7 @@ export default function Login() {
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                  <span>Entrando...</span>
+                  <span>{loadingMessage}</span>
                 </>
               ) : (
                 <>
@@ -119,6 +151,14 @@ export default function Login() {
                 </>
               )}
             </button>
+            
+            {showColdStartMessage && (
+              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-sm text-blue-400 text-center">
+                  ⏳ O servidor está iniciando. Isso pode levar alguns segundos na primeira requisição.
+                </p>
+              </div>
+            )}
           </form>
         </div>
       </motion.div>

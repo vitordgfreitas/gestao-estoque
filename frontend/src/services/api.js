@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 segundos de timeout
 })
 
 // Interceptor para adicionar token se necessário
@@ -73,9 +74,35 @@ export const infoAPI = {
   obter: () => api.get('/api/info'),
 }
 
+// Função de retry para login (até 2 tentativas com delay de 1s)
+const retryLogin = async (credentials, maxRetries = 2) => {
+  let lastError = null
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await api.post('/api/auth/login', credentials)
+      return response
+    } catch (error) {
+      lastError = error
+      
+      // Se não for erro de timeout ou conexão, não tenta novamente
+      if (error.code !== 'ECONNABORTED' && error.code !== 'ERR_NETWORK' && error.response?.status !== 408) {
+        throw error
+      }
+      
+      // Se não for a última tentativa, aguarda antes de tentar novamente
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 segundo de delay
+      }
+    }
+  }
+  
+  throw lastError
+}
+
 // Autenticação
 export const authAPI = {
-  login: (credentials) => api.post('/api/auth/login', credentials),
+  login: (credentials) => retryLogin(credentials),
   logout: () => {
     localStorage.removeItem('token')
     localStorage.removeItem('usuario')
