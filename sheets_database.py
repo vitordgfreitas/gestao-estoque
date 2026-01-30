@@ -1413,12 +1413,16 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     
     # Adiciona financiamento
     try:
+        # Arredonda valores antes de salvar
+        valor_total_rounded = round(float(valor_total), 2)
+        valor_parcela_rounded = round(float(valor_parcela), 2)
+        
         sheet_financiamentos.append_row([
             next_id,
             item_id,
-            float(valor_total),
+            valor_total_rounded,
             numero_parcelas,
-            float(valor_parcela),
+            valor_parcela_rounded,
             float(taxa_juros),
             data_inicio_str,
             'Ativo',
@@ -1453,11 +1457,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     data_vencimento = parcela_custom['data_vencimento']
                 
                 try:
+                    # Arredonda valor da parcela antes de salvar
+                    valor_parcela_custom = round(float(parcela_custom.get('valor', 0)), 2)
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         parcela_custom.get('numero', idx + 1),
-                        float(parcela_custom.get('valor', 0)),
+                        valor_parcela_custom,
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
                         '',  # Data pagamento vazia
@@ -1496,11 +1502,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                         data_vencimento = date(ano, mes, ultimo_dia)
                 
                 try:
+                    # Arredonda valor da parcela antes de salvar (2 casas decimais)
+                    valor_parcela_rounded = round(float(valor_parcela), 2)
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         i,
-                        float(valor_parcela),
+                        valor_parcela_rounded,
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d'),
                         '',  # Data pagamento vazia
@@ -1623,12 +1631,39 @@ def listar_financiamentos(status=None, item_id=None):
     for record in records:
         if record and record.get('ID'):
             try:
+                # Lê e converte valores, garantindo que sejam números
+                valor_total_raw = record.get('Valor Total', 0)
+                valor_parcela_raw = record.get('Valor Parcela', 0)
+                
+                # Converte valores para float e arredonda
+                # Google Sheets pode retornar como string com vírgula ou número
+                def parse_value(val):
+                    if val is None:
+                        return 0.0
+                    if isinstance(val, (int, float)):
+                        return round(float(val), 2)
+                    if isinstance(val, str):
+                        # Remove espaços e substitui vírgula por ponto
+                        val_clean = val.replace(' ', '').replace(',', '.')
+                        # Se tiver múltiplos pontos, mantém apenas o último (decimal)
+                        if val_clean.count('.') > 1:
+                            parts = val_clean.split('.')
+                            val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+                        try:
+                            return round(float(val_clean), 2)
+                        except (ValueError, TypeError):
+                            return 0.0
+                    return round(float(val), 2)
+                
+                valor_total_conv = parse_value(valor_total_raw)
+                valor_parcela_conv = parse_value(valor_parcela_raw)
+                
                 fin = Financiamento(
                     record.get('ID'),
                     record.get('Item ID'),
-                    record.get('Valor Total', 0),
+                    valor_total_conv,
                     record.get('Numero Parcelas', 0),
-                    record.get('Valor Parcela', 0),
+                    valor_parcela_conv,
                     record.get('Taxa Juros', 0),
                     record.get('Data Inicio', ''),
                     record.get('Status', 'Ativo'),
