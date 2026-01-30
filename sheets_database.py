@@ -1430,19 +1430,21 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
         parcelas_ids = []
         
+        # Busca próximo ID de parcela uma vez antes do loop (mais eficiente)
+        try:
+            all_parcelas = sheet_parcelas.get_all_records()
+            if all_parcelas:
+                valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
+                next_parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
+            else:
+                next_parcela_id = 1
+        except (IndexError, KeyError, ValueError):
+            next_parcela_id = 1
+        
         if parcelas_customizadas:
             # Usa parcelas customizadas
-            for parcela_custom in parcelas_customizadas:
-                # Busca próximo ID de parcela
-                try:
-                    all_parcelas = sheet_parcelas.get_all_records()
-                    if all_parcelas:
-                        valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
-                        parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
-                    else:
-                        parcela_id = 1
-                except (IndexError, KeyError, ValueError):
-                    parcela_id = 1
+            for idx, parcela_custom in enumerate(parcelas_customizadas):
+                parcela_id = next_parcela_id + idx
                 
                 # Converte data_vencimento se necessário
                 if isinstance(parcela_custom.get('data_vencimento'), str):
@@ -1450,34 +1452,28 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 else:
                     data_vencimento = parcela_custom['data_vencimento']
                 
-                sheet_parcelas.append_row([
-                    parcela_id,
-                    next_id,
-                    parcela_custom['numero'],
-                    float(parcela_custom['valor']),
-                    0.0,  # Valor pago inicialmente 0
-                    data_vencimento.strftime('%Y-%m-%d'),
-                    '',  # Data pagamento vazia
-                    'Pendente',
-                    0.0,  # Juros
-                    0.0,  # Multa
-                    0.0,  # Desconto
-                    ''  # Link Boleto vazio
-                ])
-                parcelas_ids.append(parcela_id)
+                try:
+                    sheet_parcelas.append_row([
+                        parcela_id,
+                        next_id,
+                        parcela_custom.get('numero', idx + 1),
+                        float(parcela_custom.get('valor', 0)),
+                        0.0,  # Valor pago inicialmente 0
+                        data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
+                        '',  # Data pagamento vazia
+                        'Pendente',
+                        0.0,  # Juros
+                        0.0,  # Multa
+                        0.0,  # Desconto
+                        ''  # Link Boleto vazio
+                    ])
+                    parcelas_ids.append(parcela_id)
+                except Exception as e:
+                    raise Exception(f"Erro ao criar parcela customizada {idx + 1}: {str(e)}")
         else:
             # Gera parcelas automaticamente (fixas)
             for i in range(1, numero_parcelas + 1):
-                # Busca próximo ID de parcela
-                try:
-                    all_parcelas = sheet_parcelas.get_all_records()
-                    if all_parcelas:
-                        valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
-                        parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
-                    else:
-                        parcela_id = 1
-                except (IndexError, KeyError, ValueError):
-                    parcela_id = 1
+                parcela_id = next_parcela_id + i - 1
                 
                 # Calcula data de vencimento (mes seguinte)
                 if i == 1:
@@ -1499,21 +1495,24 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                         ultimo_dia = calendar.monthrange(ano, mes)[1]
                         data_vencimento = date(ano, mes, ultimo_dia)
                 
-                sheet_parcelas.append_row([
-                    parcela_id,
-                    next_id,
-                    i,
-                    float(valor_parcela),
-                    0.0,  # Valor pago inicialmente 0
-                    data_vencimento.strftime('%Y-%m-%d'),
-                    '',  # Data pagamento vazia
-                    'Pendente',
-                    0.0,  # Juros
-                    0.0,  # Multa
-                    0.0,  # Desconto
-                    ''  # Link Boleto vazio
-                ])
-                parcelas_ids.append(parcela_id)
+                try:
+                    sheet_parcelas.append_row([
+                        parcela_id,
+                        next_id,
+                        i,
+                        float(valor_parcela),
+                        0.0,  # Valor pago inicialmente 0
+                        data_vencimento.strftime('%Y-%m-%d'),
+                        '',  # Data pagamento vazia
+                        'Pendente',
+                        0.0,  # Juros
+                        0.0,  # Multa
+                        0.0,  # Desconto
+                        ''  # Link Boleto vazio
+                    ])
+                    parcelas_ids.append(parcela_id)
+                except Exception as e:
+                    raise Exception(f"Erro ao criar parcela {i} de {numero_parcelas}: {str(e)}")
         
         auditoria.registrar_auditoria('CREATE', 'Financiamentos', next_id, valores_novos={
             'item_id': item_id,
