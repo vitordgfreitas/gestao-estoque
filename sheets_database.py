@@ -1527,10 +1527,10 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
                 self.id = int(id)
                 self.item_id = int(item_id)
-                self.valor_total = float(valor_total)
+                self.valor_total = round(float(valor_total), 2)  # Arredonda para 2 casas decimais
                 self.numero_parcelas = int(numero_parcelas)
-                self.valor_parcela = float(valor_parcela)
-                self.taxa_juros = float(taxa_juros)
+                self.valor_parcela = round(float(valor_parcela), 2)  # Arredonda para 2 casas decimais
+                self.taxa_juros = float(taxa_juros)  # Mantém precisão para taxa
                 self.data_inicio = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio, '%Y-%m-%d').date()
                 self.status = status or 'Ativo'
                 self.instituicao_financeira = instituicao_financeira or ''
@@ -1580,10 +1580,10 @@ def listar_financiamentos(status=None, item_id=None):
         def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
             self.id = int(id) if id else None
             self.item_id = int(item_id) if item_id else None
-            self.valor_total = float(valor_total) if valor_total else 0.0
+            self.valor_total = round(float(valor_total), 2) if valor_total else 0.0  # Arredonda para 2 casas decimais
             self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
-            self.valor_parcela = float(valor_parcela) if valor_parcela else 0.0
-            self.taxa_juros = float(taxa_juros) if taxa_juros else 0.0
+            self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0  # Arredonda para 2 casas decimais
+            self.taxa_juros = float(taxa_juros) if taxa_juros else 0.0  # Mantém precisão para taxa
             if isinstance(data_inicio, str) and data_inicio:
                 try:
                     self.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()

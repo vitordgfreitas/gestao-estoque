@@ -1717,15 +1717,31 @@ def financiamento_to_dict(fin):
     """Converte Financiamento para dict"""
     # Garante que fin é um objeto, não um dict ou Response
     if isinstance(fin, dict):
+        # Se já é dict, apenas arredonda valores
+        if 'valor_total' in fin:
+            fin['valor_total'] = round(float(fin['valor_total']), 2)
+        if 'valor_parcela' in fin:
+            fin['valor_parcela'] = round(float(fin['valor_parcela']), 2)
+        if 'taxa_juros' in fin:
+            fin['taxa_juros'] = round(float(fin['taxa_juros']), 6)  # Mantém mais precisão para taxa
         return fin
+    
+    # Se for Response do FastAPI, extrai o conteúdo
+    if hasattr(fin, 'json') or hasattr(fin, 'body'):
+        # Não deveria acontecer, mas trata caso venha Response
+        return {}
+    
+    valor_total = round(float(getattr(fin, 'valor_total', 0.0)), 2)
+    valor_parcela = round(float(getattr(fin, 'valor_parcela', 0.0)), 2)
+    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 6)  # Mantém mais precisão para taxa
     
     return {
         "id": getattr(fin, 'id', None),
         "item_id": getattr(fin, 'item_id', None),
-        "valor_total": getattr(fin, 'valor_total', 0.0),
+        "valor_total": valor_total,
         "numero_parcelas": getattr(fin, 'numero_parcelas', 0),
-        "valor_parcela": getattr(fin, 'valor_parcela', 0.0),
-        "taxa_juros": getattr(fin, 'taxa_juros', 0.0),
+        "valor_parcela": valor_parcela,
+        "taxa_juros": taxa_juros,
         "data_inicio": fin.data_inicio.isoformat() if hasattr(fin, 'data_inicio') and isinstance(fin.data_inicio, date) else (str(fin.data_inicio) if hasattr(fin, 'data_inicio') else None),
         "status": getattr(fin, 'status', 'Ativo'),
         "instituicao_financeira": getattr(fin, 'instituicao_financeira', None),
