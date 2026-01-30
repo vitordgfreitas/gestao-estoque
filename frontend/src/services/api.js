@@ -108,6 +108,7 @@ export const financiamentosAPI = {
   atualizar: (id, data) => api.put(`/api/financiamentos/${id}`, data),
   deletar: (id) => api.delete(`/api/financiamentos/${id}`),
   pagarParcela: (financiamentoId, parcelaId, data) => api.post(`/api/financiamentos/${financiamentoId}/parcelas/${parcelaId}/pagar`, data),
+  atualizarParcela: (financiamentoId, parcelaId, data) => api.put(`/api/financiamentos/${financiamentoId}/parcelas/${parcelaId}`, data),
   valorPresente: (id, usarCdi) => api.get(`/api/financiamentos/${id}/valor-presente`, { params: { usar_cdi: usarCdi } }),
   dashboard: () => api.get('/api/financiamentos/dashboard'),
 }

@@ -1,9 +1,8 @@
-from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento
-from datetime import date
+﻿from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento
+from datetime import date, datetime
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
 import validacoes
-import auditoria
 import auditoria
 
 def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
@@ -11,20 +10,20 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
     
     Args:
         nome: Nome do item
-        quantidade_total: Quantidade total disponível
+        quantidade_total: Quantidade total dispon├¡vel
         categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
-        descricao: Descrição opcional do item
-        cidade: Cidade onde o item está localizado (obrigatório)
-        uf: UF onde o item está localizado (obrigatório)
-        endereco: Endereço opcional do item
-        placa: Placa do carro (obrigatório se categoria='Carros')
-        marca: Marca do carro (obrigatório se categoria='Carros')
-        modelo: Modelo do carro (obrigatório se categoria='Carros')
-        ano: Ano do carro (obrigatório se categoria='Carros')
+        descricao: Descri├º├úo opcional do item
+        cidade: Cidade onde o item est├í localizado (obrigat├│rio)
+        uf: UF onde o item est├í localizado (obrigat├│rio)
+        endereco: Endere├ºo opcional do item
+        placa: Placa do carro (obrigat├│rio se categoria='Carros')
+        marca: Marca do carro (obrigat├│rio se categoria='Carros')
+        modelo: Modelo do carro (obrigat├│rio se categoria='Carros')
+        ano: Ano do carro (obrigat├│rio se categoria='Carros')
     """
     session = get_session()
     try:
-        # Validações robustas
+        # Valida├º├Áes robustas
         valido, msg_erro = validacoes.validar_item_completo(
             nome=nome,
             categoria=categoria or '',
@@ -40,8 +39,8 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
         if not valido:
             raise ValueError(msg_erro)
         
-        # Validação de duplicatas
-        # Verifica nome + categoria único
+        # Valida├º├úo de duplicatas
+        # Verifica nome + categoria ├║nico
         item_existente = session.query(Item).filter(
             and_(
                 Item.nome == nome,
@@ -50,13 +49,13 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
         ).first()
         
         if item_existente:
-            raise ValueError(f"Item '{nome}' já existe na categoria '{categoria}'")
+            raise ValueError(f"Item '{nome}' j├í existe na categoria '{categoria}'")
         
-        # Validação de placa única para carros
+        # Valida├º├úo de placa ├║nica para carros
         if categoria == 'Carros' and placa:
             carro_existente = session.query(Carro).filter(Carro.placa == placa.upper().strip()).first()
             if carro_existente:
-                raise ValueError(f"Placa {placa} já cadastrada")
+                raise ValueError(f"Placa {placa} j├í cadastrada")
         
         item = Item(
             nome=nome, 
@@ -64,7 +63,7 @@ def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descrica
             categoria=categoria,
             descricao=descricao,
             cidade=cidade,
-            uf=uf.upper()[:2],  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
+            uf=uf.upper()[:2],  # Garante que UF tenha no m├íximo 2 caracteres e seja mai├║scula
             endereco=endereco
         )
         session.add(item)
@@ -122,7 +121,7 @@ def listar_itens():
     try:
         # Carrega os relacionamentos antes de desanexar
         itens = session.query(Item).options(joinedload(Item.compromissos), joinedload(Item.carro)).all()
-        # Desanexa todos os objetos da sessão
+        # Desanexa todos os objetos da sess├úo
         for item in itens:
             if item.carro:
                 session.expunge(item.carro)
@@ -152,29 +151,29 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     Args:
         item_id: ID do item
         nome: Nome do item
-        quantidade_total: Quantidade total disponível
+        quantidade_total: Quantidade total dispon├¡vel
         categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
-        descricao: Descrição opcional do item
-        cidade: Cidade onde o item está localizado (obrigatório)
-        uf: UF onde o item está localizado (obrigatório)
-        endereco: Endereço opcional do item
-        placa: Placa do carro (obrigatório se categoria='Carros')
-        marca: Marca do carro (obrigatório se categoria='Carros')
-        modelo: Modelo do carro (obrigatório se categoria='Carros')
-        ano: Ano do carro (obrigatório se categoria='Carros')
+        descricao: Descri├º├úo opcional do item
+        cidade: Cidade onde o item est├í localizado (obrigat├│rio)
+        uf: UF onde o item est├í localizado (obrigat├│rio)
+        endereco: Endere├ºo opcional do item
+        placa: Placa do carro (obrigat├│rio se categoria='Carros')
+        marca: Marca do carro (obrigat├│rio se categoria='Carros')
+        modelo: Modelo do carro (obrigat├│rio se categoria='Carros')
+        ano: Ano do carro (obrigat├│rio se categoria='Carros')
     """
     session = get_session()
     try:
         item = session.query(Item).options(joinedload(Item.carro)).filter(Item.id == item_id).first()
         if not item:
-            raise ValueError(f"Item com ID {item_id} não encontrado")
+            raise ValueError(f"Item com ID {item_id} n├úo encontrado")
         
-        # Usa valores atuais se não fornecidos
+        # Usa valores atuais se n├úo fornecidos
         categoria_final = categoria if categoria is not None else (item.categoria or '')
         cidade_final = cidade if cidade else (item.cidade or '')
         uf_final = uf if uf else (item.uf or '')
         
-        # Validações robustas
+        # Valida├º├Áes robustas
         valido, msg_erro = validacoes.validar_item_completo(
             nome=nome,
             categoria=categoria_final,
@@ -191,7 +190,7 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         if not valido:
             raise ValueError(msg_erro)
         
-        # Validação de duplicatas (excluindo o item atual)
+        # Valida├º├úo de duplicatas (excluindo o item atual)
         item_existente = session.query(Item).filter(
             and_(
                 Item.nome == nome,
@@ -201,9 +200,9 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         ).first()
         
         if item_existente:
-            raise ValueError(f"Item '{nome}' já existe na categoria '{categoria_final}'")
+            raise ValueError(f"Item '{nome}' j├í existe na categoria '{categoria_final}'")
         
-        # Validação de placa única para carros (excluindo o item atual)
+        # Valida├º├úo de placa ├║nica para carros (excluindo o item atual)
         if categoria_final == 'Carros' and placa:
             carro_existente = session.query(Carro).join(Item).filter(
                 and_(
@@ -212,16 +211,16 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
                 )
             ).first()
             if carro_existente:
-                raise ValueError(f"Placa {placa} já cadastrada")
+                raise ValueError(f"Placa {placa} j├í cadastrada")
         
         # Se categoria mudou ou foi especificada
         if categoria:
             item.categoria = categoria
             
-            # Se mudou para Carros, cria registro de carro se não existir
+            # Se mudou para Carros, cria registro de carro se n├úo existir
             if categoria == 'Carros':
                 if not placa or not marca or not modelo or not ano:
-                    raise ValueError("Para carros, placa, marca, modelo e ano são obrigatórios")
+                    raise ValueError("Para carros, placa, marca, modelo e ano s├úo obrigat├│rios")
                 
                 if item.carro:
                     # Atualiza carro existente
@@ -248,17 +247,17 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         item.quantidade_total = quantidade_total
         item.descricao = descricao
         item.cidade = cidade_final
-        item.uf = uf_final.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
+        item.uf = uf_final.upper()[:2]  # Garante que UF tenha no m├íximo 2 caracteres e seja mai├║scula
         item.endereco = endereco
         
-        # Se já é carro e não mudou categoria, atualiza dados do carro
+        # Se j├í ├® carro e n├úo mudou categoria, atualiza dados do carro
         if item.categoria == 'Carros' and item.carro and placa and marca and modelo and ano:
             item.carro.placa = placa.upper().strip()
             item.carro.marca = marca.strip()
             item.carro.modelo = modelo.strip()
             item.carro.ano = int(ano)
         
-        # Prepara valores antigos para auditoria (antes do commit, mas após atualizar campos)
+        # Prepara valores antigos para auditoria (antes do commit, mas ap├│s atualizar campos)
         valores_antigos = {
             'id': item.id,
             'nome': item.nome,
@@ -320,18 +319,18 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None
     Args:
         item_id: ID do item
         quantidade: Quantidade alugada
-        data_inicio: Data de início do aluguel
+        data_inicio: Data de in├¡cio do aluguel
         data_fim: Data de fim do aluguel
-        descricao: Descrição opcional do compromisso
-        cidade: Cidade do compromisso (obrigatório)
-        uf: UF do compromisso (obrigatório)
-        endereco: Endereço opcional do compromisso
+        descricao: Descri├º├úo opcional do compromisso
+        cidade: Cidade do compromisso (obrigat├│rio)
+        uf: UF do compromisso (obrigat├│rio)
+        endereco: Endere├ºo opcional do compromisso
         contratante: Nome do contratante (opcional)
     """
     session = get_session()
     try:
         if not cidade or not uf:
-            raise ValueError("Cidade e UF são obrigatórios")
+            raise ValueError("Cidade e UF s├úo obrigat├│rios")
         
         compromisso = Compromisso(
             item_id=item_id,
@@ -340,7 +339,7 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None
             data_fim=data_fim,
             descricao=descricao,
             cidade=cidade,
-            uf=uf.upper()[:2],  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
+            uf=uf.upper()[:2],  # Garante que UF tenha no m├íximo 2 caracteres e seja mai├║scula
             endereco=endereco,
             contratante=contratante
         )
@@ -348,8 +347,8 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None
         session.commit()
         session.refresh(compromisso)
         # Carrega o relacionamento com Item antes de desanexar
-        compromisso.item  # Força o carregamento do relacionamento
-        # Desanexa o objeto da sessão para poder ser usado depois que a sessão fechar
+        compromisso.item  # For├ºa o carregamento do relacionamento
+        # Desanexa o objeto da sess├úo para poder ser usado depois que a sess├úo fechar
         session.expunge(compromisso)
         if compromisso.item:
             session.expunge(compromisso.item)
@@ -383,10 +382,10 @@ def listar_compromissos():
     try:
         # Carrega o relacionamento com Item antes de desanexar
         compromissos = session.query(Compromisso).options(joinedload(Compromisso.item)).all()
-        # Desanexa todos os objetos da sessão
+        # Desanexa todos os objetos da sess├úo
         for compromisso in compromissos:
             session.expunge(compromisso)
-            # Também desanexa o item relacionado
+            # Tamb├®m desanexa o item relacionado
             if compromisso.item:
                 session.expunge(compromisso.item)
         return compromissos
@@ -395,12 +394,12 @@ def listar_compromissos():
 
 
 def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
-    """Verifica a disponibilidade de um item em uma data específica
+    """Verifica a disponibilidade de um item em uma data espec├¡fica
     
     Args:
         item_id: ID do item
         data_consulta: Data para verificar disponibilidade
-        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localização
+        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localiza├º├úo
     """
     session = get_session()
     try:
@@ -408,7 +407,7 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
         if not item:
             return None
         
-        # Busca compromissos que estão ativos na data de consulta
+        # Busca compromissos que est├úo ativos na data de consulta
         compromissos_ativos_query = session.query(Compromisso).filter(
             and_(
                 Compromisso.item_id == item_id,
@@ -417,7 +416,7 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
             )
         )
         
-        # Se há filtro de localização, aplica filtro adicional (formato: "Cidade - UF")
+        # Se h├í filtro de localiza├º├úo, aplica filtro adicional (formato: "Cidade - UF")
         if filtro_localizacao:
             cidade_uf = filtro_localizacao.split(" - ")
             if len(cidade_uf) == 2:
@@ -433,15 +432,15 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
         
         quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
         
-        # Se há filtro de localização e o item não está nessa localização,
-        # considera que não há itens disponíveis naquela localização
+        # Se h├í filtro de localiza├º├úo e o item n├úo est├í nessa localiza├º├úo,
+        # considera que n├úo h├í itens dispon├¡veis naquela localiza├º├úo
         if filtro_localizacao:
             cidade_uf = filtro_localizacao.split(" - ")
             if len(cidade_uf) == 2:
                 cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
                 item_na_localizacao = (item.cidade == cidade_filtro and item.uf == uf_filtro.upper())
                 if not item_na_localizacao:
-                    # Item não está na localização, então disponível = 0 (ou negativo se houver compromissos)
+                    # Item n├úo est├í na localiza├º├úo, ent├úo dispon├¡vel = 0 (ou negativo se houver compromissos)
                     quantidade_disponivel = max(0, -quantidade_comprometida) if quantidade_comprometida > 0 else 0
                 else:
                     quantidade_disponivel = item.quantidade_total - quantidade_comprometida
@@ -450,7 +449,7 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
         else:
             quantidade_disponivel = item.quantidade_total - quantidade_comprometida
         
-        # Desanexa objetos da sessão antes de retornar
+        # Desanexa objetos da sess├úo antes de retornar
         session.expunge(item)
         for comp in compromissos_ativos:
             session.expunge(comp)
@@ -467,7 +466,7 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
 
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None):
-    """Verifica se há disponibilidade suficiente em todo o período para um novo compromisso"""
+    """Verifica se h├í disponibilidade suficiente em todo o per├¡odo para um novo compromisso"""
     from datetime import timedelta
     
     session = get_session()
@@ -476,8 +475,8 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         if not item:
             return None
         
-        # Busca compromissos que se sobrepõem com o período solicitado
-        # Dois períodos se sobrepõem se: inicio1 <= fim2 AND inicio2 <= fim1
+        # Busca compromissos que se sobrep├Áem com o per├¡odo solicitado
+        # Dois per├¡odos se sobrep├Áem se: inicio1 <= fim2 AND inicio2 <= fim1
         compromissos_sobrepostos = session.query(Compromisso).filter(
             and_(
                 Compromisso.item_id == item_id,
@@ -486,11 +485,11 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
             )
         ).all()
         
-        # Exclui o próprio compromisso se estiver editando
+        # Exclui o pr├│prio compromisso se estiver editando
         if excluir_compromisso_id:
             compromissos_sobrepostos = [c for c in compromissos_sobrepostos if c.id != excluir_compromisso_id]
         
-        # Encontra o dia com maior comprometimento no período
+        # Encontra o dia com maior comprometimento no per├¡odo
         max_comprometido = 0
         data_atual = data_inicio
         
@@ -505,7 +504,7 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
                 break
             data_atual += timedelta(days=1)
         
-        # Desanexa objeto da sessão antes de retornar
+        # Desanexa objeto da sess├úo antes de retornar
         session.expunge(item)
         
         return {
@@ -519,11 +518,11 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
 
 
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
-    """Verifica a disponibilidade de todos os itens em uma data específica
+    """Verifica a disponibilidade de todos os itens em uma data espec├¡fica
     
     Args:
         data_consulta: Data para verificar disponibilidade
-        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localização
+        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localiza├º├úo
     """
     session = get_session()
     try:
@@ -539,7 +538,7 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
                 )
             )
             
-            # Se há filtro de localização, aplica filtro adicional (formato: "Cidade - UF")
+            # Se h├í filtro de localiza├º├úo, aplica filtro adicional (formato: "Cidade - UF")
             if filtro_localizacao:
                 cidade_uf = filtro_localizacao.split(" - ")
                 if len(cidade_uf) == 2:
@@ -555,15 +554,15 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
             
             quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
             
-            # Se há filtro de localização e o item não está nessa localização,
-            # considera que não há itens disponíveis naquela localização
+            # Se h├í filtro de localiza├º├úo e o item n├úo est├í nessa localiza├º├úo,
+            # considera que n├úo h├í itens dispon├¡veis naquela localiza├º├úo
             if filtro_localizacao:
                 cidade_uf = filtro_localizacao.split(" - ")
                 if len(cidade_uf) == 2:
                     cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
                     item_na_localizacao = (item.cidade == cidade_filtro and item.uf == uf_filtro.upper())
                     if not item_na_localizacao:
-                        # Item não está na localização, então disponível = 0 (ou negativo se houver compromissos)
+                        # Item n├úo est├í na localiza├º├úo, ent├úo dispon├¡vel = 0 (ou negativo se houver compromissos)
                         quantidade_disponivel = max(0, -quantidade_comprometida) if quantidade_comprometida > 0 else 0
                     else:
                         quantidade_disponivel = item.quantidade_total - quantidade_comprometida
@@ -572,7 +571,7 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
             else:
                 quantidade_disponivel = item.quantidade_total - quantidade_comprometida
             
-            # Desanexa objeto da sessão
+            # Desanexa objeto da sess├úo
             session.expunge(item)
             
             resultados.append({
@@ -593,9 +592,9 @@ def deletar_item(item_id):
     try:
         item = session.query(Item).options(joinedload(Item.compromissos)).filter(Item.id == item_id).first()
         if not item:
-            raise ValueError(f"Item com ID {item_id} não encontrado")
+            raise ValueError(f"Item com ID {item_id} n├úo encontrado")
         
-        # Verifica se há compromissos ativos ou futuros
+        # Verifica se h├í compromissos ativos ou futuros
         hoje = date.today()
         compromissos_futuros = [
             c for c in item.compromissos 
@@ -604,8 +603,8 @@ def deletar_item(item_id):
         
             if compromissos_futuros:
                 raise ValueError(
-                    f"Não é possível deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
-                    f"Delete os compromissos primeiro ou aguarde sua conclusão."
+                    f"N├úo ├® poss├¡vel deletar o item. Existem {len(compromissos_futuros)} compromisso(s) ativo(s) ou futuro(s). "
+                    f"Delete os compromissos primeiro ou aguarde sua conclus├úo."
                 )
         
         # Prepara valores antigos para auditoria antes de deletar
@@ -648,24 +647,24 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
         compromisso_id: ID do compromisso
         item_id: ID do item
         quantidade: Quantidade alugada
-        data_inicio: Data de início do aluguel
+        data_inicio: Data de in├¡cio do aluguel
         data_fim: Data de fim do aluguel
-        descricao: Descrição opcional do compromisso
-        cidade: Cidade do compromisso (obrigatório)
-        uf: UF do compromisso (obrigatório)
-        endereco: Endereço opcional do compromisso
+        descricao: Descri├º├úo opcional do compromisso
+        cidade: Cidade do compromisso (obrigat├│rio)
+        uf: UF do compromisso (obrigat├│rio)
+        endereco: Endere├ºo opcional do compromisso
         contratante: Nome do contratante (opcional)
     """
     session = get_session()
     try:
         compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
         if not compromisso:
-            raise ValueError(f"Compromisso com ID {compromisso_id} não encontrado")
+            raise ValueError(f"Compromisso com ID {compromisso_id} n├úo encontrado")
         
         # Verifica se o item existe
         item = session.query(Item).filter(Item.id == item_id).first()
         if not item:
-            raise ValueError(f"Item com ID {item_id} não encontrado")
+            raise ValueError(f"Item com ID {item_id} n├úo encontrado")
         
         # Verifica disponibilidade (excluindo o compromisso atual)
         disponibilidade = verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=compromisso_id)
@@ -674,7 +673,7 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
         
         quantidade_disponivel = disponibilidade.get('disponivel_minimo', 0)
         
-        # Validações robustas
+        # Valida├º├Áes robustas
         valido, msg_erro = validacoes.validar_compromisso_completo(
             item_id=item_id,
             quantidade=quantidade,
@@ -696,7 +695,7 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
             compromisso.data_fim = data_fim
             compromisso.descricao = descricao
             compromisso.cidade = cidade
-            compromisso.uf = uf.upper()[:2]  # Garante que UF tenha no máximo 2 caracteres e seja maiúscula
+            compromisso.uf = uf.upper()[:2]  # Garante que UF tenha no m├íximo 2 caracteres e seja mai├║scula
             compromisso.endereco = endereco
             compromisso.contratante = contratante
             
@@ -716,7 +715,7 @@ def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data
             
             session.commit()
             session.refresh(compromisso)
-            compromisso.item  # Força o carregamento do relacionamento
+            compromisso.item  # For├ºa o carregamento do relacionamento
             session.expunge(compromisso)
             if compromisso.item:
                 session.expunge(compromisso.item)
@@ -791,7 +790,7 @@ def criar_conta_receber(compromisso_id, descricao, valor, data_vencimento, forma
         # Verifica se compromisso existe
         compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
         if not compromisso:
-            raise ValueError(f"Compromisso {compromisso_id} não encontrado")
+            raise ValueError(f"Compromisso {compromisso_id} n├úo encontrado")
         
         # Calcula status inicial
         hoje = date.today()
@@ -844,7 +843,7 @@ def listar_contas_receber(status=None, data_inicio=None, data_fim=None, compromi
         
         contas = query.all()
         
-        # Recalcula status para garantir consistência
+        # Recalcula status para garantir consist├¬ncia
         hoje = date.today()
         for conta in contas:
             if conta.data_pagamento:
@@ -894,7 +893,7 @@ def atualizar_conta_receber(conta_id, descricao=None, valor=None, data_venciment
         if observacoes is not None:
             conta.observacoes = observacoes
         
-        # Recalcula status se necessário
+        # Recalcula status se necess├írio
         hoje = date.today()
         if conta.data_pagamento:
             conta.status = 'Pago'
@@ -966,7 +965,7 @@ def criar_conta_pagar(descricao, categoria, valor, data_vencimento, fornecedor=N
         if item_id:
             item = session.query(Item).filter(Item.id == item_id).first()
             if not item:
-                raise ValueError(f"Item {item_id} não encontrado")
+                raise ValueError(f"Item {item_id} n├úo encontrado")
         
         # Calcula status inicial
         hoje = date.today()
@@ -1021,7 +1020,7 @@ def listar_contas_pagar(status=None, data_inicio=None, data_fim=None, categoria=
         
         contas = query.all()
         
-        # Recalcula status para garantir consistência
+        # Recalcula status para garantir consist├¬ncia
         hoje = date.today()
         for conta in contas:
             if conta.data_pagamento:
@@ -1078,7 +1077,7 @@ def atualizar_conta_pagar(conta_id, descricao=None, categoria=None, valor=None, 
         if observacoes is not None:
             conta.observacoes = observacoes
         
-        # Recalcula status se necessário
+        # Recalcula status se necess├írio
         hoje = date.today()
         if conta.data_pagamento:
             conta.status = 'Pago'
@@ -1141,10 +1140,10 @@ def deletar_conta_pagar(conta_id):
         session.close()
 
 
-# ============= FUNÇÕES DE CÁLCULO FINANCEIRO =============
+# ============= FUN├ç├òES DE C├üLCULO FINANCEIRO =============
 
 def calcular_saldo_periodo(data_inicio, data_fim):
-    """Calcula saldo (receitas - despesas) em um período"""
+    """Calcula saldo (receitas - despesas) em um per├¡odo"""
     receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
     despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
     
@@ -1161,7 +1160,7 @@ def calcular_saldo_periodo(data_inicio, data_fim):
 
 
 def obter_fluxo_caixa(data_inicio, data_fim):
-    """Retorna fluxo de caixa por período (agrupado por mês)"""
+    """Retorna fluxo de caixa por per├¡odo (agrupado por m├¬s)"""
     receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
     despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
     
@@ -1196,7 +1195,7 @@ def obter_fluxo_caixa(data_inicio, data_fim):
 
 # ============= FINANCIAMENTOS =============
 
-def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None):
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     from datetime import timedelta
     import calendar
@@ -1206,10 +1205,10 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         # Verifica se item existe
         item = session.query(Item).filter(Item.id == item_id).first()
         if not item:
-            raise ValueError(f"Item {item_id} não encontrado")
+            raise ValueError(f"Item {item_id} n├úo encontrado")
         
-        # Calcula valor da parcela (fixo)
-        valor_parcela = valor_total / numero_parcelas
+        # Calcula valor da parcela (fixo) - usado apenas se não houver parcelas customizadas
+        valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
         
         # Cria financiamento
         financiamento = Financiamento(
@@ -1227,38 +1226,58 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         session.add(financiamento)
         session.flush()  # Para obter o ID
         
-        # Gera parcelas automaticamente
-        data_venc = data_inicio
-        for i in range(1, numero_parcelas + 1):
-            # Calcula data de vencimento
-            if i == 1:
-                data_vencimento = data_venc
-            else:
-                meses_adicionar = i - 1
-                ano = data_venc.year
-                mes = data_venc.month + meses_adicionar
-                while mes > 12:
-                    mes -= 12
-                    ano += 1
-                try:
-                    data_vencimento = date(ano, mes, data_venc.day)
-                except ValueError:
-                    ultimo_dia = calendar.monthrange(ano, mes)[1]
-                    data_vencimento = date(ano, mes, ultimo_dia)
-            
-            parcela = ParcelaFinanciamento(
-                financiamento_id=financiamento.id,
-                numero_parcela=i,
-                valor_original=float(valor_parcela),
-                valor_pago=0.0,
-                data_vencimento=data_vencimento,
-                data_pagamento=None,
-                status='Pendente',
-                juros=0.0,
-                multa=0.0,
-                desconto=0.0
-            )
-            session.add(parcela)
+        # Gera parcelas
+        if parcelas_customizadas:
+            # Usa parcelas customizadas
+            for parcela_custom in parcelas_customizadas:
+                parcela = ParcelaFinanciamento(
+                    financiamento_id=financiamento.id,
+                    numero_parcela=parcela_custom['numero'],
+                    valor_original=float(parcela_custom['valor']),
+                    valor_pago=0.0,
+                    data_vencimento=parcela_custom['data_vencimento'] if isinstance(parcela_custom['data_vencimento'], date) else datetime.strptime(parcela_custom['data_vencimento'], '%Y-%m-%d').date(),
+                    data_pagamento=None,
+                    status='Pendente',
+                    juros=0.0,
+                    multa=0.0,
+                    desconto=0.0,
+                    link_boleto=None
+                )
+                session.add(parcela)
+        else:
+            # Gera parcelas automaticamente (fixas)
+            data_venc = data_inicio
+            for i in range(1, numero_parcelas + 1):
+                # Calcula data de vencimento
+                if i == 1:
+                    data_vencimento = data_venc
+                else:
+                    meses_adicionar = i - 1
+                    ano = data_venc.year
+                    mes = data_venc.month + meses_adicionar
+                    while mes > 12:
+                        mes -= 12
+                        ano += 1
+                    try:
+                        data_vencimento = date(ano, mes, data_venc.day)
+                    except ValueError:
+                        ultimo_dia = calendar.monthrange(ano, mes)[1]
+                        data_vencimento = date(ano, mes, ultimo_dia)
+                
+                parcela = ParcelaFinanciamento(
+                    financiamento_id=financiamento.id,
+                    numero_parcela=i,
+                    valor_original=float(valor_parcela),
+                    valor_pago=0.0,
+                    data_vencimento=data_vencimento,
+                    data_pagamento=None,
+                    status='Pendente',
+                    juros=0.0,
+                    multa=0.0,
+                    desconto=0.0,
+                    link_boleto=None
+                )
+                session.add(parcela)
         
         session.commit()
         session.refresh(financiamento)
@@ -1387,7 +1406,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
         
         parcelas = query.all()
         
-        # Recalcula status para garantir consistência
+        # Recalcula status para garantir consist├¬ncia
         hoje = date.today()
         for parcela in parcelas:
             if parcela.valor_pago >= parcela.valor_original:
@@ -1445,6 +1464,48 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
         auditoria.registrar_auditoria('UPDATE', 'Parcelas Financiamento', parcela_id, valores_antigos=valores_antigos, valores_novos={
             'valor_pago': valor_pago_total,
             'data_pagamento': str(data_pagamento)
+        })
+        
+        return parcela
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, valor_original=None, data_vencimento=None):
+    """Atualiza uma parcela de financiamento"""
+    session = get_session()
+    try:
+        parcela = session.query(ParcelaFinanciamento).filter(ParcelaFinanciamento.id == parcela_id).first()
+        if not parcela:
+            return None
+        
+        valores_antigos = {
+            'status': parcela.status,
+            'link_boleto': parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
+            'valor_original': parcela.valor_original,
+            'data_vencimento': str(parcela.data_vencimento)
+        }
+        
+        if status is not None:
+            parcela.status = status
+        if link_boleto is not None:
+            parcela.link_boleto = link_boleto
+        if valor_original is not None:
+            parcela.valor_original = float(valor_original)
+        if data_vencimento is not None:
+            parcela.data_vencimento = data_vencimento
+        
+        session.commit()
+        session.refresh(parcela)
+        
+        auditoria.registrar_auditoria('UPDATE', 'Parcelas Financiamento', parcela_id, valores_antigos=valores_antigos, valores_novos={
+            'status': parcela.status,
+            'link_boleto': parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
+            'valor_original': parcela.valor_original,
+            'data_vencimento': str(parcela.data_vencimento)
         })
         
         return parcela

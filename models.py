@@ -158,6 +158,7 @@ class ParcelaFinanciamento(Base):
     juros = Column(Float, nullable=False, default=0.0)
     multa = Column(Float, nullable=False, default=0.0)
     desconto = Column(Float, nullable=False, default=0.0)
+    link_boleto = Column(String(500))  # URL do boleto
     
     financiamento = relationship("Financiamento", back_populates="parcelas")
     

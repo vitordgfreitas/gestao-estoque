@@ -361,10 +361,10 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         try:
             header = sheet_parcelas.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_parcelas.insert_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto"], 1)
+                sheet_parcelas.insert_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto"], 1)
             else:
                 headers = sheet_parcelas.row_values(1)
-                expected_headers = ["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto"]
+                expected_headers = ["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto"]
                 for i, expected_header in enumerate(expected_headers):
                     if i >= len(headers) or headers[i] != expected_header:
                         col_letter = chr(65 + i)
@@ -373,12 +373,12 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             try:
                 all_values = sheet_parcelas.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto"])
+                    sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto"])
             except Exception:
                 pass
     else:
-        sheet_parcelas = spreadsheet.add_worksheet(title=sheet_parcelas_financiamento_name, rows=1000, cols=11)
-        sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto"])
+        sheet_parcelas = spreadsheet.add_worksheet(title=sheet_parcelas_financiamento_name, rows=1000, cols=12)
+        sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto"])
     
     return {
         'spreadsheet': spreadsheet,

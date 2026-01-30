@@ -1374,7 +1374,7 @@ def deletar_compromisso(compromisso_id):
 
 # ============= FINANCIAMENTOS =============
 
-def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None):
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     from datetime import timedelta
     import calendar
@@ -1462,7 +1462,8 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 'Pendente',
                 0.0,  # Juros
                 0.0,  # Multa
-                0.0   # Desconto
+                0.0,  # Desconto
+                ''  # Link Boleto vazio
             ])
             parcelas_ids.append(parcela_id)
         
@@ -1702,12 +1703,13 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
         return []
     
     class ParcelaFinanciamento:
-        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto):
+        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto, link_boleto=None):
             self.id = int(id) if id else None
             self.financiamento_id = int(financiamento_id) if financiamento_id else None
             self.numero_parcela = int(numero_parcela) if numero_parcela else 0
             self.valor_original = float(valor_original) if valor_original else 0.0
             self.valor_pago = float(valor_pago) if valor_pago else 0.0
+            self.link_boleto = link_boleto or ''
             if isinstance(data_vencimento, str) and data_vencimento:
                 try:
                     self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
@@ -1771,7 +1773,8 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
                     record.get('Status', 'Pendente'),
                     record.get('Juros', 0),
                     record.get('Multa', 0),
-                    record.get('Desconto', 0)
+                    record.get('Desconto', 0),
+                    record.get('Link Boleto', '')
                 )
                 
                 # Aplica filtros

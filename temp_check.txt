@@ -1,0 +1,100 @@
+﻿from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento
+from datetime import date
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import joinedload
+import validacoes
+import auditoria
+import auditoria
+
+def criar_item(nome, quantidade_total, categoria='Estrutura de Evento', descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None):
+    """Cria um novo item no estoque
+    
+    Args:
+        nome: Nome do item
+        quantidade_total: Quantidade total dispon├¡vel
+        categoria: Categoria do item ('Estrutura de Evento' ou 'Carros')
+        descricao: Descri├º├úo opcional do item
+        cidade: Cidade onde o item est├í localizado (obrigat├│rio)
+        uf: UF onde o item est├í localizado (obrigat├│rio)
+        endereco: Endere├ºo opcional do item
+        placa: Placa do carro (obrigat├│rio se categoria='Carros')
+        marca: Marca do carro (obrigat├│rio se categoria='Carros')
+        modelo: Modelo do carro (obrigat├│rio se categoria='Carros')
+        ano: Ano do carro (obrigat├│rio se categoria='Carros')
+    """
+    session = get_session()
+    try:
+        # Valida├º├Áes robustas
+        valido, msg_erro = validacoes.validar_item_completo(
+            nome=nome,
+            categoria=categoria or '',
+            cidade=cidade or '',
+            uf=uf or '',
+            quantidade_total=quantidade_total,
+            placa=placa,
+            marca=marca,
+            modelo=modelo,
+            ano=ano
+        )
+        
+        if not valido:
+            raise ValueError(msg_erro)
+        
+        # Valida├º├úo de duplicatas
+        # Verifica nome + categoria ├║nico
+        item_existente = session.query(Item).filter(
+            and_(
+                Item.nome == nome,
+                Item.categoria == categoria
+            )
+        ).first()
+        
+        if item_existente:
+            raise ValueError(f"Item '{nome}' j├í existe na categoria '{categoria}'")
+        
+        # Valida├º├úo de placa ├║nica para carros
+        if categoria == 'Carros' and placa:
+            carro_existente = session.query(Carro).filter(Carro.placa == placa.upper().strip()).first()
+            if carro_existente:
+                raise ValueError(f"Placa {placa} j├í cadastrada")
+        
+        item = Item(
+            nome=nome, 
+            quantidade_total=quantidade_total,
+            categoria=categoria,
+            descricao=descricao,
+            cidade=cidade,
+            uf=uf.upper()[:2],  # Garante que UF tenha no m├íximo 2 caracteres e seja mai├║scula
+            endereco=endereco
+        )
+        session.add(item)
+        session.flush()  # Para obter o ID do item
+        
+        # Se for carro, cria registro na tabela carros
+        if categoria == 'Carros':
+            carro = Carro(
+                item_id=item.id,
+                placa=placa.upper().strip(),
+                marca=marca.strip(),
+                modelo=modelo.strip(),
+                ano=int(ano)
+            )
+            session.add(carro)
+        
+        session.commit()
+        session.refresh(item)
+        if categoria == 'Carros' and item.carro:
+            session.refresh(item.carro)
+            session.expunge(item.carro)
+        session.expunge(item)
+        
+        # Registra auditoria
+        valores_novos = {
+            'id': item.id,
+            'nome': nome,
+            'quantidade_total': quantidade_total,
+            'categoria': categoria,
+            'descricao': descricao,
+            'cidade': cidade,
+            'uf': uf,
+            'endereco': endereco

@@ -433,6 +433,17 @@ class ValorPresenteResponse(BaseModel):
 
 # ============= MODELOS FINANCIAMENTO =============
 
+class ParcelaCustomizada(BaseModel):
+    numero: int
+    valor: float
+    data_vencimento: date
+
+class ParcelaUpdate(BaseModel):
+    status: Optional[str] = None
+    link_boleto: Optional[str] = None
+    valor_original: Optional[float] = None
+    data_vencimento: Optional[date] = None
+
 class FinanciamentoCreate(BaseModel):
     item_id: int
     valor_total: float
@@ -1738,23 +1749,44 @@ def parcela_to_dict(parcela):
         "status": parcela.status,
         "juros": parcela.juros,
         "multa": parcela.multa,
-        "desconto": parcela.desconto
+        "desconto": parcela.desconto,
+        "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None
     }
 
 @app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(verify_token)):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     try:
-        novo_fin = db_module.criar_financiamento(
-            item_id=fin.item_id,
-            valor_total=fin.valor_total,
-            numero_parcelas=fin.numero_parcelas,
-            taxa_juros=fin.taxa_juros,
-            data_inicio=fin.data_inicio,
-            instituicao_financeira=fin.instituicao_financeira,
-            observacoes=fin.observacoes
-        )
+        # Se parcelas customizadas foram fornecidas, usa elas
+        if fin.parcelas_customizadas and len(fin.parcelas_customizadas) > 0:
+            # Valida que soma das parcelas = valor_total
+            soma_parcelas = sum(p.valor for p in fin.parcelas_customizadas)
+            if abs(soma_parcelas - fin.valor_total) > 0.01:  # Tolerância de centavos
+                raise HTTPException(status_code=400, detail=f"Soma das parcelas ({soma_parcelas}) não confere com valor total ({fin.valor_total})")
+            
+            novo_fin = db_module.criar_financiamento(
+                item_id=fin.item_id,
+                valor_total=fin.valor_total,
+                numero_parcelas=len(fin.parcelas_customizadas),
+                taxa_juros=fin.taxa_juros,
+                data_inicio=fin.data_inicio,
+                instituicao_financeira=fin.instituicao_financeira,
+                observacoes=fin.observacoes,
+                parcelas_customizadas=[{"numero": p.numero, "valor": p.valor, "data_vencimento": p.data_vencimento} for p in fin.parcelas_customizadas]
+            )
+        else:
+            novo_fin = db_module.criar_financiamento(
+                item_id=fin.item_id,
+                valor_total=fin.valor_total,
+                numero_parcelas=fin.numero_parcelas,
+                taxa_juros=fin.taxa_juros,
+                data_inicio=fin.data_inicio,
+                instituicao_financeira=fin.instituicao_financeira,
+                observacoes=fin.observacoes
+            )
         return financiamento_to_dict(novo_fin)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1840,6 +1872,30 @@ async def pagar_parcela_financiamento(
             juros=pagamento.juros,
             multa=pagamento.multa,
             desconto=pagamento.desconto
+        )
+        if parcela_atualizada is None:
+            raise HTTPException(status_code=404, detail="Parcela não encontrada")
+        return parcela_to_dict(parcela_atualizada)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/financiamentos/{financiamento_id}/parcelas/{parcela_id}", response_model=dict)
+async def atualizar_parcela_financiamento(
+    financiamento_id: int,
+    parcela_id: int,
+    parcela_update: ParcelaUpdate,
+    token: str = Depends(verify_token)
+):
+    """Atualiza uma parcela de financiamento"""
+    try:
+        parcela_atualizada = db_module.atualizar_parcela_financiamento(
+            parcela_id=parcela_id,
+            status=parcela_update.status,
+            link_boleto=parcela_update.link_boleto,
+            valor_original=parcela_update.valor_original,
+            data_vencimento=parcela_update.data_vencimento
         )
         if parcela_atualizada is None:
             raise HTTPException(status_code=404, detail="Parcela não encontrada")

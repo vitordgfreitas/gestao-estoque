@@ -10,9 +10,12 @@ export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
   const [itens, setItens] = useState([])
   const [loading, setLoading] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [selectedFinanciamento, setSelectedFinanciamento] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('Todos')
+  const [parcelasFixas, setParcelasFixas] = useState(true)
+  const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
   const [formData, setFormData] = useState({
     item_id: '',
     valor_total: '',
@@ -53,13 +56,27 @@ export default function Financiamentos() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      setLoading(true)
+      setFormLoading(true)
       const data = {
         ...formData,
         item_id: parseInt(formData.item_id),
         valor_total: parseFloat(formData.valor_total),
-        numero_parcelas: parseInt(formData.numero_parcelas),
-        taxa_juros: parseFloat(formData.taxa_juros) / 100, // Converte % para decimal
+        numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
+        // Converte % para decimal: se usuário digita 3 (querendo 3%), salva como 0.03
+        // Converte % para decimal: usuário digita 3 (querendo 3%), salva como 0.03
+        // Se o valor já estiver em decimal (< 1), não divide novamente
+        taxa_juros: parseFloat(formData.taxa_juros) >= 1 
+          ? parseFloat(formData.taxa_juros) / 100 
+          : parseFloat(formData.taxa_juros),
+      }
+      
+      // Se parcelas variáveis, adiciona array de parcelas
+      if (!parcelasFixas && parcelasCustomizadas.length > 0) {
+        data.parcelas_customizadas = parcelasCustomizadas.map((p, idx) => ({
+          numero: idx + 1,
+          valor: parseFloat(p.valor),
+          data_vencimento: p.data_vencimento
+        }))
       }
       
       if (selectedFinanciamento) {
@@ -70,6 +87,7 @@ export default function Financiamentos() {
         toast.success('Financiamento criado com sucesso!')
       }
       
+      // Fecha formulário primeiro
       setShowForm(false)
       setSelectedFinanciamento(null)
       setFormData({
@@ -81,11 +99,17 @@ export default function Financiamentos() {
         instituicao_financeira: '',
         observacoes: ''
       })
-      loadFinanciamentos()
+      setParcelasFixas(true)
+      setParcelasCustomizadas([])
+      
+      // Pequeno delay para feedback visual antes de recarregar
+      setTimeout(() => {
+        loadFinanciamentos()
+      }, 300)
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao salvar financiamento')
     } finally {
-      setLoading(false)
+      setFormLoading(false)
     }
   }
 
@@ -116,7 +140,10 @@ export default function Financiamentos() {
       item_id: fin.item_id,
       valor_total: fin.valor_total,
       numero_parcelas: fin.numero_parcelas,
-      taxa_juros: (fin.taxa_juros * 100).toFixed(2), // Converte para %
+      // Backend sempre retorna taxa como decimal (0.03 para 3%), então sempre multiplicamos por 100 para exibir
+      // Backend retorna taxa como decimal (0.03 para 3%)
+      // Se por algum motivo vier como porcentagem (>= 1), normaliza para decimal primeiro
+      taxa_juros: (fin.taxa_juros >= 1 ? fin.taxa_juros : fin.taxa_juros * 100).toFixed(2),
       data_inicio: fin.data_inicio,
       instituicao_financeira: fin.instituicao_financeira || '',
       observacoes: fin.observacoes || ''
@@ -144,6 +171,8 @@ export default function Financiamentos() {
           onClick={() => {
             setShowForm(true)
             setSelectedFinanciamento(null)
+            setParcelasFixas(true)
+            setParcelasCustomizadas([])
             setFormData({
               item_id: '',
               valor_total: '',
@@ -215,15 +244,98 @@ export default function Financiamentos() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Número de Parcelas</label>
-                <input
-                  type="number"
-                  value={formData.numero_parcelas}
-                  onChange={(e) => setFormData({ ...formData, numero_parcelas: e.target.value })}
-                  required
-                  min="1"
-                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                />
+                <label className="block text-sm font-medium text-dark-300 mb-2">Tipo de Parcelas</label>
+                <div className="flex gap-4 mb-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={parcelasFixas}
+                      onChange={() => {
+                        setParcelasFixas(true)
+                        setParcelasCustomizadas([])
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white">Parcelas Fixas</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!parcelasFixas}
+                      onChange={() => {
+                        setParcelasFixas(false)
+                        if (parcelasCustomizadas.length === 0) {
+                          setParcelasCustomizadas([{ valor: '', data_vencimento: '' }])
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white">Parcelas Variáveis</span>
+                  </label>
+                </div>
+                {parcelasFixas ? (
+                  <input
+                    type="number"
+                    value={formData.numero_parcelas}
+                    onChange={(e) => setFormData({ ...formData, numero_parcelas: e.target.value })}
+                    required
+                    min="1"
+                    className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                    placeholder="Número de Parcelas"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {parcelasCustomizadas.map((parcela, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={parcela.valor}
+                          onChange={(e) => {
+                            const novas = [...parcelasCustomizadas]
+                            novas[idx].valor = e.target.value
+                            setParcelasCustomizadas(novas)
+                          }}
+                          placeholder="Valor"
+                          className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                        />
+                        <input
+                          type="date"
+                          value={parcela.data_vencimento}
+                          onChange={(e) => {
+                            const novas = [...parcelasCustomizadas]
+                            novas[idx].data_vencimento = e.target.value
+                            setParcelasCustomizadas(novas)
+                          }}
+                          className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setParcelasCustomizadas(parcelasCustomizadas.filter((_, i) => i !== idx))
+                          }}
+                          className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParcelasCustomizadas([...parcelasCustomizadas, { valor: '', data_vencimento: '' }])
+                      }}
+                      className="w-full px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    >
+                      + Adicionar Parcela
+                    </button>
+                    {parcelasCustomizadas.length > 0 && (
+                      <div className="text-sm text-dark-400">
+                        Total: {formatCurrency(parcelasCustomizadas.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div>
@@ -273,10 +385,10 @@ export default function Financiamentos() {
             <div className="flex gap-4">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={formLoading}
                 className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                {loading ? 'Salvando...' : 'Salvar'}
+                {formLoading ? 'Salvando...' : 'Salvar'}
               </button>
               <button
                 type="button"
@@ -337,7 +449,8 @@ export default function Financiamentos() {
                     </div>
                     <div>
                       <p className="text-sm text-dark-400">Taxa Juros</p>
-                      <p className="text-lg font-semibold text-white">{(fin.taxa_juros * 100).toFixed(2)}%</p>
+                      {/* Exibe taxa: se >= 1, já está em %, senão multiplica por 100 */}
+                      <p className="text-lg font-semibold text-white">{(fin.taxa_juros >= 1 ? fin.taxa_juros : fin.taxa_juros * 100).toFixed(2)}%</p>
                     </div>
                   </div>
                   
@@ -347,6 +460,8 @@ export default function Financiamentos() {
                       <p className="text-white">{fin.instituicao_financeira}</p>
                     </div>
                   )}
+                  
+                  <ValorPresenteCard financiamentoId={fin.id} compact />
                 </div>
                 
                 <div className="flex gap-2">
