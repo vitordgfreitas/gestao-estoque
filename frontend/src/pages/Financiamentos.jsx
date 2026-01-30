@@ -14,6 +14,7 @@ export default function Financiamentos() {
   const [formLoading, setFormLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [selectedFinanciamento, setSelectedFinanciamento] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('Todos')
   const [parcelasFixas, setParcelasFixas] = useState(true)
   const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
@@ -177,6 +178,7 @@ export default function Financiamentos() {
           onClick={() => {
             setShowForm(true)
             setSelectedFinanciamento(null)
+            setSelectedItem(null)
             setParcelasFixas(true)
             setParcelasCustomizadas([])
             setFormData({
