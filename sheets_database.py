@@ -1413,16 +1413,21 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     
     # Adiciona financiamento
     try:
-        # Arredonda valores antes de salvar
+        # Arredonda valores antes de salvar (garante 2 casas decimais)
         valor_total_rounded = round(float(valor_total), 2)
         valor_parcela_rounded = round(float(valor_parcela), 2)
+        
+        # Converte para string formatada para garantir que o Google Sheets interprete corretamente
+        # Usa ponto como separador decimal (padrão internacional)
+        valor_total_str = f"{valor_total_rounded:.2f}"
+        valor_parcela_str = f"{valor_parcela_rounded:.2f}"
         
         sheet_financiamentos.append_row([
             next_id,
             item_id,
-            valor_total_rounded,
+            valor_total_str,  # Salva como string formatada
             numero_parcelas,
-            valor_parcela_rounded,
+            valor_parcela_str,  # Salva como string formatada
             float(taxa_juros),
             data_inicio_str,
             'Ativo',
@@ -1459,11 +1464,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 try:
                     # Arredonda valor da parcela antes de salvar
                     valor_parcela_custom = round(float(parcela_custom.get('valor', 0)), 2)
+                    # Converte para string formatada para garantir que o Google Sheets interprete corretamente
+                    valor_parcela_custom_str = f"{valor_parcela_custom:.2f}"
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         parcela_custom.get('numero', idx + 1),
-                        valor_parcela_custom,
+                        valor_parcela_custom_str,  # Salva como string formatada
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
                         '',  # Data pagamento vazia
@@ -1504,11 +1511,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 try:
                     # Arredonda valor da parcela antes de salvar (2 casas decimais)
                     valor_parcela_rounded = round(float(valor_parcela), 2)
+                    # Converte para string formatada para garantir que o Google Sheets interprete corretamente
+                    valor_parcela_str = f"{valor_parcela_rounded:.2f}"
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         i,
-                        valor_parcela_rounded,
+                        valor_parcela_str,  # Salva como string formatada
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d'),
                         '',  # Data pagamento vazia
@@ -1636,21 +1645,41 @@ def listar_financiamentos(status=None, item_id=None):
                 valor_parcela_raw = record.get('Valor Parcela', 0)
                 
                 # Converte valores para float e arredonda
-                # Google Sheets pode retornar como string com vírgula ou número
+                # Google Sheets pode retornar como string formatada ou número
                 def parse_value(val):
                     if val is None:
                         return 0.0
                     if isinstance(val, (int, float)):
-                        return round(float(val), 2)
+                        # Se o número é muito grande, pode estar sem ponto decimal
+                        val_float = float(val)
+                        # Se o valor parece estar sem ponto decimal (ex: 422968778 para 4229.69)
+                        # Verifica se é um número muito grande que deveria ter ponto decimal
+                        if val_float > 10000 and val_float < 1000000000:
+                            # Pode ser um número que perdeu o ponto decimal
+                            # Tenta dividir por 100 para ver se faz sentido
+                            test_val = val_float / 100
+                            if test_val < 100000:  # Se dividido por 100 fica razoável
+                                return round(test_val, 2)
+                        return round(val_float, 2)
                     if isinstance(val, str):
-                        # Remove espaços e substitui vírgula por ponto
-                        val_clean = val.replace(' ', '').replace(',', '.')
-                        # Se tiver múltiplos pontos, mantém apenas o último (decimal)
+                        # Remove espaços
+                        val_clean = val.replace(' ', '').strip()
+                        # Se tem vírgula, substitui por ponto
+                        if ',' in val_clean:
+                            val_clean = val_clean.replace(',', '.')
+                        # Se tem múltiplos pontos, trata como separador de milhar
                         if val_clean.count('.') > 1:
+                            # Remove pontos exceto o último (decimal)
                             parts = val_clean.split('.')
                             val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
                         try:
-                            return round(float(val_clean), 2)
+                            val_float = float(val_clean)
+                            # Verifica se precisa dividir (número muito grande)
+                            if val_float > 10000 and val_float < 1000000000:
+                                test_val = val_float / 100
+                                if test_val < 100000:
+                                    return round(test_val, 2)
+                            return round(val_float, 2)
                         except (ValueError, TypeError):
                             return 0.0
                     return round(float(val), 2)
