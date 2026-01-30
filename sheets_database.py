@@ -1662,23 +1662,35 @@ def listar_financiamentos(status=None, item_id=None):
                                 return round(test_val, 2)
                         return round(val_float, 2)
                     if isinstance(val, str):
-                        # Remove espaços
+                        # Remove espaços e pontos de milhar
                         val_clean = val.replace(' ', '').strip()
-                        # Se tem vírgula, substitui por ponto
+                        
+                        # Se tem vírgula, pode ser formato brasileiro (ex: "422,968778025999")
+                        # ou formato com pontos de milhar (ex: "422.968.778,00")
                         if ',' in val_clean:
-                            val_clean = val_clean.replace(',', '.')
-                        # Se tem múltiplos pontos, trata como separador de milhar
-                        if val_clean.count('.') > 1:
+                            # Se tem vírgula E ponto, vírgula é decimal e ponto é milhar
+                            if '.' in val_clean:
+                                # Formato brasileiro: "422.968.778,00" -> "422968778.00"
+                                val_clean = val_clean.replace('.', '').replace(',', '.')
+                            else:
+                                # Só vírgula: "422,968778025999" -> "422.968778025999"
+                                val_clean = val_clean.replace(',', '.')
+                        # Se só tem pontos, pode ser formato internacional (ex: "422.968.778.00")
+                        elif val_clean.count('.') > 1:
                             # Remove pontos exceto o último (decimal)
                             parts = val_clean.split('.')
                             val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+                        
                         try:
                             val_float = float(val_clean)
-                            # Verifica se precisa dividir (número muito grande)
+                            # Verifica se precisa dividir (número muito grande sem ponto decimal)
+                            # Ex: 422968778 deveria ser 4229.69
                             if val_float > 10000 and val_float < 1000000000:
-                                test_val = val_float / 100
-                                if test_val < 100000:
-                                    return round(test_val, 2)
+                                # Tenta diferentes divisores
+                                for divisor in [100000, 10000, 1000, 100]:
+                                    test_val = val_float / divisor
+                                    if 1 <= test_val < 100000:  # Valor razoável
+                                        return round(test_val, 2)
                             return round(val_float, 2)
                         except (ValueError, TypeError):
                             return 0.0
@@ -1720,9 +1732,10 @@ def buscar_financiamento_por_id(financiamento_id):
 
 
 def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None, status=None, instituicao_financeira=None, observacoes=None):
-    """Atualiza um financiamento"""
+    """Atualiza um financiamento e recalcula parcelas se necessário"""
     sheets = get_sheets()
     sheet_financiamentos = sheets['sheet_financiamentos']
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
     try:
         records = sheet_financiamentos.get_all_records()
@@ -1735,10 +1748,39 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
         if record and str(record.get('ID')) == str(financiamento_id):
             valores_antigos = record.copy()
             
+            # Obtém valores atuais para recálculo
+            valor_total_atual = valor_total if valor_total is not None else record.get('Valor Total', 0)
+            taxa_juros_atual = taxa_juros if taxa_juros is not None else record.get('Taxa Juros', 0)
+            numero_parcelas = record.get('Numero Parcelas', 0)
+            
+            # Se valor_total ou taxa_juros mudaram, precisa recalcular valor_parcela
+            recalcular_parcelas = False
+            novo_valor_parcela = None
+            
+            if valor_total is not None or taxa_juros is not None:
+                # Recalcula valor da parcela usando Sistema Price
+                valor_total_float = float(valor_total_atual)
+                taxa_juros_float = float(taxa_juros_atual)
+                
+                if taxa_juros_float > 0 and numero_parcelas > 0:
+                    i = taxa_juros_float
+                    n = numero_parcelas
+                    novo_valor_parcela = valor_total_float * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
+                else:
+                    novo_valor_parcela = valor_total_float / numero_parcelas if numero_parcelas > 0 else 0
+                
+                novo_valor_parcela = round(novo_valor_parcela, 2)
+                recalcular_parcelas = True
+            
+            # Atualiza valores na planilha de financiamentos
             if valor_total is not None:
-                sheet_financiamentos.update_cell(i, 3, float(valor_total))
+                valor_total_str = f"{round(float(valor_total), 2):.2f}"
+                sheet_financiamentos.update_cell(i, 3, valor_total_str)
             if taxa_juros is not None:
                 sheet_financiamentos.update_cell(i, 6, float(taxa_juros))
+            if novo_valor_parcela is not None:
+                valor_parcela_str = f"{novo_valor_parcela:.2f}"
+                sheet_financiamentos.update_cell(i, 5, valor_parcela_str)  # Coluna 5 = Valor Parcela
             if status is not None:
                 sheet_financiamentos.update_cell(i, 8, status)
             if instituicao_financeira is not None:
@@ -1746,10 +1788,30 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
             if observacoes is not None:
                 sheet_financiamentos.update_cell(i, 10, observacoes)
             
+            # Se precisa recalcular parcelas, atualiza todas as parcelas pendentes
+            if recalcular_parcelas and novo_valor_parcela is not None:
+                try:
+                    parcelas_records = sheet_parcelas.get_all_records()
+                    # Obtém cabeçalhos para encontrar a coluna correta
+                    headers = sheet_parcelas.row_values(1)
+                    valor_original_col = headers.index('Valor Original') + 1 if 'Valor Original' in headers else 4
+                    
+                    for idx, parcela_record in enumerate(parcelas_records, start=2):  # Começa na linha 2
+                        if str(parcela_record.get('Financiamento ID')) == str(financiamento_id):
+                            parcela_status = parcela_record.get('Status', 'Pendente')
+                            # Só atualiza parcelas pendentes (não pagas)
+                            if parcela_status in ['Pendente', 'Atrasada']:
+                                valor_parcela_str = f"{novo_valor_parcela:.2f}"
+                                sheet_parcelas.update_cell(idx, valor_original_col, valor_parcela_str)
+                except Exception as e:
+                    # Se der erro ao atualizar parcelas, continua mesmo assim
+                    print(f"Aviso: Erro ao atualizar parcelas: {e}")
+            
             auditoria.registrar_auditoria('UPDATE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos, valores_novos={
                 'valor_total': valor_total,
                 'taxa_juros': taxa_juros,
-                'status': status
+                'status': status,
+                'valor_parcela': novo_valor_parcela
             })
             
             _clear_cache()
