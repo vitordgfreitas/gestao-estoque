@@ -63,12 +63,15 @@ export default function Financiamentos() {
         item_id: parseInt(formData.item_id),
         valor_total: parseFloat(formData.valor_total),
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
-        // Converte % para decimal: se usuário digita 3 (querendo 3%), salva como 0.03
         // Converte % para decimal: usuário digita 3 (querendo 3%), salva como 0.03
-        // Se o valor já estiver em decimal (< 1), não divide novamente
-        taxa_juros: parseFloat(formData.taxa_juros) >= 1 
-          ? parseFloat(formData.taxa_juros) / 100 
-          : parseFloat(formData.taxa_juros),
+        // SEMPRE divide por 100 se o valor for >= 1 (assumindo que é porcentagem)
+        // Garante que nunca envia taxa > 1 (sempre converte para decimal)
+        taxa_juros: (() => {
+          const taxa = parseFloat(formData.taxa_juros)
+          if (isNaN(taxa)) return 0
+          // Se >= 1, assume que é porcentagem e converte para decimal
+          return taxa >= 1 ? taxa / 100 : taxa
+        })(),
       }
       
       // Se parcelas variáveis, adiciona array de parcelas
@@ -91,6 +94,7 @@ export default function Financiamentos() {
       // Fecha formulário primeiro
       setShowForm(false)
       setSelectedFinanciamento(null)
+      setSelectedItem(null)
       setFormData({
         item_id: '',
         valor_total: '',
@@ -137,14 +141,15 @@ export default function Financiamentos() {
 
   const handleEdit = (fin) => {
     setSelectedFinanciamento(fin)
+    const item = itens.find(i => i.id === fin.item_id)
+    setSelectedItem(item || null)
     setFormData({
       item_id: fin.item_id,
       valor_total: fin.valor_total,
       numero_parcelas: fin.numero_parcelas,
       // Backend sempre retorna taxa como decimal (0.03 para 3%), então sempre multiplicamos por 100 para exibir
-      // Backend retorna taxa como decimal (0.03 para 3%)
-      // Se por algum motivo vier como porcentagem (>= 1), normaliza para decimal primeiro
-      taxa_juros: (fin.taxa_juros >= 1 ? fin.taxa_juros : fin.taxa_juros * 100).toFixed(2),
+      // Garante que sempre converte para porcentagem para exibição
+      taxa_juros: fin.taxa_juros < 1 ? (fin.taxa_juros * 100).toFixed(2) : fin.taxa_juros.toFixed(2),
       data_inicio: fin.data_inicio,
       instituicao_financeira: fin.instituicao_financeira || '',
       observacoes: fin.observacoes || ''
@@ -221,7 +226,12 @@ export default function Financiamentos() {
                 <label className="block text-sm font-medium text-dark-300 mb-2">Item</label>
                 <select
                   value={formData.item_id}
-                  onChange={(e) => setFormData({ ...formData, item_id: e.target.value })}
+                  onChange={(e) => {
+                    const itemId = e.target.value
+                    const item = itens.find(i => i.id === parseInt(itemId))
+                    setSelectedItem(item || null)
+                    setFormData({ ...formData, item_id: itemId })
+                  }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
@@ -230,6 +240,20 @@ export default function Financiamentos() {
                     <option key={item.id} value={item.id}>{item.nome}</option>
                   ))}
                 </select>
+                {selectedItem && selectedItem.categoria === 'Carros' && selectedItem.dados_categoria && (
+                  <div className="mt-2 p-2 bg-dark-700/50 rounded text-sm text-dark-300">
+                    <p><span className="font-semibold">Nome:</span> {selectedItem.nome}</p>
+                    {selectedItem.dados_categoria.placa && (
+                      <p><span className="font-semibold">Placa:</span> {selectedItem.dados_categoria.placa}</p>
+                    )}
+                    {selectedItem.dados_categoria.marca && (
+                      <p><span className="font-semibold">Marca:</span> {selectedItem.dados_categoria.marca}</p>
+                    )}
+                    {selectedItem.dados_categoria.modelo && (
+                      <p><span className="font-semibold">Modelo:</span> {selectedItem.dados_categoria.modelo}</p>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div>
