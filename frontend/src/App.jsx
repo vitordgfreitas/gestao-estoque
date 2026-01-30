@@ -8,6 +8,9 @@ import Compromissos from './pages/Compromissos'
 import Disponibilidade from './pages/Disponibilidade'
 import Calendario from './pages/Calendario'
 import VisualizarDados from './pages/VisualizarDados'
+import ContasReceber from './pages/ContasReceber'
+import ContasPagar from './pages/ContasPagar'
+import DashboardFinanceiro from './pages/DashboardFinanceiro'
 import { authAPI } from './services/api'
 
 function ProtectedRoute({ children }) {
@@ -49,6 +52,9 @@ function App() {
                   <Route path="/disponibilidade" element={<Disponibilidade />} />
                   <Route path="/calendario" element={<Calendario />} />
                   <Route path="/visualizar" element={<VisualizarDados />} />
+                  <Route path="/contas-receber" element={<ContasReceber />} />
+                  <Route path="/contas-pagar" element={<ContasPagar />} />
+                  <Route path="/financeiro" element={<DashboardFinanceiro />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

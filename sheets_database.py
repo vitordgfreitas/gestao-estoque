@@ -16,6 +16,8 @@ _sheets_cache = None
 _data_cache = {
     'itens': None,
     'compromissos': None,
+    'contas_receber': None,
+    'contas_pagar': None,
     'cache_time': None,
     'cache_ttl': 30  # Time to live em segundos
 }
@@ -26,6 +28,8 @@ def _clear_cache():
     _data_cache = {
         'itens': None,
         'compromissos': None,
+        'contas_receber': None,
+        'contas_pagar': None,
         'cache_time': None,
         'cache_ttl': 30
     }

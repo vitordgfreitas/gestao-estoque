@@ -282,6 +282,93 @@ class DisponibilidadeResponse(BaseModel):
     quantidade_disponivel: int
     compromissos_ativos: List[CompromissoResponse] = []
 
+# ============= MODELOS FINANCEIRO =============
+
+class ContaReceberCreate(BaseModel):
+    compromisso_id: int
+    descricao: str
+    valor: float
+    data_vencimento: date
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ContaReceberUpdate(BaseModel):
+    descricao: Optional[str] = None
+    valor: Optional[float] = None
+    data_vencimento: Optional[date] = None
+    data_pagamento: Optional[date] = None
+    status: Optional[str] = None
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ContaReceberResponse(BaseModel):
+    id: int
+    compromisso_id: int
+    descricao: str
+    valor: float
+    data_vencimento: date
+    data_pagamento: Optional[date] = None
+    status: str
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class ContaPagarCreate(BaseModel):
+    descricao: str
+    categoria: str
+    valor: float
+    data_vencimento: date
+    fornecedor: Optional[str] = None
+    item_id: Optional[int] = None
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ContaPagarUpdate(BaseModel):
+    descricao: Optional[str] = None
+    categoria: Optional[str] = None
+    valor: Optional[float] = None
+    data_vencimento: Optional[date] = None
+    data_pagamento: Optional[date] = None
+    status: Optional[str] = None
+    fornecedor: Optional[str] = None
+    item_id: Optional[int] = None
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class ContaPagarResponse(BaseModel):
+    id: int
+    descricao: str
+    categoria: str
+    valor: float
+    data_vencimento: date
+    data_pagamento: Optional[date] = None
+    status: str
+    fornecedor: Optional[str] = None
+    item_id: Optional[int] = None
+    forma_pagamento: Optional[str] = None
+    observacoes: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class DashboardFinanceiroResponse(BaseModel):
+    saldo_atual: float
+    receitas_mes: float
+    despesas_mes: float
+    saldo_previsto: float
+    contas_vencidas: int
+    contas_a_vencer_7_dias: int
+    receitas_pendentes: float
+    despesas_pendentes: float
+
+class FluxoCaixaResponse(BaseModel):
+    mes: str
+    receitas: float
+    despesas: float
+    saldo: float
+
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
@@ -1202,6 +1289,298 @@ async def obter_info():
             info["spreadsheet_url"] = sheets_info.get('spreadsheet_url', None)
             info["spreadsheet_id"] = sheets_info.get('spreadsheet_id', None)
         return info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= ENDPOINTS FINANCEIRO =============
+
+def conta_receber_to_dict(conta):
+    """Converte ContaReceber para dict"""
+    return {
+        "id": conta.id,
+        "compromisso_id": conta.compromisso_id,
+        "descricao": conta.descricao,
+        "valor": conta.valor,
+        "data_vencimento": conta.data_vencimento.isoformat() if isinstance(conta.data_vencimento, date) else str(conta.data_vencimento),
+        "data_pagamento": conta.data_pagamento.isoformat() if conta.data_pagamento and isinstance(conta.data_pagamento, date) else None,
+        "status": conta.status,
+        "forma_pagamento": conta.forma_pagamento,
+        "observacoes": conta.observacoes
+    }
+
+def conta_pagar_to_dict(conta):
+    """Converte ContaPagar para dict"""
+    return {
+        "id": conta.id,
+        "descricao": conta.descricao,
+        "categoria": conta.categoria,
+        "valor": conta.valor,
+        "data_vencimento": conta.data_vencimento.isoformat() if isinstance(conta.data_vencimento, date) else str(conta.data_vencimento),
+        "data_pagamento": conta.data_pagamento.isoformat() if conta.data_pagamento and isinstance(conta.data_pagamento, date) else None,
+        "status": conta.status,
+        "fornecedor": conta.fornecedor,
+        "item_id": conta.item_id,
+        "forma_pagamento": conta.forma_pagamento,
+        "observacoes": conta.observacoes
+    }
+
+@app.post("/api/contas-receber", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def criar_conta_receber(conta: ContaReceberCreate, token: str = Depends(verify_token)):
+    """Cria uma nova conta a receber"""
+    try:
+        nova_conta = db_module.criar_conta_receber(
+            compromisso_id=conta.compromisso_id,
+            descricao=conta.descricao,
+            valor=conta.valor,
+            data_vencimento=conta.data_vencimento,
+            forma_pagamento=conta.forma_pagamento,
+            observacoes=conta.observacoes
+        )
+        return conta_receber_to_dict(nova_conta)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/contas-receber", response_model=List[dict])
+async def listar_contas_receber(
+    status: Optional[str] = None,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    compromisso_id: Optional[int] = None,
+    token: str = Depends(verify_token)
+):
+    """Lista contas a receber com filtros opcionais"""
+    try:
+        contas = db_module.listar_contas_receber(
+            status=status,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            compromisso_id=compromisso_id
+        )
+        return [conta_receber_to_dict(c) for c in contas]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/contas-receber/{conta_id}", response_model=dict)
+async def atualizar_conta_receber(conta_id: int, conta: ContaReceberUpdate, token: str = Depends(verify_token)):
+    """Atualiza uma conta a receber"""
+    try:
+        conta_atualizada = db_module.atualizar_conta_receber(
+            conta_id=conta_id,
+            descricao=conta.descricao,
+            valor=conta.valor,
+            data_vencimento=conta.data_vencimento,
+            data_pagamento=conta.data_pagamento,
+            status=conta.status,
+            forma_pagamento=conta.forma_pagamento,
+            observacoes=conta.observacoes
+        )
+        if conta_atualizada is None:
+            raise HTTPException(status_code=404, detail="Conta a receber não encontrada")
+        return conta_receber_to_dict(conta_atualizada)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/contas-receber/{conta_id}/pagar", response_model=dict)
+async def marcar_conta_receber_paga(
+    conta_id: int,
+    data_pagamento: Optional[date] = None,
+    forma_pagamento: Optional[str] = None,
+    token: str = Depends(verify_token)
+):
+    """Marca uma conta a receber como paga"""
+    try:
+        conta_atualizada = db_module.marcar_conta_receber_paga(
+            conta_id=conta_id,
+            data_pagamento=data_pagamento,
+            forma_pagamento=forma_pagamento
+        )
+        if conta_atualizada is None:
+            raise HTTPException(status_code=404, detail="Conta a receber não encontrada")
+        return conta_receber_to_dict(conta_atualizada)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/contas-receber/{conta_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deletar_conta_receber(conta_id: int, token: str = Depends(verify_token)):
+    """Deleta uma conta a receber"""
+    try:
+        sucesso = db_module.deletar_conta_receber(conta_id)
+        if not sucesso:
+            raise HTTPException(status_code=404, detail="Conta a receber não encontrada")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/contas-pagar", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def criar_conta_pagar(conta: ContaPagarCreate, token: str = Depends(verify_token)):
+    """Cria uma nova conta a pagar"""
+    try:
+        nova_conta = db_module.criar_conta_pagar(
+            descricao=conta.descricao,
+            categoria=conta.categoria,
+            valor=conta.valor,
+            data_vencimento=conta.data_vencimento,
+            fornecedor=conta.fornecedor,
+            item_id=conta.item_id,
+            forma_pagamento=conta.forma_pagamento,
+            observacoes=conta.observacoes
+        )
+        return conta_pagar_to_dict(nova_conta)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/contas-pagar", response_model=List[dict])
+async def listar_contas_pagar(
+    status: Optional[str] = None,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    categoria: Optional[str] = None,
+    token: str = Depends(verify_token)
+):
+    """Lista contas a pagar com filtros opcionais"""
+    try:
+        contas = db_module.listar_contas_pagar(
+            status=status,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            categoria=categoria
+        )
+        return [conta_pagar_to_dict(c) for c in contas]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/contas-pagar/{conta_id}", response_model=dict)
+async def atualizar_conta_pagar(conta_id: int, conta: ContaPagarUpdate, token: str = Depends(verify_token)):
+    """Atualiza uma conta a pagar"""
+    try:
+        conta_atualizada = db_module.atualizar_conta_pagar(
+            conta_id=conta_id,
+            descricao=conta.descricao,
+            categoria=conta.categoria,
+            valor=conta.valor,
+            data_vencimento=conta.data_vencimento,
+            data_pagamento=conta.data_pagamento,
+            status=conta.status,
+            fornecedor=conta.fornecedor,
+            item_id=conta.item_id,
+            forma_pagamento=conta.forma_pagamento,
+            observacoes=conta.observacoes
+        )
+        if conta_atualizada is None:
+            raise HTTPException(status_code=404, detail="Conta a pagar não encontrada")
+        return conta_pagar_to_dict(conta_atualizada)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/contas-pagar/{conta_id}/pagar", response_model=dict)
+async def marcar_conta_pagar_paga(
+    conta_id: int,
+    data_pagamento: Optional[date] = None,
+    forma_pagamento: Optional[str] = None,
+    token: str = Depends(verify_token)
+):
+    """Marca uma conta a pagar como paga"""
+    try:
+        conta_atualizada = db_module.marcar_conta_pagar_paga(
+            conta_id=conta_id,
+            data_pagamento=data_pagamento,
+            forma_pagamento=forma_pagamento
+        )
+        if conta_atualizada is None:
+            raise HTTPException(status_code=404, detail="Conta a pagar não encontrada")
+        return conta_pagar_to_dict(conta_atualizada)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/contas-pagar/{conta_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deletar_conta_pagar(conta_id: int, token: str = Depends(verify_token)):
+    """Deleta uma conta a pagar"""
+    try:
+        sucesso = db_module.deletar_conta_pagar(conta_id)
+        if not sucesso:
+            raise HTTPException(status_code=404, detail="Conta a pagar não encontrada")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financeiro/dashboard", response_model=DashboardFinanceiroResponse)
+async def obter_dashboard_financeiro(token: str = Depends(verify_token)):
+    """Obtém dados do dashboard financeiro"""
+    try:
+        hoje = date.today()
+        inicio_mes = date(hoje.year, hoje.month, 1)
+        fim_mes = date(hoje.year, hoje.month + 1, 1) - timedelta(days=1) if hoje.month < 12 else date(hoje.year + 1, 1, 1) - timedelta(days=1)
+        proximos_7_dias = hoje + timedelta(days=7)
+        
+        # Receitas do mês (pagas)
+        receitas_mes = db_module.listar_contas_receber(status='Pago', data_inicio=inicio_mes, data_fim=fim_mes)
+        receitas_mes_valor = sum(c.valor for c in receitas_mes)
+        
+        # Despesas do mês (pagas)
+        despesas_mes = db_module.listar_contas_pagar(status='Pago', data_inicio=inicio_mes, data_fim=fim_mes)
+        despesas_mes_valor = sum(c.valor for c in despesas_mes)
+        
+        # Saldo atual (todas as receitas pagas - todas as despesas pagas)
+        todas_receitas_pagas = db_module.listar_contas_receber(status='Pago')
+        todas_despesas_pagas = db_module.listar_contas_pagar(status='Pago')
+        saldo_atual = sum(c.valor for c in todas_receitas_pagas) - sum(c.valor for c in todas_despesas_pagas)
+        
+        # Receitas pendentes
+        receitas_pendentes = db_module.listar_contas_receber(status='Pendente')
+        receitas_pendentes_valor = sum(c.valor for c in receitas_pendentes)
+        
+        # Despesas pendentes
+        despesas_pendentes = db_module.listar_contas_pagar(status='Pendente')
+        despesas_pendentes_valor = sum(c.valor for c in despesas_pendentes)
+        
+        # Saldo previsto (saldo atual + receitas pendentes - despesas pendentes)
+        saldo_previsto = saldo_atual + receitas_pendentes_valor - despesas_pendentes_valor
+        
+        # Contas vencidas
+        contas_receber_vencidas = db_module.listar_contas_receber(status='Vencido')
+        contas_pagar_vencidas = db_module.listar_contas_pagar(status='Vencido')
+        contas_vencidas = len(contas_receber_vencidas) + len(contas_pagar_vencidas)
+        
+        # Contas a vencer em 7 dias
+        contas_receber_proximas = [c for c in db_module.listar_contas_receber(status='Pendente') if c.data_vencimento <= proximos_7_dias]
+        contas_pagar_proximas = [c for c in db_module.listar_contas_pagar(status='Pendente') if c.data_vencimento <= proximos_7_dias]
+        contas_a_vencer_7_dias = len(contas_receber_proximas) + len(contas_pagar_proximas)
+        
+        return DashboardFinanceiroResponse(
+            saldo_atual=saldo_atual,
+            receitas_mes=receitas_mes_valor,
+            despesas_mes=despesas_mes_valor,
+            saldo_previsto=saldo_previsto,
+            contas_vencidas=contas_vencidas,
+            contas_a_vencer_7_dias=contas_a_vencer_7_dias,
+            receitas_pendentes=receitas_pendentes_valor,
+            despesas_pendentes=despesas_pendentes_valor
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financeiro/fluxo-caixa", response_model=List[FluxoCaixaResponse])
+async def obter_fluxo_caixa(
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    token: str = Depends(verify_token)
+):
+    """Obtém fluxo de caixa por período"""
+    try:
+        if data_inicio is None:
+            # Últimos 6 meses por padrão
+            hoje = date.today()
+            data_fim = hoje
+            data_inicio = date(hoje.year, hoje.month - 5, 1) if hoje.month > 5 else date(hoje.year - 1, hoje.month + 7, 1)
+        
+        fluxo = db_module.obter_fluxo_caixa(data_inicio, data_fim)
+        return [FluxoCaixaResponse(**item) for item in fluxo]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

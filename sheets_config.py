@@ -165,6 +165,8 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
     sheet_itens_name = "Itens"
     sheet_compromissos_name = "Compromissos"
     sheet_carros_name = "Carros"
+    sheet_contas_receber_name = "Contas a Receber"
+    sheet_contas_pagar_name = "Contas a Pagar"
     
     # Lista todas as abas existentes
     existing_worksheets = [ws.title for ws in spreadsheet.worksheets()]
@@ -276,11 +278,63 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         # Cabeçalhos
         sheet_compromissos.append_row(["ID", "Item ID", "Quantidade", "Data Início", "Data Fim", "Descrição", "Cidade", "UF", "Endereço", "Contratante"])
     
+    # Obtém ou cria aba de Contas a Receber
+    if sheet_contas_receber_name in existing_worksheets:
+        sheet_contas_receber = spreadsheet.worksheet(sheet_contas_receber_name)
+        try:
+            header = sheet_contas_receber.get('A1')
+            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
+                sheet_contas_receber.insert_row(["ID", "Compromisso ID", "Descrição", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Forma Pagamento", "Observações"], 1)
+            else:
+                headers = sheet_contas_receber.row_values(1)
+                expected_headers = ["ID", "Compromisso ID", "Descrição", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Forma Pagamento", "Observações"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        col_letter = chr(65 + i)
+                        sheet_contas_receber.update(f'{col_letter}1', [[expected_header]])
+        except Exception:
+            try:
+                all_values = sheet_contas_receber.get_all_values()
+                if not all_values or len(all_values) == 0:
+                    sheet_contas_receber.append_row(["ID", "Compromisso ID", "Descrição", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Forma Pagamento", "Observações"])
+            except Exception:
+                pass
+    else:
+        sheet_contas_receber = spreadsheet.add_worksheet(title=sheet_contas_receber_name, rows=1000, cols=10)
+        sheet_contas_receber.append_row(["ID", "Compromisso ID", "Descrição", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Forma Pagamento", "Observações"])
+    
+    # Obtém ou cria aba de Contas a Pagar
+    if sheet_contas_pagar_name in existing_worksheets:
+        sheet_contas_pagar = spreadsheet.worksheet(sheet_contas_pagar_name)
+        try:
+            header = sheet_contas_pagar.get('A1')
+            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
+                sheet_contas_pagar.insert_row(["ID", "Descrição", "Categoria", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Fornecedor", "Item ID", "Forma Pagamento", "Observações"], 1)
+            else:
+                headers = sheet_contas_pagar.row_values(1)
+                expected_headers = ["ID", "Descrição", "Categoria", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Fornecedor", "Item ID", "Forma Pagamento", "Observações"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        col_letter = chr(65 + i)
+                        sheet_contas_pagar.update(f'{col_letter}1', [[expected_header]])
+        except Exception:
+            try:
+                all_values = sheet_contas_pagar.get_all_values()
+                if not all_values or len(all_values) == 0:
+                    sheet_contas_pagar.append_row(["ID", "Descrição", "Categoria", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Fornecedor", "Item ID", "Forma Pagamento", "Observações"])
+            except Exception:
+                pass
+    else:
+        sheet_contas_pagar = spreadsheet.add_worksheet(title=sheet_contas_pagar_name, rows=1000, cols=11)
+        sheet_contas_pagar.append_row(["ID", "Descrição", "Categoria", "Valor", "Data Vencimento", "Data Pagamento", "Status", "Fornecedor", "Item ID", "Forma Pagamento", "Observações"])
+    
     return {
         'spreadsheet': spreadsheet,
         'sheet_itens': sheet_itens,
         'sheet_compromissos': sheet_compromissos,
         'sheet_carros': sheet_carros,
+        'sheet_contas_receber': sheet_contas_receber,
+        'sheet_contas_pagar': sheet_contas_pagar,
         'spreadsheet_id': spreadsheet.id,
         'spreadsheet_url': spreadsheet.url
     }

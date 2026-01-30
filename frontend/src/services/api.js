@@ -74,6 +74,32 @@ export const infoAPI = {
   obter: () => api.get('/api/info'),
 }
 
+// Contas a Receber
+export const contasReceberAPI = {
+  listar: (params) => api.get('/api/contas-receber', { params }),
+  buscar: (id) => api.get(`/api/contas-receber/${id}`),
+  criar: (data) => api.post('/api/contas-receber', data),
+  atualizar: (id, data) => api.put(`/api/contas-receber/${id}`, data),
+  marcarPaga: (id, data) => api.put(`/api/contas-receber/${id}/pagar`, data),
+  deletar: (id) => api.delete(`/api/contas-receber/${id}`),
+}
+
+// Contas a Pagar
+export const contasPagarAPI = {
+  listar: (params) => api.get('/api/contas-pagar', { params }),
+  buscar: (id) => api.get(`/api/contas-pagar/${id}`),
+  criar: (data) => api.post('/api/contas-pagar', data),
+  atualizar: (id, data) => api.put(`/api/contas-pagar/${id}`, data),
+  marcarPaga: (id, data) => api.put(`/api/contas-pagar/${id}/pagar`, data),
+  deletar: (id) => api.delete(`/api/contas-pagar/${id}`),
+}
+
+// Financeiro
+export const financeiroAPI = {
+  dashboard: () => api.get('/api/financeiro/dashboard'),
+  fluxoCaixa: (params) => api.get('/api/financeiro/fluxo-caixa', { params }),
+}
+
 // Função de retry para login (até 2 tentativas com delay de 1s)
 const retryLogin = async (credentials, maxRetries = 2) => {
   let lastError = null

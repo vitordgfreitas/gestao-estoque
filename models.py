@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Date, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import date
@@ -57,9 +57,70 @@ class Compromisso(Base):
     contratante = Column(String(200))
     
     item = relationship("Item", back_populates="compromissos")
+    contas_receber = relationship("ContaReceber", back_populates="compromisso", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Compromisso(item_id={self.item_id}, quantidade={self.quantidade}, data_inicio={self.data_inicio}, data_fim={self.data_fim})>"
+
+
+class ContaReceber(Base):
+    __tablename__ = 'contas_receber'
+    
+    id = Column(Integer, primary_key=True)
+    compromisso_id = Column(Integer, ForeignKey('compromissos.id'), nullable=False)
+    descricao = Column(String(500), nullable=False)
+    valor = Column(Float, nullable=False)
+    data_vencimento = Column(Date, nullable=False)
+    data_pagamento = Column(Date)
+    status = Column(String(20), nullable=False, default='Pendente')  # Pendente, Pago, Vencido
+    forma_pagamento = Column(String(50))  # Dinheiro, PIX, Cartão, Boleto, etc.
+    observacoes = Column(String(1000))
+    
+    compromisso = relationship("Compromisso", back_populates="contas_receber")
+    
+    def calcular_status(self):
+        """Calcula o status baseado nas datas"""
+        hoje = date.today()
+        if self.data_pagamento:
+            return 'Pago'
+        elif self.data_vencimento < hoje:
+            return 'Vencido'
+        else:
+            return 'Pendente'
+    
+    def __repr__(self):
+        return f"<ContaReceber(id={self.id}, compromisso_id={self.compromisso_id}, valor={self.valor}, status='{self.status}')>"
+
+
+class ContaPagar(Base):
+    __tablename__ = 'contas_pagar'
+    
+    id = Column(Integer, primary_key=True)
+    descricao = Column(String(500), nullable=False)
+    categoria = Column(String(50), nullable=False)  # Fornecedor, Manutenção, Despesa, Outro
+    valor = Column(Float, nullable=False)
+    data_vencimento = Column(Date, nullable=False)
+    data_pagamento = Column(Date)
+    status = Column(String(20), nullable=False, default='Pendente')  # Pendente, Pago, Vencido
+    fornecedor = Column(String(200))
+    item_id = Column(Integer, ForeignKey('itens.id'))  # Opcional - para manutenção de itens específicos
+    forma_pagamento = Column(String(50))  # Dinheiro, PIX, Cartão, Boleto, etc.
+    observacoes = Column(String(1000))
+    
+    item = relationship("Item", backref="contas_pagar")
+    
+    def calcular_status(self):
+        """Calcula o status baseado nas datas"""
+        hoje = date.today()
+        if self.data_pagamento:
+            return 'Pago'
+        elif self.data_vencimento < hoje:
+            return 'Vencido'
+        else:
+            return 'Pendente'
+    
+    def __repr__(self):
+        return f"<ContaPagar(id={self.id}, descricao='{self.descricao}', valor={self.valor}, status='{self.status}')>"
 
 
 def get_engine():

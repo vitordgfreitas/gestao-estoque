@@ -11,7 +11,10 @@ import {
   Menu,
   X,
   LogOut,
-  ExternalLink
+  ExternalLink,
+  DollarSign,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react'
 import { infoAPI } from '../services/api'
 
@@ -22,6 +25,9 @@ const menuItems = [
   { path: '/disponibilidade', icon: Search, label: 'Verificar Disponibilidade' },
   { path: '/calendario', icon: Calendar, label: 'Calendário' },
   { path: '/visualizar', icon: Table, label: 'Visualizar Dados' },
+  { path: '/financeiro', icon: DollarSign, label: 'Financeiro' },
+  { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
+  { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
 ]
 
 export default function Layout({ children }) {
