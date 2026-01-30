@@ -241,9 +241,23 @@ export default function Financiamentos() {
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
                   <option value="">Selecione um item</option>
-                  {itens.map(item => (
-                    <option key={item.id} value={item.id}>{item.nome}</option>
-                  ))}
+                  {itens.map(item => {
+                    // Se for carro, mostra nome e placa
+                    if (item.categoria === 'Carros') {
+                      const placa = item.dados_categoria?.Placa || 
+                                   item.dados_categoria?.placa || 
+                                   item.carro?.placa || ''
+                      return (
+                        <option key={item.id} value={item.id}>
+                          {item.nome}{placa ? ` - ${placa}` : ''}
+                        </option>
+                      )
+                    }
+                    // Para outros itens, mostra apenas o nome
+                    return (
+                      <option key={item.id} value={item.id}>{item.nome}</option>
+                    )
+                  })}
                 </select>
                 {selectedItem && selectedItem.categoria === 'Carros' && (
                   <div className="mt-2 p-2 bg-dark-700/50 rounded text-sm text-dark-300">
