@@ -85,10 +85,10 @@ export default function Financiamentos() {
       }
       
       if (selectedFinanciamento) {
-        await financiamentosAPI.atualizar(selectedFinanciamento.id, data)
+        const response = await financiamentosAPI.atualizar(selectedFinanciamento.id, data)
         toast.success('Financiamento atualizado com sucesso!')
       } else {
-        await financiamentosAPI.criar(data)
+        const response = await financiamentosAPI.criar(data)
         toast.success('Financiamento criado com sucesso!')
       }
       

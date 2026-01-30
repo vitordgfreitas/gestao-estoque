@@ -1715,17 +1715,21 @@ async def obter_fluxo_caixa(
 
 def financiamento_to_dict(fin):
     """Converte Financiamento para dict"""
+    # Garante que fin é um objeto, não um dict ou Response
+    if isinstance(fin, dict):
+        return fin
+    
     return {
-        "id": fin.id,
-        "item_id": fin.item_id,
-        "valor_total": fin.valor_total,
-        "numero_parcelas": fin.numero_parcelas,
-        "valor_parcela": fin.valor_parcela,
-        "taxa_juros": fin.taxa_juros,
-        "data_inicio": fin.data_inicio.isoformat() if isinstance(fin.data_inicio, date) else str(fin.data_inicio),
-        "status": fin.status,
-        "instituicao_financeira": fin.instituicao_financeira,
-        "observacoes": fin.observacoes
+        "id": getattr(fin, 'id', None),
+        "item_id": getattr(fin, 'item_id', None),
+        "valor_total": getattr(fin, 'valor_total', 0.0),
+        "numero_parcelas": getattr(fin, 'numero_parcelas', 0),
+        "valor_parcela": getattr(fin, 'valor_parcela', 0.0),
+        "taxa_juros": getattr(fin, 'taxa_juros', 0.0),
+        "data_inicio": fin.data_inicio.isoformat() if hasattr(fin, 'data_inicio') and isinstance(fin.data_inicio, date) else (str(fin.data_inicio) if hasattr(fin, 'data_inicio') else None),
+        "status": getattr(fin, 'status', 'Ativo'),
+        "instituicao_financeira": getattr(fin, 'instituicao_financeira', None),
+        "observacoes": getattr(fin, 'observacoes', None)
     }
 
 def parcela_to_dict(parcela):
