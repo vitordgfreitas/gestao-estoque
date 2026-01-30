@@ -1414,20 +1414,16 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     # Adiciona financiamento
     try:
         # Arredonda valores antes de salvar (garante 2 casas decimais)
+        # Salva como número float com 2 casas decimais (não string)
         valor_total_rounded = round(float(valor_total), 2)
         valor_parcela_rounded = round(float(valor_parcela), 2)
-        
-        # Converte para string formatada para garantir que o Google Sheets interprete corretamente
-        # Usa ponto como separador decimal (padrão internacional)
-        valor_total_str = f"{valor_total_rounded:.2f}"
-        valor_parcela_str = f"{valor_parcela_rounded:.2f}"
         
         sheet_financiamentos.append_row([
             next_id,
             item_id,
-            valor_total_str,  # Salva como string formatada
+            valor_total_rounded,  # Salva como número float com 2 casas decimais
             numero_parcelas,
-            valor_parcela_str,  # Salva como string formatada
+            valor_parcela_rounded,  # Salva como número float com 2 casas decimais
             float(taxa_juros),
             data_inicio_str,
             'Ativo',
@@ -1462,15 +1458,14 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     data_vencimento = parcela_custom['data_vencimento']
                 
                 try:
-                    # Arredonda valor da parcela antes de salvar
+                    # Arredonda valor da parcela antes de salvar (2 casas decimais)
+                    # Salva como número float com 2 casas decimais (não string)
                     valor_parcela_custom = round(float(parcela_custom.get('valor', 0)), 2)
-                    # Converte para string formatada para garantir que o Google Sheets interprete corretamente
-                    valor_parcela_custom_str = f"{valor_parcela_custom:.2f}"
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         parcela_custom.get('numero', idx + 1),
-                        valor_parcela_custom_str,  # Salva como string formatada
+                        valor_parcela_custom,  # Salva como número float com 2 casas decimais
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
                         '',  # Data pagamento vazia
@@ -1510,14 +1505,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 
                 try:
                     # Arredonda valor da parcela antes de salvar (2 casas decimais)
+                    # Salva como número float com 2 casas decimais (não string)
                     valor_parcela_rounded = round(float(valor_parcela), 2)
-                    # Converte para string formatada para garantir que o Google Sheets interprete corretamente
-                    valor_parcela_str = f"{valor_parcela_rounded:.2f}"
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         i,
-                        valor_parcela_str,  # Salva como string formatada
+                        valor_parcela_rounded,  # Salva como número float com 2 casas decimais
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d'),
                         '',  # Data pagamento vazia
@@ -1773,14 +1767,14 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
                 recalcular_parcelas = True
             
             # Atualiza valores na planilha de financiamentos
+            # Salva como número float com 2 casas decimais (não string)
             if valor_total is not None:
-                valor_total_str = f"{round(float(valor_total), 2):.2f}"
-                sheet_financiamentos.update_cell(i, 3, valor_total_str)
+                valor_total_rounded = round(float(valor_total), 2)
+                sheet_financiamentos.update_cell(i, 3, valor_total_rounded)
             if taxa_juros is not None:
                 sheet_financiamentos.update_cell(i, 6, float(taxa_juros))
             if novo_valor_parcela is not None:
-                valor_parcela_str = f"{novo_valor_parcela:.2f}"
-                sheet_financiamentos.update_cell(i, 5, valor_parcela_str)  # Coluna 5 = Valor Parcela
+                sheet_financiamentos.update_cell(i, 5, novo_valor_parcela)  # Coluna 5 = Valor Parcela (número float)
             if status is not None:
                 sheet_financiamentos.update_cell(i, 8, status)
             if instituicao_financeira is not None:
@@ -1801,8 +1795,8 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
                             parcela_status = parcela_record.get('Status', 'Pendente')
                             # Só atualiza parcelas pendentes (não pagas)
                             if parcela_status in ['Pendente', 'Atrasada']:
-                                valor_parcela_str = f"{novo_valor_parcela:.2f}"
-                                sheet_parcelas.update_cell(idx, valor_original_col, valor_parcela_str)
+                                # Salva como número float com 2 casas decimais (não string)
+                                sheet_parcelas.update_cell(idx, valor_original_col, novo_valor_parcela)
                 except Exception as e:
                     # Se der erro ao atualizar parcelas, continua mesmo assim
                     print(f"Aviso: Erro ao atualizar parcelas: {e}")

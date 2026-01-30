@@ -74,7 +74,12 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
         multa: '0',
         desconto: '0'
       })
-      if (onPagar) onPagar()
+      // Aguarda um pouco para garantir que o backend processou
+      await new Promise(resolve => setTimeout(resolve, 300))
+      // Recarrega os dados
+      if (onPagar) {
+        await onPagar()
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao registrar pagamento')
     }
@@ -85,7 +90,12 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
       await financiamentosAPI.atualizarParcela(financiamentoId, parcelaId, { status: newStatus })
       toast.success('Status atualizado com sucesso!')
       setEditingStatus({ ...editingStatus, [parcelaId]: false })
-      if (onPagar) onPagar()
+      // Aguarda um pouco para garantir que o backend processou
+      await new Promise(resolve => setTimeout(resolve, 300))
+      // Recarrega os dados
+      if (onPagar) {
+        await onPagar()
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao atualizar status')
     }

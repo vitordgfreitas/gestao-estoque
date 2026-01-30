@@ -601,7 +601,18 @@ export default function Financiamentos() {
               
               {selectedFinanciamento.parcelas && (
                 <>
-                  <TabelaParcelas parcelas={selectedFinanciamento.parcelas} financiamentoId={selectedFinanciamento.id} onPagar={loadFinanciamentos} />
+                  <TabelaParcelas 
+                    parcelas={selectedFinanciamento.parcelas} 
+                    financiamentoId={selectedFinanciamento.id} 
+                    onPagar={async () => {
+                      await loadFinanciamentos()
+                      // Recarrega o financiamento selecionado para atualizar as parcelas
+                      const updated = await financiamentosAPI.buscar(selectedFinanciamento.id)
+                      if (updated?.data) {
+                        setSelectedFinanciamento(updated.data)
+                      }
+                    }} 
+                  />
                   <CalculadoraNPV financiamentoId={selectedFinanciamento.id} />
                 </>
               )}
