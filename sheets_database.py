@@ -1480,40 +1480,40 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     parcela_id = 1
                 
                 # Calcula data de vencimento (mes seguinte)
-            if i == 1:
-                data_vencimento = data_venc
-            else:
-                # Adiciona meses usando relativedelta ou cálculo manual
-                meses_adicionar = i - 1
-                ano = data_venc.year
-                mes = data_venc.month + meses_adicionar
-                # Ajusta ano se necessário
-                while mes > 12:
-                    mes -= 12
-                    ano += 1
-                # Ajusta para último dia do mês se necessário
-                try:
-                    data_vencimento = date(ano, mes, data_venc.day)
-                except ValueError:
-                    # Se o dia não existe no mês (ex: 31/02), usa último dia do mês
-                    ultimo_dia = calendar.monthrange(ano, mes)[1]
-                    data_vencimento = date(ano, mes, ultimo_dia)
-            
-            sheet_parcelas.append_row([
-                parcela_id,
-                next_id,
-                i,
-                float(valor_parcela),
-                0.0,  # Valor pago inicialmente 0
-                data_vencimento.strftime('%Y-%m-%d'),
-                '',  # Data pagamento vazia
-                'Pendente',
-                0.0,  # Juros
-                0.0,  # Multa
-                0.0,  # Desconto
-                ''  # Link Boleto vazio
-            ])
-            parcelas_ids.append(parcela_id)
+                if i == 1:
+                    data_vencimento = data_venc
+                else:
+                    # Adiciona meses usando relativedelta ou cálculo manual
+                    meses_adicionar = i - 1
+                    ano = data_venc.year
+                    mes = data_venc.month + meses_adicionar
+                    # Ajusta ano se necessário
+                    while mes > 12:
+                        mes -= 12
+                        ano += 1
+                    # Ajusta para último dia do mês se necessário
+                    try:
+                        data_vencimento = date(ano, mes, data_venc.day)
+                    except ValueError:
+                        # Se o dia não existe no mês (ex: 31/02), usa último dia do mês
+                        ultimo_dia = calendar.monthrange(ano, mes)[1]
+                        data_vencimento = date(ano, mes, ultimo_dia)
+                
+                sheet_parcelas.append_row([
+                    parcela_id,
+                    next_id,
+                    i,
+                    float(valor_parcela),
+                    0.0,  # Valor pago inicialmente 0
+                    data_vencimento.strftime('%Y-%m-%d'),
+                    '',  # Data pagamento vazia
+                    'Pendente',
+                    0.0,  # Juros
+                    0.0,  # Multa
+                    0.0,  # Desconto
+                    ''  # Link Boleto vazio
+                ])
+                parcelas_ids.append(parcela_id)
         
         auditoria.registrar_auditoria('CREATE', 'Financiamentos', next_id, valores_novos={
             'item_id': item_id,

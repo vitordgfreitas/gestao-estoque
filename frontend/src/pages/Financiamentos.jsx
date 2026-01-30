@@ -108,10 +108,8 @@ export default function Financiamentos() {
       setParcelasFixas(true)
       setParcelasCustomizadas([])
       
-      // Pequeno delay para feedback visual antes de recarregar
-      setTimeout(() => {
-        loadFinanciamentos()
-      }, 300)
+      // Recarrega a lista imediatamente
+      await loadFinanciamentos()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao salvar financiamento')
     } finally {
