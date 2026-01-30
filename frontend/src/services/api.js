@@ -100,6 +100,18 @@ export const financeiroAPI = {
   fluxoCaixa: (params) => api.get('/api/financeiro/fluxo-caixa', { params }),
 }
 
+// Financiamentos
+export const financiamentosAPI = {
+  listar: (params) => api.get('/api/financiamentos', { params }),
+  buscar: (id) => api.get(`/api/financiamentos/${id}`),
+  criar: (data) => api.post('/api/financiamentos', data),
+  atualizar: (id, data) => api.put(`/api/financiamentos/${id}`, data),
+  deletar: (id) => api.delete(`/api/financiamentos/${id}`),
+  pagarParcela: (financiamentoId, parcelaId, data) => api.post(`/api/financiamentos/${financiamentoId}/parcelas/${parcelaId}/pagar`, data),
+  valorPresente: (id, usarCdi) => api.get(`/api/financiamentos/${id}/valor-presente`, { params: { usar_cdi: usarCdi } }),
+  dashboard: () => api.get('/api/financiamentos/dashboard'),
+}
+
 // Função de retry para login (até 2 tentativas com delay de 1s)
 const retryLogin = async (credentials, maxRetries = 2) => {
   let lastError = null

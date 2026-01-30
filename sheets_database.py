@@ -1370,3 +1370,467 @@ def deletar_compromisso(compromisso_id):
                 _handle_api_error(e, "deletar_compromisso (deletar linha)")
     
     return False
+
+
+# ============= FINANCIAMENTOS =============
+
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None):
+    """Cria um novo financiamento e gera as parcelas automaticamente"""
+    from datetime import timedelta
+    import calendar
+    
+    sheets = get_sheets()
+    sheet_financiamentos = sheets['sheet_financiamentos']
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    # Busca próximo ID de financiamento
+    try:
+        all_records = sheet_financiamentos.get_all_records()
+        if all_records:
+            valid_ids = [int(record.get('ID', 0)) for record in all_records if record and record.get('ID')]
+            next_id = max(valid_ids) + 1 if valid_ids else 1
+        else:
+            next_id = 1
+    except (IndexError, KeyError, ValueError):
+        next_id = 1
+    
+    # Calcula valor da parcela (fixo)
+    valor_parcela = valor_total / numero_parcelas
+    
+    # Formata data
+    data_inicio_str = data_inicio.strftime('%Y-%m-%d') if isinstance(data_inicio, date) else str(data_inicio)
+    
+    # Adiciona financiamento
+    try:
+        sheet_financiamentos.append_row([
+            next_id,
+            item_id,
+            float(valor_total),
+            numero_parcelas,
+            float(valor_parcela),
+            float(taxa_juros),
+            data_inicio_str,
+            'Ativo',
+            instituicao_financeira or '',
+            observacoes or ''
+        ])
+        
+        # Gera parcelas automaticamente
+        data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        parcelas_ids = []
+        
+        for i in range(1, numero_parcelas + 1):
+            # Busca próximo ID de parcela
+            try:
+                all_parcelas = sheet_parcelas.get_all_records()
+                if all_parcelas:
+                    valid_parcela_ids = [int(p.get('ID', 0)) for p in all_parcelas if p and p.get('ID')]
+                    parcela_id = max(valid_parcela_ids) + 1 if valid_parcela_ids else 1
+                else:
+                    parcela_id = 1
+            except (IndexError, KeyError, ValueError):
+                parcela_id = 1
+            
+            # Calcula data de vencimento (mes seguinte)
+            if i == 1:
+                data_vencimento = data_venc
+            else:
+                # Adiciona meses usando relativedelta ou cálculo manual
+                meses_adicionar = i - 1
+                ano = data_venc.year
+                mes = data_venc.month + meses_adicionar
+                # Ajusta ano se necessário
+                while mes > 12:
+                    mes -= 12
+                    ano += 1
+                # Ajusta para último dia do mês se necessário
+                try:
+                    data_vencimento = date(ano, mes, data_venc.day)
+                except ValueError:
+                    # Se o dia não existe no mês (ex: 31/02), usa último dia do mês
+                    ultimo_dia = calendar.monthrange(ano, mes)[1]
+                    data_vencimento = date(ano, mes, ultimo_dia)
+            
+            sheet_parcelas.append_row([
+                parcela_id,
+                next_id,
+                i,
+                float(valor_parcela),
+                0.0,  # Valor pago inicialmente 0
+                data_vencimento.strftime('%Y-%m-%d'),
+                '',  # Data pagamento vazia
+                'Pendente',
+                0.0,  # Juros
+                0.0,  # Multa
+                0.0   # Desconto
+            ])
+            parcelas_ids.append(parcela_id)
+        
+        auditoria.registrar_auditoria('CREATE', 'Financiamentos', next_id, valores_novos={
+            'item_id': item_id,
+            'valor_total': valor_total,
+            'numero_parcelas': numero_parcelas
+        })
+        
+        _clear_cache()
+        
+        # Retorna objeto similar ao modelo Financiamento
+        class Financiamento:
+            def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+                self.id = int(id)
+                self.item_id = int(item_id)
+                self.valor_total = float(valor_total)
+                self.numero_parcelas = int(numero_parcelas)
+                self.valor_parcela = float(valor_parcela)
+                self.taxa_juros = float(taxa_juros)
+                self.data_inicio = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio, '%Y-%m-%d').date()
+                self.status = status or 'Ativo'
+                self.instituicao_financeira = instituicao_financeira or ''
+                self.observacoes = observacoes or ''
+                self._item_cache = None
+                self._parcelas_cache = None
+            
+            def _get_item(self):
+                if self._item_cache is None:
+                    from sheets_database import buscar_item_por_id
+                    self._item_cache = buscar_item_por_id(self.item_id)
+                return self._item_cache
+            
+            @property
+            def item(self):
+                return self._get_item()
+            
+            def _get_parcelas(self):
+                if self._parcelas_cache is None:
+                    self._parcelas_cache = listar_parcelas_financiamento(financiamento_id=self.id)
+                return self._parcelas_cache
+            
+            @property
+            def parcelas(self):
+                return self._get_parcelas()
+        
+        return Financiamento(next_id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio_str, 'Ativo', instituicao_financeira, observacoes)
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_financiamento")
+    except Exception as e:
+        raise Exception(f"Erro ao criar financiamento: {str(e)}")
+
+
+def listar_financiamentos(status=None, item_id=None):
+    """Lista financiamentos com filtros opcionais"""
+    sheets = get_sheets()
+    sheet_financiamentos = sheets['sheet_financiamentos']
+    
+    try:
+        records = sheet_financiamentos.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "listar_financiamentos")
+    except (IndexError, KeyError):
+        return []
+    
+    class Financiamento:
+        def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+            self.id = int(id) if id else None
+            self.item_id = int(item_id) if item_id else None
+            self.valor_total = float(valor_total) if valor_total else 0.0
+            self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
+            self.valor_parcela = float(valor_parcela) if valor_parcela else 0.0
+            self.taxa_juros = float(taxa_juros) if taxa_juros else 0.0
+            if isinstance(data_inicio, str) and data_inicio:
+                try:
+                    self.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_inicio = datetime.strptime(data_inicio, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_inicio = date.today()
+            else:
+                self.data_inicio = data_inicio if isinstance(data_inicio, date) else date.today()
+            self.status = status or 'Ativo'
+            self.instituicao_financeira = instituicao_financeira or ''
+            self.observacoes = observacoes or ''
+            self._item_cache = None
+            self._parcelas_cache = None
+        
+        def _get_item(self):
+            if self._item_cache is None:
+                from sheets_database import buscar_item_por_id
+                self._item_cache = buscar_item_por_id(self.item_id)
+            return self._item_cache
+        
+        @property
+        def item(self):
+            return self._get_item()
+        
+        def _get_parcelas(self):
+            if self._parcelas_cache is None:
+                self._parcelas_cache = listar_parcelas_financiamento(financiamento_id=self.id)
+            return self._parcelas_cache
+        
+        @property
+        def parcelas(self):
+            return self._get_parcelas()
+    
+    financiamentos = []
+    for record in records:
+        if record and record.get('ID'):
+            try:
+                fin = Financiamento(
+                    record.get('ID'),
+                    record.get('Item ID'),
+                    record.get('Valor Total', 0),
+                    record.get('Numero Parcelas', 0),
+                    record.get('Valor Parcela', 0),
+                    record.get('Taxa Juros', 0),
+                    record.get('Data Inicio', ''),
+                    record.get('Status', 'Ativo'),
+                    record.get('Instituicao Financeira', ''),
+                    record.get('Observacoes', '')
+                )
+                
+                # Aplica filtros
+                if status and fin.status != status:
+                    continue
+                if item_id and fin.item_id != int(item_id):
+                    continue
+                
+                financiamentos.append(fin)
+            except (ValueError, TypeError):
+                continue
+    
+    return financiamentos
+
+
+def buscar_financiamento_por_id(financiamento_id):
+    """Busca um financiamento por ID"""
+    financiamentos = listar_financiamentos()
+    return next((f for f in financiamentos if f.id == financiamento_id), None)
+
+
+def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None, status=None, instituicao_financeira=None, observacoes=None):
+    """Atualiza um financiamento"""
+    sheets = get_sheets()
+    sheet_financiamentos = sheets['sheet_financiamentos']
+    
+    try:
+        records = sheet_financiamentos.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "atualizar_financiamento")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(financiamento_id):
+            valores_antigos = record.copy()
+            
+            if valor_total is not None:
+                sheet_financiamentos.update_cell(i, 3, float(valor_total))
+            if taxa_juros is not None:
+                sheet_financiamentos.update_cell(i, 6, float(taxa_juros))
+            if status is not None:
+                sheet_financiamentos.update_cell(i, 8, status)
+            if instituicao_financeira is not None:
+                sheet_financiamentos.update_cell(i, 9, instituicao_financeira)
+            if observacoes is not None:
+                sheet_financiamentos.update_cell(i, 10, observacoes)
+            
+            auditoria.registrar_auditoria('UPDATE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos, valores_novos={
+                'valor_total': valor_total,
+                'taxa_juros': taxa_juros,
+                'status': status
+            })
+            
+            _clear_cache()
+            return buscar_financiamento_por_id(financiamento_id)
+    
+    return None
+
+
+def deletar_financiamento(financiamento_id):
+    """Deleta um financiamento e suas parcelas"""
+    sheets = get_sheets()
+    sheet_financiamentos = sheets['sheet_financiamentos']
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    try:
+        records = sheet_financiamentos.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "deletar_financiamento")
+    except (IndexError, KeyError):
+        return False
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(financiamento_id):
+            valores_antigos = record.copy()
+            
+            # Deleta parcelas primeiro
+            try:
+                parcelas_records = sheet_parcelas.get_all_records()
+                parcelas_para_deletar = []
+                for j, parcela_record in enumerate(parcelas_records, start=2):
+                    if parcela_record and str(parcela_record.get('Financiamento ID')) == str(financiamento_id):
+                        parcelas_para_deletar.append(j)
+                
+                # Deleta de trás para frente para não afetar índices
+                for idx in reversed(parcelas_para_deletar):
+                    sheet_parcelas.delete_rows(idx)
+            except Exception:
+                pass  # Continua mesmo se não conseguir deletar parcelas
+            
+            # Deleta financiamento
+            try:
+                sheet_financiamentos.delete_rows(i)
+                auditoria.registrar_auditoria('DELETE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos)
+                _clear_cache()
+                return True
+            except gspread.exceptions.APIError as e:
+                _handle_api_error(e, "deletar_financiamento")
+    
+    return False
+
+
+def listar_parcelas_financiamento(financiamento_id=None, status=None):
+    """Lista parcelas de financiamento com filtros opcionais"""
+    sheets = get_sheets()
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    try:
+        records = sheet_parcelas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "listar_parcelas_financiamento")
+    except (IndexError, KeyError):
+        return []
+    
+    class ParcelaFinanciamento:
+        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto):
+            self.id = int(id) if id else None
+            self.financiamento_id = int(financiamento_id) if financiamento_id else None
+            self.numero_parcela = int(numero_parcela) if numero_parcela else 0
+            self.valor_original = float(valor_original) if valor_original else 0.0
+            self.valor_pago = float(valor_pago) if valor_pago else 0.0
+            if isinstance(data_vencimento, str) and data_vencimento:
+                try:
+                    self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_vencimento = datetime.strptime(data_vencimento, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_vencimento = date.today()
+            else:
+                self.data_vencimento = data_vencimento if isinstance(data_vencimento, date) else date.today()
+            
+            if data_pagamento and isinstance(data_pagamento, str):
+                try:
+                    self.data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_pagamento = datetime.strptime(data_pagamento, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_pagamento = None
+            else:
+                self.data_pagamento = data_pagamento if isinstance(data_pagamento, date) else None
+            
+            # Recalcula status
+            hoje = date.today()
+            if self.valor_pago >= self.valor_original:
+                self.status = 'Paga'
+            elif self.data_vencimento < hoje:
+                self.status = 'Atrasada'
+            else:
+                self.status = status or 'Pendente'
+            
+            self.juros = float(juros) if juros else 0.0
+            self.multa = float(multa) if multa else 0.0
+            self.desconto = float(desconto) if desconto else 0.0
+            self._financiamento_cache = None
+        
+        def calcular_valor_total(self):
+            return self.valor_original + self.juros + self.multa - self.desconto
+        
+        def _get_financiamento(self):
+            if self._financiamento_cache is None:
+                self._financiamento_cache = buscar_financiamento_por_id(self.financiamento_id)
+            return self._financiamento_cache
+        
+        @property
+        def financiamento(self):
+            return self._get_financiamento()
+    
+    parcelas = []
+    for record in records:
+        if record and record.get('ID'):
+            try:
+                parcela = ParcelaFinanciamento(
+                    record.get('ID'),
+                    record.get('Financiamento ID'),
+                    record.get('Numero Parcela', 0),
+                    record.get('Valor Original', 0),
+                    record.get('Valor Pago', 0),
+                    record.get('Data Vencimento', ''),
+                    record.get('Data Pagamento', ''),
+                    record.get('Status', 'Pendente'),
+                    record.get('Juros', 0),
+                    record.get('Multa', 0),
+                    record.get('Desconto', 0)
+                )
+                
+                # Aplica filtros
+                if financiamento_id and parcela.financiamento_id != int(financiamento_id):
+                    continue
+                if status and parcela.status != status:
+                    continue
+                
+                parcelas.append(parcela)
+            except (ValueError, TypeError):
+                continue
+    
+    return parcelas
+
+
+def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, juros=0.0, multa=0.0, desconto=0.0):
+    """Registra pagamento de uma parcela"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    
+    sheets = get_sheets()
+    sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    try:
+        records = sheet_parcelas.get_all_records()
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "pagar_parcela_financiamento")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(parcela_id):
+            valores_antigos = record.copy()
+            
+            valor_pago_total = float(valor_pago) + float(juros) + float(multa) - float(desconto)
+            valor_original = float(record.get('Valor Original', 0))
+            
+            # Atualiza valores
+            sheet_parcelas.update_cell(i, 5, valor_pago_total)  # Valor Pago
+            sheet_parcelas.update_cell(i, 7, data_pagamento.strftime('%Y-%m-%d'))  # Data Pagamento
+            sheet_parcelas.update_cell(i, 8, 'Paga' if valor_pago_total >= valor_original else 'Pendente')  # Status
+            sheet_parcelas.update_cell(i, 9, float(juros))  # Juros
+            sheet_parcelas.update_cell(i, 10, float(multa))  # Multa
+            sheet_parcelas.update_cell(i, 11, float(desconto))  # Desconto
+            
+            # Verifica se financiamento foi quitado
+            financiamento_id = record.get('Financiamento ID')
+            if financiamento_id:
+                parcelas = listar_parcelas_financiamento(financiamento_id=financiamento_id)
+                todas_pagas = all(p.status == 'Paga' for p in parcelas)
+                if todas_pagas:
+                    atualizar_financiamento(financiamento_id, status='Quitado')
+            
+            auditoria.registrar_auditoria('UPDATE', 'Parcelas Financiamento', parcela_id, valores_antigos=valores_antigos, valores_novos={
+                'valor_pago': valor_pago_total,
+                'data_pagamento': str(data_pagamento)
+            })
+            
+            _clear_cache()
+            return listar_parcelas_financiamento()[0] if listar_parcelas_financiamento() else None
+    
+    return None

@@ -123,6 +123,62 @@ class ContaPagar(Base):
         return f"<ContaPagar(id={self.id}, descricao='{self.descricao}', valor={self.valor}, status='{self.status}')>"
 
 
+class Financiamento(Base):
+    __tablename__ = 'financiamentos'
+    
+    id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey('itens.id'), nullable=False)
+    valor_total = Column(Float, nullable=False)
+    numero_parcelas = Column(Integer, nullable=False)
+    valor_parcela = Column(Float, nullable=False)
+    taxa_juros = Column(Float, nullable=False, default=0.0)  # Taxa de juros % ao mês
+    data_inicio = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, default='Ativo')  # Ativo, Quitado, Cancelado
+    instituicao_financeira = Column(String(200))
+    observacoes = Column(String(1000))
+    
+    item = relationship("Item", backref="financiamentos")
+    parcelas = relationship("ParcelaFinanciamento", back_populates="financiamento", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Financiamento(id={self.id}, item_id={self.item_id}, valor_total={self.valor_total}, status='{self.status}')>"
+
+
+class ParcelaFinanciamento(Base):
+    __tablename__ = 'parcelas_financiamento'
+    
+    id = Column(Integer, primary_key=True)
+    financiamento_id = Column(Integer, ForeignKey('financiamentos.id'), nullable=False)
+    numero_parcela = Column(Integer, nullable=False)
+    valor_original = Column(Float, nullable=False)
+    valor_pago = Column(Float, nullable=False, default=0.0)
+    data_vencimento = Column(Date, nullable=False)
+    data_pagamento = Column(Date)
+    status = Column(String(20), nullable=False, default='Pendente')  # Pendente, Paga, Atrasada
+    juros = Column(Float, nullable=False, default=0.0)
+    multa = Column(Float, nullable=False, default=0.0)
+    desconto = Column(Float, nullable=False, default=0.0)
+    
+    financiamento = relationship("Financiamento", back_populates="parcelas")
+    
+    def calcular_status(self):
+        """Calcula o status baseado nas datas"""
+        hoje = date.today()
+        if self.valor_pago >= self.valor_original:
+            return 'Paga'
+        elif self.data_vencimento < hoje:
+            return 'Atrasada'
+        else:
+            return 'Pendente'
+    
+    def calcular_valor_total(self):
+        """Calcula valor total da parcela (original + juros + multa - desconto)"""
+        return self.valor_original + self.juros + self.multa - self.desconto
+    
+    def __repr__(self):
+        return f"<ParcelaFinanciamento(id={self.id}, financiamento_id={self.financiamento_id}, parcela={self.numero_parcela}, status='{self.status}')>"
+
+
 def get_engine():
     """Cria e retorna a engine do banco de dados"""
     os.makedirs('data', exist_ok=True)

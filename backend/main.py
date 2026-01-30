@@ -369,6 +369,130 @@ class FluxoCaixaResponse(BaseModel):
     despesas: float
     saldo: float
 
+# ============= MODELOS FINANCIAMENTO =============
+
+class FinanciamentoCreate(BaseModel):
+    item_id: int
+    valor_total: float
+    numero_parcelas: int
+    taxa_juros: float
+    data_inicio: date
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class FinanciamentoUpdate(BaseModel):
+    valor_total: Optional[float] = None
+    taxa_juros: Optional[float] = None
+    status: Optional[str] = None
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class FinanciamentoResponse(BaseModel):
+    id: int
+    item_id: int
+    valor_total: float
+    numero_parcelas: int
+    valor_parcela: float
+    taxa_juros: float
+    data_inicio: date
+    status: str
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class ParcelaFinanciamentoResponse(BaseModel):
+    id: int
+    financiamento_id: int
+    numero_parcela: int
+    valor_original: float
+    valor_pago: float
+    data_vencimento: date
+    data_pagamento: Optional[date] = None
+    status: str
+    juros: float
+    multa: float
+    desconto: float
+    
+    class Config:
+        from_attributes = True
+
+class PagarParcelaRequest(BaseModel):
+    valor_pago: float
+    data_pagamento: Optional[date] = None
+    juros: Optional[float] = 0.0
+    multa: Optional[float] = 0.0
+    desconto: Optional[float] = 0.0
+
+class ValorPresenteResponse(BaseModel):
+    valor_presente: float
+    taxa_desconto: float
+    parcelas_restantes: int
+    valor_total_restante: float
+
+# ============= MODELOS FINANCIAMENTO =============
+
+class FinanciamentoCreate(BaseModel):
+    item_id: int
+    valor_total: float
+    numero_parcelas: int
+    taxa_juros: float
+    data_inicio: date
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class FinanciamentoUpdate(BaseModel):
+    valor_total: Optional[float] = None
+    taxa_juros: Optional[float] = None
+    status: Optional[str] = None
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class FinanciamentoResponse(BaseModel):
+    id: int
+    item_id: int
+    valor_total: float
+    numero_parcelas: int
+    valor_parcela: float
+    taxa_juros: float
+    data_inicio: date
+    status: str
+    instituicao_financeira: Optional[str] = None
+    observacoes: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class ParcelaFinanciamentoResponse(BaseModel):
+    id: int
+    financiamento_id: int
+    numero_parcela: int
+    valor_original: float
+    valor_pago: float
+    data_vencimento: date
+    data_pagamento: Optional[date] = None
+    status: str
+    juros: float
+    multa: float
+    desconto: float
+    
+    class Config:
+        from_attributes = True
+
+class PagarParcelaRequest(BaseModel):
+    valor_pago: float
+    data_pagamento: Optional[date] = None
+    juros: Optional[float] = 0.0
+    multa: Optional[float] = 0.0
+    desconto: Optional[float] = 0.0
+
+class ValorPresenteResponse(BaseModel):
+    valor_presente: float
+    taxa_desconto: float
+    parcelas_restantes: int
+    valor_total_restante: float
+
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
@@ -1581,6 +1705,216 @@ async def obter_fluxo_caixa(
         
         fluxo = db_module.obter_fluxo_caixa(data_inicio, data_fim)
         return [FluxoCaixaResponse(**item) for item in fluxo]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= ENDPOINTS FINANCIAMENTOS =============
+
+def financiamento_to_dict(fin):
+    """Converte Financiamento para dict"""
+    return {
+        "id": fin.id,
+        "item_id": fin.item_id,
+        "valor_total": fin.valor_total,
+        "numero_parcelas": fin.numero_parcelas,
+        "valor_parcela": fin.valor_parcela,
+        "taxa_juros": fin.taxa_juros,
+        "data_inicio": fin.data_inicio.isoformat() if isinstance(fin.data_inicio, date) else str(fin.data_inicio),
+        "status": fin.status,
+        "instituicao_financeira": fin.instituicao_financeira,
+        "observacoes": fin.observacoes
+    }
+
+def parcela_to_dict(parcela):
+    """Converte ParcelaFinanciamento para dict"""
+    return {
+        "id": parcela.id,
+        "financiamento_id": parcela.financiamento_id,
+        "numero_parcela": parcela.numero_parcela,
+        "valor_original": parcela.valor_original,
+        "valor_pago": parcela.valor_pago,
+        "data_vencimento": parcela.data_vencimento.isoformat() if isinstance(parcela.data_vencimento, date) else str(parcela.data_vencimento),
+        "data_pagamento": parcela.data_pagamento.isoformat() if parcela.data_pagamento and isinstance(parcela.data_pagamento, date) else None,
+        "status": parcela.status,
+        "juros": parcela.juros,
+        "multa": parcela.multa,
+        "desconto": parcela.desconto
+    }
+
+@app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(verify_token)):
+    """Cria um novo financiamento e gera as parcelas automaticamente"""
+    try:
+        novo_fin = db_module.criar_financiamento(
+            item_id=fin.item_id,
+            valor_total=fin.valor_total,
+            numero_parcelas=fin.numero_parcelas,
+            taxa_juros=fin.taxa_juros,
+            data_inicio=fin.data_inicio,
+            instituicao_financeira=fin.instituicao_financeira,
+            observacoes=fin.observacoes
+        )
+        return financiamento_to_dict(novo_fin)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financiamentos", response_model=List[dict])
+async def listar_financiamentos(
+    status: Optional[str] = None,
+    item_id: Optional[int] = None,
+    token: str = Depends(verify_token)
+):
+    """Lista financiamentos com filtros opcionais"""
+    try:
+        financiamentos = db_module.listar_financiamentos(status=status, item_id=item_id)
+        return [financiamento_to_dict(f) for f in financiamentos]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financiamentos/{financiamento_id}", response_model=dict)
+async def buscar_financiamento(financiamento_id: int, token: str = Depends(verify_token)):
+    """Busca um financiamento por ID com suas parcelas"""
+    try:
+        fin = db_module.buscar_financiamento_por_id(financiamento_id)
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamento não encontrado")
+        
+        resultado = financiamento_to_dict(fin)
+        # Adiciona parcelas
+        parcelas = db_module.listar_parcelas_financiamento(financiamento_id=financiamento_id)
+        resultado['parcelas'] = [parcela_to_dict(p) for p in parcelas]
+        
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/financiamentos/{financiamento_id}", response_model=dict)
+async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdate, token: str = Depends(verify_token)):
+    """Atualiza um financiamento"""
+    try:
+        fin_atualizado = db_module.atualizar_financiamento(
+            financiamento_id=financiamento_id,
+            valor_total=fin.valor_total,
+            taxa_juros=fin.taxa_juros,
+            status=fin.status,
+            instituicao_financeira=fin.instituicao_financeira,
+            observacoes=fin.observacoes
+        )
+        if fin_atualizado is None:
+            raise HTTPException(status_code=404, detail="Financiamento não encontrado")
+        return financiamento_to_dict(fin_atualizado)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/financiamentos/{financiamento_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deletar_financiamento(financiamento_id: int, token: str = Depends(verify_token)):
+    """Deleta um financiamento"""
+    try:
+        sucesso = db_module.deletar_financiamento(financiamento_id)
+        if not sucesso:
+            raise HTTPException(status_code=404, detail="Financiamento não encontrado")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/financiamentos/{financiamento_id}/parcelas/{parcela_id}/pagar", response_model=dict)
+async def pagar_parcela_financiamento(
+    financiamento_id: int,
+    parcela_id: int,
+    pagamento: PagarParcelaRequest,
+    token: str = Depends(verify_token)
+):
+    """Registra pagamento de uma parcela"""
+    try:
+        parcela_atualizada = db_module.pagar_parcela_financiamento(
+            parcela_id=parcela_id,
+            valor_pago=pagamento.valor_pago,
+            data_pagamento=pagamento.data_pagamento,
+            juros=pagamento.juros,
+            multa=pagamento.multa,
+            desconto=pagamento.desconto
+        )
+        if parcela_atualizada is None:
+            raise HTTPException(status_code=404, detail="Parcela não encontrada")
+        return parcela_to_dict(parcela_atualizada)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financiamentos/{financiamento_id}/valor-presente", response_model=ValorPresenteResponse)
+async def calcular_valor_presente_financiamento(
+    financiamento_id: int,
+    usar_cdi: Optional[bool] = False,
+    token: str = Depends(verify_token)
+):
+    """Calcula valor presente (NPV) de um financiamento"""
+    try:
+        import sys
+        import os
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root_dir not in sys.path:
+            sys.path.insert(0, root_dir)
+        from taxa_selic import calcular_valor_presente, obter_taxa_selic, obter_taxa_cdi
+        
+        fin = db_module.buscar_financiamento_por_id(financiamento_id)
+        if not fin:
+            raise HTTPException(status_code=404, detail="Financiamento não encontrado")
+        
+        parcelas = db_module.listar_parcelas_financiamento(financiamento_id=financiamento_id)
+        parcelas_restantes = [p for p in parcelas if p.status != 'Paga']
+        
+        if usar_cdi:
+            taxa_desconto = obter_taxa_cdi()
+        else:
+            taxa_desconto = obter_taxa_selic()
+        
+        valor_presente = calcular_valor_presente(parcelas_restantes, taxa_desconto=taxa_desconto, usar_cdi=usar_cdi)
+        valor_total_restante = sum(p.valor_original + p.juros + p.multa - p.desconto for p in parcelas_restantes)
+        
+        return ValorPresenteResponse(
+            valor_presente=valor_presente,
+            taxa_desconto=taxa_desconto,
+            parcelas_restantes=len(parcelas_restantes),
+            valor_total_restante=valor_total_restante
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financiamentos/dashboard", response_model=dict)
+async def obter_dashboard_financiamentos(token: str = Depends(verify_token)):
+    """Obtém dashboard de financiamentos"""
+    try:
+        financiamentos_ativos = db_module.listar_financiamentos(status='Ativo')
+        parcelas_pendentes = db_module.listar_parcelas_financiamento(status='Pendente')
+        parcelas_atrasadas = db_module.listar_parcelas_financiamento(status='Atrasada')
+        
+        hoje = date.today()
+        proximos_7_dias = hoje + timedelta(days=7)
+        parcelas_proximas = [p for p in parcelas_pendentes if p.data_vencimento <= proximos_7_dias]
+        
+        valor_total_financiado = sum(f.valor_total for f in financiamentos_ativos)
+        valor_total_pago = sum(p.valor_pago for p in db_module.listar_parcelas_financiamento())
+        valor_total_restante = valor_total_financiado - valor_total_pago
+        
+        return {
+            'total_financiamentos_ativos': len(financiamentos_ativos),
+            'parcelas_pendentes': len(parcelas_pendentes),
+            'parcelas_atrasadas': len(parcelas_atrasadas),
+            'parcelas_proximas_7_dias': len(parcelas_proximas),
+            'valor_total_financiado': valor_total_financiado,
+            'valor_total_pago': valor_total_pago,
+            'valor_total_restante': valor_total_restante
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

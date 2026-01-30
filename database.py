@@ -1,4 +1,4 @@
-from models import get_session, Item, Compromisso, Carro
+from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento
 from datetime import date
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
@@ -775,6 +775,679 @@ def deletar_compromisso(compromisso_id):
             
             return True
         return False
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+# ============= CONTAS A RECEBER =============
+
+def criar_conta_receber(compromisso_id, descricao, valor, data_vencimento, forma_pagamento=None, observacoes=None):
+    """Cria uma nova conta a receber vinculada a um compromisso"""
+    session = get_session()
+    try:
+        # Verifica se compromisso existe
+        compromisso = session.query(Compromisso).filter(Compromisso.id == compromisso_id).first()
+        if not compromisso:
+            raise ValueError(f"Compromisso {compromisso_id} não encontrado")
+        
+        # Calcula status inicial
+        hoje = date.today()
+        status = 'Vencido' if data_vencimento < hoje else 'Pendente'
+        
+        nova_conta = ContaReceber(
+            compromisso_id=compromisso_id,
+            descricao=descricao,
+            valor=float(valor),
+            data_vencimento=data_vencimento,
+            data_pagamento=None,
+            status=status,
+            forma_pagamento=forma_pagamento,
+            observacoes=observacoes
+        )
+        
+        session.add(nova_conta)
+        session.commit()
+        session.refresh(nova_conta)
+        
+        auditoria.registrar_auditoria('CREATE', 'Contas a Receber', nova_conta.id, valores_novos={
+            'compromisso_id': compromisso_id,
+            'descricao': descricao,
+            'valor': valor,
+            'data_vencimento': str(data_vencimento)
+        })
+        
+        return nova_conta
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def listar_contas_receber(status=None, data_inicio=None, data_fim=None, compromisso_id=None):
+    """Lista contas a receber com filtros opcionais"""
+    session = get_session()
+    try:
+        query = session.query(ContaReceber)
+        
+        if status:
+            query = query.filter(ContaReceber.status == status)
+        if compromisso_id:
+            query = query.filter(ContaReceber.compromisso_id == compromisso_id)
+        if data_inicio:
+            query = query.filter(ContaReceber.data_vencimento >= data_inicio)
+        if data_fim:
+            query = query.filter(ContaReceber.data_vencimento <= data_fim)
+        
+        contas = query.all()
+        
+        # Recalcula status para garantir consistência
+        hoje = date.today()
+        for conta in contas:
+            if conta.data_pagamento:
+                conta.status = 'Pago'
+            elif conta.data_vencimento < hoje:
+                conta.status = 'Vencido'
+            else:
+                conta.status = 'Pendente'
+        
+        return contas
+    except Exception as e:
+        raise e
+    finally:
+        session.close()
+
+
+def atualizar_conta_receber(conta_id, descricao=None, valor=None, data_vencimento=None, data_pagamento=None, status=None, forma_pagamento=None, observacoes=None):
+    """Atualiza uma conta a receber"""
+    session = get_session()
+    try:
+        conta = session.query(ContaReceber).filter(ContaReceber.id == conta_id).first()
+        if not conta:
+            return None
+        
+        valores_antigos = {
+            'descricao': conta.descricao,
+            'valor': conta.valor,
+            'data_vencimento': str(conta.data_vencimento),
+            'data_pagamento': str(conta.data_pagamento) if conta.data_pagamento else None,
+            'status': conta.status
+        }
+        
+        if descricao is not None:
+            conta.descricao = descricao
+        if valor is not None:
+            conta.valor = float(valor)
+        if data_vencimento is not None:
+            conta.data_vencimento = data_vencimento
+        if data_pagamento is not None:
+            conta.data_pagamento = data_pagamento
+            if data_pagamento:
+                conta.status = 'Pago'
+        if status is not None:
+            conta.status = status
+        if forma_pagamento is not None:
+            conta.forma_pagamento = forma_pagamento
+        if observacoes is not None:
+            conta.observacoes = observacoes
+        
+        # Recalcula status se necessário
+        hoje = date.today()
+        if conta.data_pagamento:
+            conta.status = 'Pago'
+        elif conta.data_vencimento < hoje:
+            conta.status = 'Vencido'
+        else:
+            conta.status = 'Pendente'
+        
+        session.commit()
+        session.refresh(conta)
+        
+        auditoria.registrar_auditoria('UPDATE', 'Contas a Receber', conta_id, valores_antigos=valores_antigos, valores_novos={
+            'descricao': conta.descricao,
+            'valor': conta.valor,
+            'data_vencimento': str(conta.data_vencimento),
+            'data_pagamento': str(conta.data_pagamento) if conta.data_pagamento else None,
+            'status': conta.status
+        })
+        
+        return conta
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def marcar_conta_receber_paga(conta_id, data_pagamento=None, forma_pagamento=None):
+    """Marca uma conta a receber como paga"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    return atualizar_conta_receber(conta_id, data_pagamento=data_pagamento, status='Pago', forma_pagamento=forma_pagamento)
+
+
+def deletar_conta_receber(conta_id):
+    """Deleta uma conta a receber"""
+    session = get_session()
+    try:
+        conta = session.query(ContaReceber).filter(ContaReceber.id == conta_id).first()
+        if not conta:
+            return False
+        
+        valores_antigos = {
+            'compromisso_id': conta.compromisso_id,
+            'descricao': conta.descricao,
+            'valor': conta.valor
+        }
+        
+        session.delete(conta)
+        session.commit()
+        
+        auditoria.registrar_auditoria('DELETE', 'Contas a Receber', conta_id, valores_antigos=valores_antigos)
+        
+        return True
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+# ============= CONTAS A PAGAR =============
+
+def criar_conta_pagar(descricao, categoria, valor, data_vencimento, fornecedor=None, item_id=None, forma_pagamento=None, observacoes=None):
+    """Cria uma nova conta a pagar"""
+    session = get_session()
+    try:
+        # Verifica se item existe (se fornecido)
+        if item_id:
+            item = session.query(Item).filter(Item.id == item_id).first()
+            if not item:
+                raise ValueError(f"Item {item_id} não encontrado")
+        
+        # Calcula status inicial
+        hoje = date.today()
+        status = 'Vencido' if data_vencimento < hoje else 'Pendente'
+        
+        nova_conta = ContaPagar(
+            descricao=descricao,
+            categoria=categoria,
+            valor=float(valor),
+            data_vencimento=data_vencimento,
+            data_pagamento=None,
+            status=status,
+            fornecedor=fornecedor,
+            item_id=item_id,
+            forma_pagamento=forma_pagamento,
+            observacoes=observacoes
+        )
+        
+        session.add(nova_conta)
+        session.commit()
+        session.refresh(nova_conta)
+        
+        auditoria.registrar_auditoria('CREATE', 'Contas a Pagar', nova_conta.id, valores_novos={
+            'descricao': descricao,
+            'categoria': categoria,
+            'valor': valor,
+            'data_vencimento': str(data_vencimento)
+        })
+        
+        return nova_conta
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def listar_contas_pagar(status=None, data_inicio=None, data_fim=None, categoria=None):
+    """Lista contas a pagar com filtros opcionais"""
+    session = get_session()
+    try:
+        query = session.query(ContaPagar)
+        
+        if status:
+            query = query.filter(ContaPagar.status == status)
+        if categoria:
+            query = query.filter(ContaPagar.categoria == categoria)
+        if data_inicio:
+            query = query.filter(ContaPagar.data_vencimento >= data_inicio)
+        if data_fim:
+            query = query.filter(ContaPagar.data_vencimento <= data_fim)
+        
+        contas = query.all()
+        
+        # Recalcula status para garantir consistência
+        hoje = date.today()
+        for conta in contas:
+            if conta.data_pagamento:
+                conta.status = 'Pago'
+            elif conta.data_vencimento < hoje:
+                conta.status = 'Vencido'
+            else:
+                conta.status = 'Pendente'
+        
+        return contas
+    except Exception as e:
+        raise e
+    finally:
+        session.close()
+
+
+def atualizar_conta_pagar(conta_id, descricao=None, categoria=None, valor=None, data_vencimento=None, data_pagamento=None, status=None, fornecedor=None, item_id=None, forma_pagamento=None, observacoes=None):
+    """Atualiza uma conta a pagar"""
+    session = get_session()
+    try:
+        conta = session.query(ContaPagar).filter(ContaPagar.id == conta_id).first()
+        if not conta:
+            return None
+        
+        valores_antigos = {
+            'descricao': conta.descricao,
+            'categoria': conta.categoria,
+            'valor': conta.valor,
+            'data_vencimento': str(conta.data_vencimento),
+            'data_pagamento': str(conta.data_pagamento) if conta.data_pagamento else None,
+            'status': conta.status
+        }
+        
+        if descricao is not None:
+            conta.descricao = descricao
+        if categoria is not None:
+            conta.categoria = categoria
+        if valor is not None:
+            conta.valor = float(valor)
+        if data_vencimento is not None:
+            conta.data_vencimento = data_vencimento
+        if data_pagamento is not None:
+            conta.data_pagamento = data_pagamento
+            if data_pagamento:
+                conta.status = 'Pago'
+        if status is not None:
+            conta.status = status
+        if fornecedor is not None:
+            conta.fornecedor = fornecedor
+        if item_id is not None:
+            conta.item_id = item_id
+        if forma_pagamento is not None:
+            conta.forma_pagamento = forma_pagamento
+        if observacoes is not None:
+            conta.observacoes = observacoes
+        
+        # Recalcula status se necessário
+        hoje = date.today()
+        if conta.data_pagamento:
+            conta.status = 'Pago'
+        elif conta.data_vencimento < hoje:
+            conta.status = 'Vencido'
+        else:
+            conta.status = 'Pendente'
+        
+        session.commit()
+        session.refresh(conta)
+        
+        auditoria.registrar_auditoria('UPDATE', 'Contas a Pagar', conta_id, valores_antigos=valores_antigos, valores_novos={
+            'descricao': conta.descricao,
+            'categoria': conta.categoria,
+            'valor': conta.valor,
+            'data_vencimento': str(conta.data_vencimento),
+            'data_pagamento': str(conta.data_pagamento) if conta.data_pagamento else None,
+            'status': conta.status
+        })
+        
+        return conta
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def marcar_conta_pagar_paga(conta_id, data_pagamento=None, forma_pagamento=None):
+    """Marca uma conta a pagar como paga"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    return atualizar_conta_pagar(conta_id, data_pagamento=data_pagamento, status='Pago', forma_pagamento=forma_pagamento)
+
+
+def deletar_conta_pagar(conta_id):
+    """Deleta uma conta a pagar"""
+    session = get_session()
+    try:
+        conta = session.query(ContaPagar).filter(ContaPagar.id == conta_id).first()
+        if not conta:
+            return False
+        
+        valores_antigos = {
+            'descricao': conta.descricao,
+            'categoria': conta.categoria,
+            'valor': conta.valor
+        }
+        
+        session.delete(conta)
+        session.commit()
+        
+        auditoria.registrar_auditoria('DELETE', 'Contas a Pagar', conta_id, valores_antigos=valores_antigos)
+        
+        return True
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+# ============= FUNÇÕES DE CÁLCULO FINANCEIRO =============
+
+def calcular_saldo_periodo(data_inicio, data_fim):
+    """Calcula saldo (receitas - despesas) em um período"""
+    receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
+    despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
+    
+    receitas_pagas = sum(c.valor for c in receitas if c.status == 'Pago')
+    despesas_pagas = sum(c.valor for c in despesas if c.status == 'Pago')
+    
+    return {
+        'receitas': receitas_pagas,
+        'despesas': despesas_pagas,
+        'saldo': receitas_pagas - despesas_pagas,
+        'total_receitas': len(receitas),
+        'total_despesas': len(despesas)
+    }
+
+
+def obter_fluxo_caixa(data_inicio, data_fim):
+    """Retorna fluxo de caixa por período (agrupado por mês)"""
+    receitas = listar_contas_receber(data_inicio=data_inicio, data_fim=data_fim)
+    despesas = listar_contas_pagar(data_inicio=data_inicio, data_fim=data_fim)
+    
+    fluxo = {}
+    
+    for conta in receitas:
+        if conta.status == 'Pago':
+            mes = conta.data_pagamento.strftime('%Y-%m') if conta.data_pagamento else conta.data_vencimento.strftime('%Y-%m')
+            if mes not in fluxo:
+                fluxo[mes] = {'receitas': 0, 'despesas': 0}
+            fluxo[mes]['receitas'] += conta.valor
+    
+    for conta in despesas:
+        if conta.status == 'Pago':
+            mes = conta.data_pagamento.strftime('%Y-%m') if conta.data_pagamento else conta.data_vencimento.strftime('%Y-%m')
+            if mes not in fluxo:
+                fluxo[mes] = {'receitas': 0, 'despesas': 0}
+            fluxo[mes]['despesas'] += conta.valor
+    
+    # Converte para lista ordenada
+    resultado = []
+    for mes in sorted(fluxo.keys()):
+        resultado.append({
+            'mes': mes,
+            'receitas': fluxo[mes]['receitas'],
+            'despesas': fluxo[mes]['despesas'],
+            'saldo': fluxo[mes]['receitas'] - fluxo[mes]['despesas']
+        })
+    
+    return resultado
+
+
+# ============= FINANCIAMENTOS =============
+
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None):
+    """Cria um novo financiamento e gera as parcelas automaticamente"""
+    from datetime import timedelta
+    import calendar
+    
+    session = get_session()
+    try:
+        # Verifica se item existe
+        item = session.query(Item).filter(Item.id == item_id).first()
+        if not item:
+            raise ValueError(f"Item {item_id} não encontrado")
+        
+        # Calcula valor da parcela (fixo)
+        valor_parcela = valor_total / numero_parcelas
+        
+        # Cria financiamento
+        financiamento = Financiamento(
+            item_id=item_id,
+            valor_total=float(valor_total),
+            numero_parcelas=numero_parcelas,
+            valor_parcela=float(valor_parcela),
+            taxa_juros=float(taxa_juros),
+            data_inicio=data_inicio,
+            status='Ativo',
+            instituicao_financeira=instituicao_financeira,
+            observacoes=observacoes
+        )
+        
+        session.add(financiamento)
+        session.flush()  # Para obter o ID
+        
+        # Gera parcelas automaticamente
+        data_venc = data_inicio
+        for i in range(1, numero_parcelas + 1):
+            # Calcula data de vencimento
+            if i == 1:
+                data_vencimento = data_venc
+            else:
+                meses_adicionar = i - 1
+                ano = data_venc.year
+                mes = data_venc.month + meses_adicionar
+                while mes > 12:
+                    mes -= 12
+                    ano += 1
+                try:
+                    data_vencimento = date(ano, mes, data_venc.day)
+                except ValueError:
+                    ultimo_dia = calendar.monthrange(ano, mes)[1]
+                    data_vencimento = date(ano, mes, ultimo_dia)
+            
+            parcela = ParcelaFinanciamento(
+                financiamento_id=financiamento.id,
+                numero_parcela=i,
+                valor_original=float(valor_parcela),
+                valor_pago=0.0,
+                data_vencimento=data_vencimento,
+                data_pagamento=None,
+                status='Pendente',
+                juros=0.0,
+                multa=0.0,
+                desconto=0.0
+            )
+            session.add(parcela)
+        
+        session.commit()
+        session.refresh(financiamento)
+        
+        auditoria.registrar_auditoria('CREATE', 'Financiamentos', financiamento.id, valores_novos={
+            'item_id': item_id,
+            'valor_total': valor_total,
+            'numero_parcelas': numero_parcelas
+        })
+        
+        return financiamento
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def listar_financiamentos(status=None, item_id=None):
+    """Lista financiamentos com filtros opcionais"""
+    session = get_session()
+    try:
+        query = session.query(Financiamento)
+        
+        if status:
+            query = query.filter(Financiamento.status == status)
+        if item_id:
+            query = query.filter(Financiamento.item_id == item_id)
+        
+        return query.all()
+    except Exception as e:
+        raise e
+    finally:
+        session.close()
+
+
+def buscar_financiamento_por_id(financiamento_id):
+    """Busca um financiamento por ID"""
+    session = get_session()
+    try:
+        return session.query(Financiamento).filter(Financiamento.id == financiamento_id).first()
+    except Exception as e:
+        raise e
+    finally:
+        session.close()
+
+
+def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None, status=None, instituicao_financeira=None, observacoes=None):
+    """Atualiza um financiamento"""
+    session = get_session()
+    try:
+        financiamento = session.query(Financiamento).filter(Financiamento.id == financiamento_id).first()
+        if not financiamento:
+            return None
+        
+        valores_antigos = {
+            'valor_total': financiamento.valor_total,
+            'taxa_juros': financiamento.taxa_juros,
+            'status': financiamento.status
+        }
+        
+        if valor_total is not None:
+            financiamento.valor_total = float(valor_total)
+        if taxa_juros is not None:
+            financiamento.taxa_juros = float(taxa_juros)
+        if status is not None:
+            financiamento.status = status
+        if instituicao_financeira is not None:
+            financiamento.instituicao_financeira = instituicao_financeira
+        if observacoes is not None:
+            financiamento.observacoes = observacoes
+        
+        session.commit()
+        session.refresh(financiamento)
+        
+        auditoria.registrar_auditoria('UPDATE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos, valores_novos={
+            'valor_total': financiamento.valor_total,
+            'taxa_juros': financiamento.taxa_juros,
+            'status': financiamento.status
+        })
+        
+        return financiamento
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def deletar_financiamento(financiamento_id):
+    """Deleta um financiamento e suas parcelas"""
+    session = get_session()
+    try:
+        financiamento = session.query(Financiamento).filter(Financiamento.id == financiamento_id).first()
+        if not financiamento:
+            return False
+        
+        valores_antigos = {
+            'item_id': financiamento.item_id,
+            'valor_total': financiamento.valor_total
+        }
+        
+        session.delete(financiamento)  # Cascade deleta parcelas automaticamente
+        session.commit()
+        
+        auditoria.registrar_auditoria('DELETE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos)
+        
+        return True
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def listar_parcelas_financiamento(financiamento_id=None, status=None):
+    """Lista parcelas de financiamento com filtros opcionais"""
+    session = get_session()
+    try:
+        query = session.query(ParcelaFinanciamento)
+        
+        if financiamento_id:
+            query = query.filter(ParcelaFinanciamento.financiamento_id == financiamento_id)
+        if status:
+            query = query.filter(ParcelaFinanciamento.status == status)
+        
+        parcelas = query.all()
+        
+        # Recalcula status para garantir consistência
+        hoje = date.today()
+        for parcela in parcelas:
+            if parcela.valor_pago >= parcela.valor_original:
+                parcela.status = 'Paga'
+            elif parcela.data_vencimento < hoje:
+                parcela.status = 'Atrasada'
+            else:
+                parcela.status = 'Pendente'
+        
+        return parcelas
+    except Exception as e:
+        raise e
+    finally:
+        session.close()
+
+
+def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, juros=0.0, multa=0.0, desconto=0.0):
+    """Registra pagamento de uma parcela"""
+    if data_pagamento is None:
+        data_pagamento = date.today()
+    
+    session = get_session()
+    try:
+        parcela = session.query(ParcelaFinanciamento).filter(ParcelaFinanciamento.id == parcela_id).first()
+        if not parcela:
+            return None
+        
+        valores_antigos = {
+            'valor_pago': parcela.valor_pago,
+            'data_pagamento': str(parcela.data_pagamento) if parcela.data_pagamento else None
+        }
+        
+        valor_pago_total = float(valor_pago) + float(juros) + float(multa) - float(desconto)
+        parcela.valor_pago = valor_pago_total
+        parcela.data_pagamento = data_pagamento
+        parcela.juros = float(juros)
+        parcela.multa = float(multa)
+        parcela.desconto = float(desconto)
+        
+        # Atualiza status
+        if valor_pago_total >= parcela.valor_original:
+            parcela.status = 'Paga'
+        else:
+            parcela.status = 'Pendente'
+        
+        session.commit()
+        session.refresh(parcela)
+        
+        # Verifica se financiamento foi quitado
+        parcelas = listar_parcelas_financiamento(financiamento_id=parcela.financiamento_id)
+        todas_pagas = all(p.status == 'Paga' for p in parcelas)
+        if todas_pagas:
+            atualizar_financiamento(parcela.financiamento_id, status='Quitado')
+        
+        auditoria.registrar_auditoria('UPDATE', 'Parcelas Financiamento', parcela_id, valores_antigos=valores_antigos, valores_novos={
+            'valor_pago': valor_pago_total,
+            'data_pagamento': str(data_pagamento)
+        })
+        
+        return parcela
     except Exception as e:
         session.rollback()
         raise e

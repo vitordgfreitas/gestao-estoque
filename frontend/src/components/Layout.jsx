@@ -28,6 +28,7 @@ const menuItems = [
   { path: '/financeiro', icon: DollarSign, label: 'Financeiro' },
   { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
   { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
+  { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' },
 ]
 
 export default function Layout({ children }) {

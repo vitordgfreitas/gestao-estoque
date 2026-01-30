@@ -11,6 +11,7 @@ import VisualizarDados from './pages/VisualizarDados'
 import ContasReceber from './pages/ContasReceber'
 import ContasPagar from './pages/ContasPagar'
 import DashboardFinanceiro from './pages/DashboardFinanceiro'
+import Financiamentos from './pages/Financiamentos'
 import { authAPI } from './services/api'
 
 function ProtectedRoute({ children }) {
@@ -55,6 +56,7 @@ function App() {
                   <Route path="/contas-receber" element={<ContasReceber />} />
                   <Route path="/contas-pagar" element={<ContasPagar />} />
                   <Route path="/financeiro" element={<DashboardFinanceiro />} />
+                  <Route path="/financiamentos" element={<Financiamentos />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>
