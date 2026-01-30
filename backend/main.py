@@ -499,7 +499,7 @@ class ValorPresenteResponse(BaseModel):
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
-    """Converte Item SQLAlchemy para dict"""
+    """Converte Item para dict, incluindo dados_categoria e carro"""
     result = {
         "id": item.id,
         "nome": item.nome,
@@ -511,18 +511,32 @@ def item_to_dict(item: Item) -> dict:
         "endereco": item.endereco,
     }
     
-    # Adiciona dados do carro se existir
+    # Adiciona dados_categoria se existir (prioridade)
+    if hasattr(item, 'dados_categoria') and item.dados_categoria:
+        # Se dados_categoria é dict, usa diretamente
+        if isinstance(item.dados_categoria, dict):
+            result["dados_categoria"] = item.dados_categoria
+        else:
+            # Se for objeto, converte para dict
+            result["dados_categoria"] = item.dados_categoria if hasattr(item.dados_categoria, '__dict__') else {}
+    
+    # Adiciona dados do carro se existir (para compatibilidade)
     if hasattr(item, 'carro') and item.carro:
         result["carro"] = {
-            "placa": item.carro.placa,
-            "marca": item.carro.marca,
-            "modelo": item.carro.modelo,
-            "ano": item.carro.ano
+            "placa": getattr(item.carro, 'placa', '') or (result.get("dados_categoria", {}).get('Placa') or result.get("dados_categoria", {}).get('placa') or ''),
+            "marca": getattr(item.carro, 'marca', '') or (result.get("dados_categoria", {}).get('Marca') or result.get("dados_categoria", {}).get('marca') or ''),
+            "modelo": getattr(item.carro, 'modelo', '') or (result.get("dados_categoria", {}).get('Modelo') or result.get("dados_categoria", {}).get('modelo') or ''),
+            "ano": getattr(item.carro, 'ano', 0) or (result.get("dados_categoria", {}).get('Ano') or 0)
         }
-    
-    # Adiciona dados_categoria se existir
-    if hasattr(item, 'dados_categoria') and item.dados_categoria:
-        result["dados_categoria"] = item.dados_categoria
+    elif result.get("dados_categoria") and result.get("categoria") == 'Carros':
+        # Se não tem carro mas tem dados_categoria e é Carros, cria objeto carro
+        dados = result["dados_categoria"]
+        result["carro"] = {
+            "placa": dados.get('Placa') or dados.get('placa') or '',
+            "marca": dados.get('Marca') or dados.get('marca') or '',
+            "modelo": dados.get('Modelo') or dados.get('modelo') or '',
+            "ano": dados.get('Ano') or dados.get('ano') or 0
+        }
     
     return result
 

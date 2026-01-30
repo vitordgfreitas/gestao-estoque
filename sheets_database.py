@@ -1425,18 +1425,24 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         if valor_parcela_rounded == int(valor_parcela_rounded):
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
+        # Usa update ao invés de append_row para garantir formatação correta
+        # Primeiro adiciona a linha
+        row_num = len(sheet_financiamentos.get_all_values()) + 1
         sheet_financiamentos.append_row([
             next_id,
             item_id,
-            valor_total_rounded,  # Salva como float (ex: 80000.0)
+            '',  # Placeholder para valor_total
             numero_parcelas,
-            valor_parcela_rounded,  # Salva como float (ex: 4229.69)
+            '',  # Placeholder para valor_parcela
             float(taxa_juros),
             data_inicio_str,
             'Ativo',
             instituicao_financeira or '',
             observacoes or ''
         ])
+        # Agora atualiza os valores numéricos com formatação explícita
+        sheet_financiamentos.update_cell(row_num, 3, valor_total_rounded)  # Valor Total
+        sheet_financiamentos.update_cell(row_num, 5, valor_parcela_rounded)  # Valor Parcela
         
         # Gera parcelas
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
@@ -1470,11 +1476,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     # Garante que valores inteiros sejam salvos como float
                     if valor_parcela_custom == int(valor_parcela_custom):
                         valor_parcela_custom = float(f"{valor_parcela_custom:.2f}")
+                    # Adiciona linha primeiro, depois atualiza valor com update_cell para garantir formatação
+                    row_parcela_custom_num = len(sheet_parcelas.get_all_values()) + 1
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         parcela_custom.get('numero', idx + 1),
-                        valor_parcela_custom,  # Salva como float (ex: 4229.69)
+                        '',  # Placeholder - será atualizado com update_cell
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
                         '',  # Data pagamento vazia
@@ -1484,6 +1492,8 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                         0.0,  # Desconto
                         ''  # Link Boleto vazio
                     ])
+                    # Atualiza valor da parcela com update_cell para garantir que seja salvo como decimal
+                    sheet_parcelas.update_cell(row_parcela_custom_num, 4, valor_parcela_custom)
                     parcelas_ids.append(parcela_id)
                 except Exception as e:
                     raise Exception(f"Erro ao criar parcela customizada {idx + 1}: {str(e)}")
@@ -1518,11 +1528,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     # Garante que valores inteiros sejam salvos como float
                     if valor_parcela_rounded == int(valor_parcela_rounded):
                         valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
+                    # Adiciona linha primeiro, depois atualiza valor com update_cell para garantir formatação
+                    row_parcela_num = len(sheet_parcelas.get_all_values()) + 1
                     sheet_parcelas.append_row([
                         parcela_id,
                         next_id,
                         i,
-                        valor_parcela_rounded,  # Salva como float (ex: 4229.69)
+                        '',  # Placeholder - será atualizado com update_cell
                         0.0,  # Valor pago inicialmente 0
                         data_vencimento.strftime('%Y-%m-%d'),
                         '',  # Data pagamento vazia
@@ -1532,6 +1544,8 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                         0.0,  # Desconto
                         ''  # Link Boleto vazio
                     ])
+                    # Atualiza valor da parcela com update_cell para garantir que seja salvo como decimal
+                    sheet_parcelas.update_cell(row_parcela_num, 4, valor_parcela_rounded)
                     parcelas_ids.append(parcela_id)
                 except Exception as e:
                     raise Exception(f"Erro ao criar parcela {i} de {numero_parcelas}: {str(e)}")
