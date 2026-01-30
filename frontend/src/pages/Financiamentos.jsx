@@ -231,6 +231,9 @@ export default function Financiamentos() {
                   onChange={(e) => {
                     const itemId = e.target.value
                     const item = itens.find(i => i.id === parseInt(itemId))
+                    console.log('Item selecionado:', item)
+                    console.log('dados_categoria:', item?.dados_categoria)
+                    console.log('carro:', item?.carro)
                     setSelectedItem(item || null)
                     setFormData({ ...formData, item_id: itemId })
                   }}
@@ -242,17 +245,38 @@ export default function Financiamentos() {
                     <option key={item.id} value={item.id}>{item.nome}</option>
                   ))}
                 </select>
-                {selectedItem && selectedItem.categoria === 'Carros' && selectedItem.dados_categoria && (
+                {selectedItem && selectedItem.categoria === 'Carros' && (
                   <div className="mt-2 p-2 bg-dark-700/50 rounded text-sm text-dark-300">
                     <p><span className="font-semibold">Nome:</span> {selectedItem.nome}</p>
-                    {selectedItem.dados_categoria.placa && (
-                      <p><span className="font-semibold">Placa:</span> {selectedItem.dados_categoria.placa}</p>
+                    {/* Tenta obter placa de diferentes fontes */}
+                    {(selectedItem.dados_categoria?.Placa || 
+                      selectedItem.dados_categoria?.placa || 
+                      selectedItem.carro?.placa) && (
+                      <p><span className="font-semibold">Placa:</span> {
+                        selectedItem.dados_categoria?.Placa || 
+                        selectedItem.dados_categoria?.placa || 
+                        selectedItem.carro?.placa
+                      }</p>
                     )}
-                    {selectedItem.dados_categoria.marca && (
-                      <p><span className="font-semibold">Marca:</span> {selectedItem.dados_categoria.marca}</p>
+                    {/* Tenta obter marca de diferentes fontes */}
+                    {(selectedItem.dados_categoria?.Marca || 
+                      selectedItem.dados_categoria?.marca || 
+                      selectedItem.carro?.marca) && (
+                      <p><span className="font-semibold">Marca:</span> {
+                        selectedItem.dados_categoria?.Marca || 
+                        selectedItem.dados_categoria?.marca || 
+                        selectedItem.carro?.marca
+                      }</p>
                     )}
-                    {selectedItem.dados_categoria.modelo && (
-                      <p><span className="font-semibold">Modelo:</span> {selectedItem.dados_categoria.modelo}</p>
+                    {/* Tenta obter modelo de diferentes fontes */}
+                    {(selectedItem.dados_categoria?.Modelo || 
+                      selectedItem.dados_categoria?.modelo || 
+                      selectedItem.carro?.modelo) && (
+                      <p><span className="font-semibold">Modelo:</span> {
+                        selectedItem.dados_categoria?.Modelo || 
+                        selectedItem.dados_categoria?.modelo || 
+                        selectedItem.carro?.modelo
+                      }</p>
                     )}
                   </div>
                 )}
