@@ -597,6 +597,22 @@ export default function Financiamentos() {
                   <p className="text-sm text-dark-400">Número de Parcelas</p>
                   <p className="text-white font-semibold">{selectedFinanciamento.numero_parcelas}</p>
                 </div>
+                {selectedFinanciamento.parcelas && (
+                  <>
+                    <div>
+                      <p className="text-sm text-dark-400">Parcelas Pagas</p>
+                      <p className="text-white font-semibold text-green-400">
+                        {selectedFinanciamento.parcelas.filter(p => p.status === 'Paga').length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-dark-400">Parcelas Faltantes</p>
+                      <p className="text-white font-semibold text-yellow-400">
+                        {selectedFinanciamento.parcelas.filter(p => p.status !== 'Paga').length}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
               
               {selectedFinanciamento.parcelas && (

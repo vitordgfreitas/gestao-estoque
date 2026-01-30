@@ -1644,16 +1644,17 @@ def listar_financiamentos(status=None, item_id=None):
                     if val is None:
                         return 0.0
                     if isinstance(val, (int, float)):
-                        # Se o número é muito grande, pode estar sem ponto decimal
                         val_float = float(val)
-                        # Se o valor parece estar sem ponto decimal (ex: 422968778 para 4229.69)
-                        # Verifica se é um número muito grande que deveria ter ponto decimal
-                        if val_float > 10000 and val_float < 1000000000:
-                            # Pode ser um número que perdeu o ponto decimal
-                            # Tenta dividir por 100 para ver se faz sentido
-                            test_val = val_float / 100
-                            if test_val < 100000:  # Se dividido por 100 fica razoável
-                                return round(test_val, 2)
+                        # Só tenta corrigir se o valor é MUITO grande (provavelmente sem ponto decimal)
+                        # Ex: 422968778 (deveria ser 4229.69) - valores acima de 1 milhão são suspeitos
+                        # Valores como 80000 são válidos e não devem ser divididos
+                        if val_float >= 1000000 and val_float < 1000000000:
+                            # Tenta diferentes divisores apenas para valores muito grandes
+                            for divisor in [100000, 10000, 1000]:
+                                test_val = val_float / divisor
+                                # Só aceita se o resultado for razoável (entre 1 e 100000)
+                                if 1 <= test_val < 100000:
+                                    return round(test_val, 2)
                         return round(val_float, 2)
                     if isinstance(val, str):
                         # Remove espaços e pontos de milhar
@@ -1677,11 +1678,11 @@ def listar_financiamentos(status=None, item_id=None):
                         
                         try:
                             val_float = float(val_clean)
-                            # Verifica se precisa dividir (número muito grande sem ponto decimal)
-                            # Ex: 422968778 deveria ser 4229.69
-                            if val_float > 10000 and val_float < 1000000000:
-                                # Tenta diferentes divisores
-                                for divisor in [100000, 10000, 1000, 100]:
+                            # Só tenta corrigir se o valor é MUITO grande (>= 1 milhão) - provavelmente sem ponto decimal
+                            # Valores como 80000 são válidos e não devem ser divididos
+                            if val_float >= 1000000 and val_float < 1000000000:
+                                # Tenta diferentes divisores apenas para valores muito grandes
+                                for divisor in [100000, 10000, 1000]:
                                     test_val = val_float / divisor
                                     if 1 <= test_val < 100000:  # Valor razoável
                                         return round(test_val, 2)
@@ -1880,8 +1881,10 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
                     return 0.0
                 if isinstance(val, (int, float)):
                     val_float = float(val)
-                    if val_float > 10000 and val_float < 1000000000:
-                        for divisor in [100000, 10000, 1000, 100]:
+                    # Só tenta corrigir se o valor é MUITO grande (>= 1 milhão) - provavelmente sem ponto decimal
+                    # Valores como 80000 são válidos e não devem ser divididos
+                    if val_float >= 1000000 and val_float < 1000000000:
+                        for divisor in [100000, 10000, 1000]:
                             test_val = val_float / divisor
                             if 1 <= test_val < 100000:
                                 return round(test_val, 2)
@@ -1898,8 +1901,9 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
                         val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
                     try:
                         val_float = float(val_clean)
-                        if val_float > 10000 and val_float < 1000000000:
-                            for divisor in [100000, 10000, 1000, 100]:
+                        # Só tenta corrigir se o valor é MUITO grande (>= 1 milhão)
+                        if val_float >= 1000000 and val_float < 1000000000:
+                            for divisor in [100000, 10000, 1000]:
                                 test_val = val_float / divisor
                                 if 1 <= test_val < 100000:
                                     return round(test_val, 2)
@@ -2017,8 +2021,10 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
                     return 0.0
                 if isinstance(val, (int, float)):
                     val_float = float(val)
-                    if val_float > 10000 and val_float < 1000000000:
-                        for divisor in [100000, 10000, 1000, 100]:
+                    # Só tenta corrigir se o valor é MUITO grande (>= 1 milhão) - provavelmente sem ponto decimal
+                    # Valores como 80000 são válidos e não devem ser divididos
+                    if val_float >= 1000000 and val_float < 1000000000:
+                        for divisor in [100000, 10000, 1000]:
                             test_val = val_float / divisor
                             if 1 <= test_val < 100000:
                                 return round(test_val, 2)
@@ -2035,8 +2041,9 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
                         val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
                     try:
                         val_float = float(val_clean)
-                        if val_float > 10000 and val_float < 1000000000:
-                            for divisor in [100000, 10000, 1000, 100]:
+                        # Só tenta corrigir se o valor é MUITO grande (>= 1 milhão)
+                        if val_float >= 1000000 and val_float < 1000000000:
+                            for divisor in [100000, 10000, 1000]:
                                 test_val = val_float / divisor
                                 if 1 <= test_val < 100000:
                                     return round(test_val, 2)
