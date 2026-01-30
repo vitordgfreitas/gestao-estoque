@@ -1690,8 +1690,8 @@ def listar_financiamentos(status=None, item_id=None):
                             return 0.0
                     return round(float(val), 2)
                 
-                valor_total_conv = parse_value_local(valor_total_raw)
-                valor_parcela_conv = parse_value_local(valor_parcela_raw)
+                valor_total_conv = parse_value(valor_total_raw)
+                valor_parcela_conv = parse_value(valor_parcela_raw)
                 
                 fin = Financiamento(
                     record.get('ID'),
