@@ -1696,8 +1696,8 @@ def listar_financiamentos(status=None, item_id=None):
                             return 0.0
                     return round(float(val), 2)
                 
-                valor_total_conv = parse_value(valor_total_raw)
-                valor_parcela_conv = parse_value(valor_parcela_raw)
+                valor_total_conv = parse_value_local(valor_total_raw)
+                valor_parcela_conv = parse_value_local(valor_parcela_raw)
                 
                 fin = Financiamento(
                     record.get('ID'),
@@ -1880,8 +1880,42 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
             self.id = int(id) if id else None
             self.financiamento_id = int(financiamento_id) if financiamento_id else None
             self.numero_parcela = int(numero_parcela) if numero_parcela else 0
-            self.valor_original = float(valor_original) if valor_original else 0.0
-            self.valor_pago = float(valor_pago) if valor_pago else 0.0
+            # Função auxiliar para parse de valores
+            def parse_val(val):
+                if val is None:
+                    return 0.0
+                if isinstance(val, (int, float)):
+                    val_float = float(val)
+                    if val_float > 10000 and val_float < 1000000000:
+                        for divisor in [100000, 10000, 1000, 100]:
+                            test_val = val_float / divisor
+                            if 1 <= test_val < 100000:
+                                return round(test_val, 2)
+                    return round(val_float, 2)
+                if isinstance(val, str):
+                    val_clean = val.replace(' ', '').strip()
+                    if ',' in val_clean:
+                        if '.' in val_clean:
+                            val_clean = val_clean.replace('.', '').replace(',', '.')
+                        else:
+                            val_clean = val_clean.replace(',', '.')
+                    elif val_clean.count('.') > 1:
+                        parts = val_clean.split('.')
+                        val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+                    try:
+                        val_float = float(val_clean)
+                        if val_float > 10000 and val_float < 1000000000:
+                            for divisor in [100000, 10000, 1000, 100]:
+                                test_val = val_float / divisor
+                                if 1 <= test_val < 100000:
+                                    return round(test_val, 2)
+                        return round(val_float, 2)
+                    except (ValueError, TypeError):
+                        return 0.0
+                return round(float(val), 2)
+            
+            self.valor_original = parse_val(valor_original)
+            self.valor_pago = parse_val(valor_pago)
             self.link_boleto = link_boleto or ''
             if isinstance(data_vencimento, str) and data_vencimento:
                 try:
@@ -1983,7 +2017,40 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
             valores_antigos = record.copy()
             
             valor_pago_total = float(valor_pago) + float(juros) + float(multa) - float(desconto)
-            valor_original = float(record.get('Valor Original', 0))
+            # Função auxiliar para parse de valores
+            def parse_val_pagar(val):
+                if val is None:
+                    return 0.0
+                if isinstance(val, (int, float)):
+                    val_float = float(val)
+                    if val_float > 10000 and val_float < 1000000000:
+                        for divisor in [100000, 10000, 1000, 100]:
+                            test_val = val_float / divisor
+                            if 1 <= test_val < 100000:
+                                return round(test_val, 2)
+                    return round(val_float, 2)
+                if isinstance(val, str):
+                    val_clean = val.replace(' ', '').strip()
+                    if ',' in val_clean:
+                        if '.' in val_clean:
+                            val_clean = val_clean.replace('.', '').replace(',', '.')
+                        else:
+                            val_clean = val_clean.replace(',', '.')
+                    elif val_clean.count('.') > 1:
+                        parts = val_clean.split('.')
+                        val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+                    try:
+                        val_float = float(val_clean)
+                        if val_float > 10000 and val_float < 1000000000:
+                            for divisor in [100000, 10000, 1000, 100]:
+                                test_val = val_float / divisor
+                                if 1 <= test_val < 100000:
+                                    return round(test_val, 2)
+                        return round(val_float, 2)
+                    except (ValueError, TypeError):
+                        return 0.0
+                return round(float(val), 2)
+            valor_original = parse_val_pagar(record.get('Valor Original', 0))
             
             # Atualiza valores
             sheet_parcelas.update_cell(i, 5, valor_pago_total)  # Valor Pago
@@ -2007,7 +2074,10 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
             })
             
             _clear_cache()
-            return listar_parcelas_financiamento()[0] if listar_parcelas_financiamento() else None
+            # Retorna a parcela atualizada corretamente
+            parcelas_atualizadas = listar_parcelas_financiamento()
+            parcela_atualizada = next((p for p in parcelas_atualizadas if p.id == parcela_id), None)
+            return parcela_atualizada
     
     return None
 
