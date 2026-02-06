@@ -3,8 +3,8 @@ import { motion } from 'framer-motion'
 import { itensAPI, categoriasAPI } from '../services/api'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { getCidadesPorUF, ESTADOS } from '../utils/municipios'
 
-const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 const MARCAS_CARROS = [
   'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Toyota', 'Honda', 'Hyundai', 
   'Renault', 'Nissan', 'Peugeot', 'Citroën', 'Jeep', 'Mitsubishi', 'Kia',
@@ -17,6 +17,7 @@ export default function Itens() {
   const [categorias, setCategorias] = useState([])
   const [camposCategoria, setCamposCategoria] = useState([])
   const [loadingCategorias, setLoadingCategorias] = useState(true)
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
   const [formData, setFormData] = useState({
     nome: '',
     quantidade_total: 1,
@@ -43,6 +44,15 @@ export default function Itens() {
       setCamposDinamicos({})
     }
   }, [formData.categoria])
+
+  // Atualiza cidades quando UF muda
+  useEffect(() => {
+    if (formData.uf) {
+      setCidadesDisponiveis(getCidadesPorUF(formData.uf))
+    } else {
+      setCidadesDisponiveis([])
+    }
+  }, [formData.uf])
 
   const loadCategorias = async () => {
     try {
@@ -504,19 +514,6 @@ export default function Itens() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Cidade *</label>
-              <input
-                type="text"
-                name="cidade"
-                value={formData.cidade}
-                onChange={handleChange}
-                required
-                className="input"
-                placeholder="Ex: São Paulo, Rio de Janeiro..."
-              />
-            </div>
-
-            <div>
               <label className="label">UF *</label>
               <select
                 name="uf"
@@ -525,8 +522,24 @@ export default function Itens() {
                 required
                 className="input"
               >
-                {UFS.map(uf => (
-                  <option key={uf} value={uf}>{uf}</option>
+                {ESTADOS.map(estado => (
+                  <option key={estado.sigla} value={estado.sigla}>{estado.sigla}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Cidade *</label>
+              <select
+                name="cidade"
+                value={formData.cidade}
+                onChange={handleChange}
+                required
+                className="input"
+              >
+                <option value="">Selecione uma cidade</option>
+                {cidadesDisponiveis.map(cidade => (
+                  <option key={cidade} value={cidade}>{cidade}</option>
                 ))}
               </select>
             </div>

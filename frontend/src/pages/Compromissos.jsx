@@ -5,8 +5,9 @@ import api from '../services/api'
 import { Calendar, Plus, Info, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatItemName } from '../utils/format'
+import { getCidadesPorUF, ESTADOS } from '../utils/municipios'
 
-const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+const UFS = ESTADOS.map(e => e.sigla) // Para compatibilidade com código existente
 
 export default function Compromissos() {
   const [itens, setItens] = useState([])
@@ -16,6 +17,7 @@ export default function Compromissos() {
   const [itemSelecionado, setItemSelecionado] = useState(null)
   const [quantidadeFixa, setQuantidadeFixa] = useState(false)
   const [pecasSelecionadas, setPecasSelecionadas] = useState([])
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
   const [formData, setFormData] = useState({
     tipo_compromisso: 'itens_alugados',
     item_id: '',
@@ -52,6 +54,15 @@ export default function Compromissos() {
     setFormData(prev => ({ ...prev, item_id: '' }))
     setItemSelecionado(null)
   }, [categoriaFiltro, itens])
+
+  // Atualiza cidades quando UF muda
+  useEffect(() => {
+    if (formData.uf) {
+      setCidadesDisponiveis(getCidadesPorUF(formData.uf))
+    } else {
+      setCidadesDisponiveis([])
+    }
+  }, [formData.uf])
 
   // Atualiza quantidade fixa quando item selecionado muda
   useEffect(() => {
@@ -524,19 +535,6 @@ export default function Compromissos() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label">Cidade *</label>
-              <input
-                type="text"
-                name="cidade"
-                value={formData.cidade}
-                onChange={handleChange}
-                required
-                className="input"
-                placeholder="Ex: São Paulo, Rio de Janeiro..."
-              />
-            </div>
-
-            <div>
               <label className="label">UF *</label>
               <select
                 name="uf"
@@ -547,6 +545,22 @@ export default function Compromissos() {
               >
                 {UFS.map(uf => (
                   <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Cidade *</label>
+              <select
+                name="cidade"
+                value={formData.cidade}
+                onChange={handleChange}
+                required
+                className="input"
+              >
+                <option value="">Selecione uma cidade</option>
+                {cidadesDisponiveis.map(cidade => (
+                  <option key={cidade} value={cidade}>{cidade}</option>
                 ))}
               </select>
             </div>

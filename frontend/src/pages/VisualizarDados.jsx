@@ -8,8 +8,9 @@ import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { formatItemName } from '../utils/format'
+import { getCidadesPorUF, ESTADOS } from '../utils/municipios'
 
-const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+const UFS = ESTADOS.map(e => e.sigla) // Para compatibilidade
 const MARCAS_CARROS = [
   'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Toyota', 'Honda', 'Hyundai', 
   'Renault', 'Nissan', 'Peugeot', 'Citroën', 'Jeep', 'Mitsubishi', 'Kia',
@@ -606,12 +607,22 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
   const [camposCategoria, setCamposCategoria] = useState([])
   const [camposDinamicos, setCamposDinamicos] = useState(item.dados_categoria || {})
   const [loading, setLoading] = useState(false)
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
 
   useEffect(() => {
     if (formData.categoria) {
       loadCamposCategoria(formData.categoria)
     }
   }, [formData.categoria])
+
+  // Atualiza cidades quando UF muda
+  useEffect(() => {
+    if (formData.uf) {
+      setCidadesDisponiveis(getCidadesPorUF(formData.uf))
+    } else {
+      setCidadesDisponiveis([])
+    }
+  }, [formData.uf])
 
   const loadCamposCategoria = async (categoria) => {
     try {
@@ -823,16 +834,6 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label">Cidade *</label>
-            <input
-              type="text"
-              value={formData.cidade}
-              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-              required
-              className="input"
-            />
-          </div>
-          <div>
             <label className="label">UF *</label>
             <select
               value={formData.uf}
@@ -842,6 +843,20 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
             >
               {UFS.map(uf => (
                 <option key={uf} value={uf}>{uf}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Cidade *</label>
+            <select
+              value={formData.cidade}
+              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+              required
+              className="input"
+            >
+              <option value="">Selecione uma cidade</option>
+              {cidadesDisponiveis.map(cidade => (
+                <option key={cidade} value={cidade}>{cidade}</option>
               ))}
             </select>
           </div>
@@ -884,6 +899,16 @@ function EditCompromissoModal({ compromisso, itens, onClose, onSave }) {
     contratante: compromisso.contratante || '',
   })
   const [loading, setLoading] = useState(false)
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
+
+  // Atualiza cidades quando UF muda
+  useEffect(() => {
+    if (formData.uf) {
+      setCidadesDisponiveis(getCidadesPorUF(formData.uf))
+    } else {
+      setCidadesDisponiveis([])
+    }
+  }, [formData.uf])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -966,16 +991,6 @@ function EditCompromissoModal({ compromisso, itens, onClose, onSave }) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label">Cidade *</label>
-            <input
-              type="text"
-              value={formData.cidade}
-              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-              required
-              className="input"
-            />
-          </div>
-          <div>
             <label className="label">UF *</label>
             <select
               value={formData.uf}
@@ -985,6 +1000,20 @@ function EditCompromissoModal({ compromisso, itens, onClose, onSave }) {
             >
               {UFS.map(uf => (
                 <option key={uf} value={uf}>{uf}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Cidade *</label>
+            <select
+              value={formData.cidade}
+              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+              required
+              className="input"
+            >
+              <option value="">Selecione uma cidade</option>
+              {cidadesDisponiveis.map(cidade => (
+                <option key={cidade} value={cidade}>{cidade}</option>
               ))}
             </select>
           </div>
