@@ -133,6 +133,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Limpa cache ao iniciar (força recarregamento dos dados)
+@app.on_event("startup")
+async def startup_event():
+    """Executado quando o servidor inicia"""
+    if USE_GOOGLE_SHEETS:
+        try:
+            print("[STARTUP] Limpando cache de dados...")
+            db_module._clear_cache()
+            print("[STARTUP] Cache limpo com sucesso")
+        except Exception as e:
+            print(f"[STARTUP] Erro ao limpar cache: {e}")
+
 # Handler explícito para OPTIONS (preflight requests)
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
