@@ -1,0 +1,5 @@
+Forcing Render deployment
+Timestamp: 2026-02-06 17:15:00
+Changes:
+- Fixed obter_categorias() to include sheet tabs as categories
+- Now newly created categories appear immediately in dropdown
