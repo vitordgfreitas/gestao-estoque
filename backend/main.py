@@ -1731,9 +1731,14 @@ async def listar_financiamentos(
 ):
     """Lista financiamentos com filtros opcionais"""
     try:
+        print("[DEBUG] listar_financiamentos endpoint chamado")
         financiamentos = db_module.listar_financiamentos(status=status, item_id=item_id)
+        print(f"[DEBUG] {len(financiamentos)} financiamentos retornados")
         return [financiamento_to_dict(f) for f in financiamentos]
     except Exception as e:
+        print(f"[ERROR] Erro em listar_financiamentos: {type(e).__name__} - {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/financiamentos/{financiamento_id}", response_model=dict)

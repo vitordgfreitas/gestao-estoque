@@ -415,9 +415,11 @@ def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=No
 
 def listar_itens():
     """Lista todos os itens do estoque"""
-    # Verifica cache primeiro
-    if _is_cache_valid() and _data_cache['itens'] is not None:
-        return _data_cache['itens']
+    # CACHE DESABILITADO TEMPORARIAMENTE PARA DEBUG
+    # if _is_cache_valid() and _data_cache['itens'] is not None:
+    #     return _data_cache['itens']
+    
+    print("[DEBUG] listar_itens() iniciado - CACHE DESABILITADO")
     
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
@@ -435,6 +437,8 @@ def listar_itens():
     dados_categoria_dict = {}
     spreadsheet = sheets['spreadsheet']
     
+    print(f"[DEBUG] Spreadsheet obtido: {spreadsheet.title}")
+    
     # Obtém todas as categorias únicas dos itens
     try:
         categorias = set()
@@ -444,23 +448,30 @@ def listar_itens():
                 if categoria:  # Todas as categorias podem ter aba específica
                     categorias.add(categoria)
         
+        print(f"[DEBUG] Categorias encontradas: {categorias}")
+        
         # Para cada categoria, tenta ler dados da aba correspondente
         for categoria in categorias:
+            print(f"[DEBUG] Processando categoria: {categoria}")
             try:
                 sheet_categoria = spreadsheet.worksheet(categoria)
+                print(f"[DEBUG] Aba '{categoria}' encontrada")
                 categoria_records = sheet_categoria.get_all_records()
                 print(f"[DEBUG] Aba '{categoria}': {len(categoria_records)} registros encontrados")
                 for cat_record in categoria_records:
                     if cat_record and cat_record.get('Item ID'):
                         item_id = int(cat_record.get('Item ID'))
                         dados_categoria_dict[item_id] = {'categoria': categoria, 'dados': cat_record}
-                        print(f"[DEBUG] Item {item_id} - Dados: {cat_record}")
+                        print(f"[DEBUG] Item {item_id} ({categoria}) - Dados: {cat_record}")
             except (gspread.exceptions.WorksheetNotFound, IndexError, KeyError, ValueError, gspread.exceptions.APIError) as e:
                 # Aba não existe ou erro ao ler, continua
-                print(f"[DEBUG] Erro ao ler aba '{categoria}': {type(e).__name__} - {str(e)}")
+                print(f"[DEBUG] ERRO ao ler aba '{categoria}': {type(e).__name__} - {str(e)}")
                 pass
-    except Exception:
+    except Exception as e:
         # Em caso de erro geral, continua sem dados de categoria
+        print(f"[DEBUG] ERRO GERAL ao processar categorias: {type(e).__name__} - {str(e)}")
+        import traceback
+        traceback.print_exc()
         pass
     
     # Classe Carro mantida apenas para compatibilidade com código antigo que ainda usa item.carro
