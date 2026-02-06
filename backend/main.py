@@ -569,28 +569,18 @@ async def login(credentials: LoginRequest):
     
     if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
         token = generate_token()
-        active_tokens[token] = usuario_recebido
-        return {"token": token, "usuario": usuario_recebido}
-    else:
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-        print(f"[LOGIN] =========================================\n")
-    
-    if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
-        token = generate_token()
         active_tokens[token] = {
             "usuario": credentials.usuario,
             "created_at": datetime.now()
         }
-        # Log simples de sucesso (sempre)
-        print(f"[LOGIN] Login bem-sucedido para usuario: {usuario_recebido}")
+        print(f"[LOGIN] ✅ Login bem-sucedido para usuario: {usuario_recebido}")
         return {
             "success": True,
             "token": token,
             "usuario": credentials.usuario
         }
     else:
-        # Log simples de falha (sempre)
-        print(f"[LOGIN] Login FALHOU - Credenciais incorretas")
+        print(f"[LOGIN] ❌ Login FALHOU - Credenciais incorretas")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuário ou senha incorretos"
