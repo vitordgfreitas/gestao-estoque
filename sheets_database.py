@@ -8,6 +8,7 @@ import time
 import gspread
 import validacoes
 import auditoria
+import random
 
 # Cache das planilhas
 _sheets_cache = None
@@ -39,6 +40,62 @@ def _is_cache_valid():
     if _data_cache['cache_time'] is None:
         return False
     return (time.time() - _data_cache['cache_time']) < _data_cache['cache_ttl']
+
+def _retry_with_backoff(func, max_retries=3, initial_delay=1.0):
+    """
+    Executa uma função com retry exponencial em caso de erro 429
+    
+    Args:
+        func: Função a ser executada (sem argumentos)
+        max_retries: Número máximo de tentativas
+        initial_delay: Delay inicial em segundos
+    
+    Returns:
+        Resultado da função
+    """
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except gspread.exceptions.APIError as e:
+            # Verifica se é erro 429
+            error_dict = getattr(e, 'response', None)
+            if error_dict and hasattr(error_dict, 'json'):
+                try:
+                    error_dict = error_dict.json()
+                except:
+                    error_dict = {}
+            elif not isinstance(error_dict, dict):
+                error_dict = {}
+            
+            error_code = error_dict.get('code', 0) if error_dict else 0
+            error_message = str(e)
+            
+            is_rate_limit = (
+                error_code == 429 or 
+                '429' in error_message or 
+                'Quota exceeded' in error_message or 
+                'RATE_LIMIT_EXCEEDED' in error_message
+            )
+            
+            if is_rate_limit and attempt < max_retries - 1:
+                # Calcula delay com backoff exponencial + jitter
+                delay = initial_delay * (2 ** attempt) + random.uniform(0, 1)
+                print(f"[RETRY] Erro 429 - Tentativa {attempt + 1}/{max_retries}. Aguardando {delay:.1f}s...")
+                time.sleep(delay)
+                last_error = e
+                continue
+            else:
+                # Não é erro 429 ou esgotou tentativas
+                raise e
+        except Exception as e:
+            # Outros erros não fazem retry
+            raise e
+    
+    # Se chegou aqui, esgotou todas as tentativas
+    if last_error:
+        raise last_error
 
 def _handle_api_error(e, operation_name):
     """Trata erros da API do Google Sheets"""
@@ -421,9 +478,10 @@ def listar_itens():
     sheets = get_sheets()
     sheet_itens = sheets['sheet_itens']
     
+    # Usa retry para lidar com erro 429
     try:
         # Tenta obter todos os registros
-        records = sheet_itens.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_itens.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "listar_itens")
     except (IndexError, KeyError):
@@ -894,9 +952,10 @@ def listar_compromissos():
     sheets = get_sheets()
     sheet_compromissos = sheets['sheet_compromissos']
     
+    # Usa retry para lidar com erro 429
     try:
         # Tenta obter todos os registros
-        records = sheet_compromissos.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_compromissos.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "listar_compromissos")
     except (IndexError, KeyError):
@@ -1631,8 +1690,9 @@ def listar_financiamentos(status=None, item_id=None):
     sheets = get_sheets()
     sheet_financiamentos = sheets['sheet_financiamentos']
     
+    # Usa retry para lidar com erro 429
     try:
-        records = sheet_financiamentos.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_financiamentos.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "listar_financiamentos")
     except (IndexError, KeyError):
@@ -1806,7 +1866,7 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
     try:
-        records = sheet_financiamentos.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_financiamentos.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "atualizar_financiamento")
     except (IndexError, KeyError):
@@ -1904,7 +1964,7 @@ def deletar_financiamento(financiamento_id):
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
     try:
-        records = sheet_financiamentos.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_financiamentos.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "deletar_financiamento")
     except (IndexError, KeyError):
@@ -1945,8 +2005,9 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
     sheets = get_sheets()
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
+    # Usa retry para lidar com erro 429
     try:
-        records = sheet_parcelas.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_parcelas.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "listar_parcelas_financiamento")
     except (IndexError, KeyError):
@@ -2101,7 +2162,7 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
     try:
-        records = sheet_parcelas.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_parcelas.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "pagar_parcela_financiamento")
     except (IndexError, KeyError):
@@ -2201,7 +2262,7 @@ def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, v
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
     try:
-        records = sheet_parcelas.get_all_records()
+        records = _retry_with_backoff(lambda: sheet_parcelas.get_all_records())
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "atualizar_parcela_financiamento")
     except (IndexError, KeyError):
