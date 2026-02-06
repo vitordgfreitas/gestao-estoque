@@ -128,10 +128,11 @@ class Financiamento(Base):
     
     id = Column(Integer, primary_key=True)
     item_id = Column(Integer, ForeignKey('itens.id'), nullable=False)
-    valor_total = Column(Float, nullable=False)
+    valor_total = Column(Float, nullable=False)  # Valor total do bem/carro
+    valor_entrada = Column(Float, nullable=False, default=0.0)  # Valor de entrada dado
     numero_parcelas = Column(Integer, nullable=False)
     valor_parcela = Column(Float, nullable=False)
-    taxa_juros = Column(Float, nullable=False, default=0.0)  # Taxa de juros % ao mês
+    taxa_juros = Column(Float, nullable=False, default=0.0)  # Taxa de juros decimal (0.02 = 2% ao mês)
     data_inicio = Column(Date, nullable=False)
     status = Column(String(20), nullable=False, default='Ativo')  # Ativo, Quitado, Cancelado
     instituicao_financeira = Column(String(200))
@@ -178,6 +179,25 @@ class ParcelaFinanciamento(Base):
     
     def __repr__(self):
         return f"<ParcelaFinanciamento(id={self.id}, financiamento_id={self.financiamento_id}, parcela={self.numero_parcela}, status='{self.status}')>"
+
+
+class PecaCarro(Base):
+    """Associação entre peças e carros - registra quais peças estão instaladas em quais carros"""
+    __tablename__ = 'pecas_carros'
+    
+    id = Column(Integer, primary_key=True)
+    peca_id = Column(Integer, ForeignKey('itens.id'), nullable=False)  # Item da categoria "Peças de Carro"
+    carro_id = Column(Integer, ForeignKey('itens.id'), nullable=False)  # Item da categoria "Carros"
+    quantidade = Column(Integer, nullable=False, default=1)
+    data_instalacao = Column(Date)
+    observacoes = Column(String(500))
+    
+    # Relacionamentos com nomes explícitos para evitar conflitos
+    peca = relationship("Item", foreign_keys=[peca_id], backref="instalacoes_como_peca")
+    carro = relationship("Item", foreign_keys=[carro_id], backref="pecas_instaladas")
+    
+    def __repr__(self):
+        return f"<PecaCarro(id={self.id}, peca_id={self.peca_id}, carro_id={self.carro_id}, qtd={self.quantidade})>"
 
 
 def get_engine():

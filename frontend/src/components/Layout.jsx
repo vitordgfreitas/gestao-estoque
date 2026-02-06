@@ -14,7 +14,8 @@ import {
   ExternalLink,
   DollarSign,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Wrench
 } from 'lucide-react'
 import { infoAPI } from '../services/api'
 
@@ -29,6 +30,7 @@ const menuItems = [
   { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
   { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
   { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' },
+  { path: '/pecas-carros', icon: Wrench, label: 'Peças em Carros' },
 ]
 
 export default function Layout({ children }) {

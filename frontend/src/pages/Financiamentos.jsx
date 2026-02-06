@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -21,6 +22,7 @@ export default function Financiamentos() {
   const [formData, setFormData] = useState({
     item_id: '',
     valor_total: '',
+    valor_entrada: '0',
     numero_parcelas: '',
     taxa_juros: '',
     data_inicio: '',
@@ -59,46 +61,54 @@ export default function Financiamentos() {
     e.preventDefault()
     try {
       setFormLoading(true)
+      
+      // Converte valores com precisão
+      const valorTotal = roundToTwoDecimals(formData.valor_total)
+      const valorEntrada = roundToTwoDecimals(formData.valor_entrada || 0)
+      const taxaJuros = parseFloat(formData.taxa_juros)
+      
+      // Valida entrada
+      if (valorEntrada > valorTotal) {
+        toast.error('Valor de entrada não pode ser maior que o valor total')
+        setFormLoading(false)
+        return
+      }
+      
       const data = {
         ...formData,
         item_id: parseInt(formData.item_id),
-        valor_total: parseFloat(formData.valor_total),
+        valor_total: valorTotal,
+        valor_entrada: valorEntrada,
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
-        // Converte % para decimal: usuário digita 3 (querendo 3%), salva como 0.03
-        // SEMPRE divide por 100 se o valor for >= 1 (assumindo que é porcentagem)
-        // Garante que nunca envia taxa > 1 (sempre converte para decimal)
-        taxa_juros: (() => {
-          const taxa = parseFloat(formData.taxa_juros)
-          if (isNaN(taxa)) return 0
-          // Se >= 1, assume que é porcentagem e converte para decimal
-          return taxa >= 1 ? taxa / 100 : taxa
-        })(),
+        // Converte % para decimal: usuário digita 2 (querendo 2%), salva como 0.02
+        taxa_juros: taxaJuros >= 1 ? taxaJuros / 100 : taxaJuros,
       }
       
       // Se parcelas variáveis, adiciona array de parcelas
       if (!parcelasFixas && parcelasCustomizadas.length > 0) {
         data.parcelas_customizadas = parcelasCustomizadas.map((p, idx) => ({
           numero: idx + 1,
-          valor: parseFloat(p.valor),
+          valor: roundToTwoDecimals(p.valor),
           data_vencimento: p.data_vencimento
         }))
       }
       
       if (selectedFinanciamento) {
-        const response = await financiamentosAPI.atualizar(selectedFinanciamento.id, data)
+        await financiamentosAPI.atualizar(selectedFinanciamento.id, data)
         toast.success('Financiamento atualizado com sucesso!')
       } else {
-        const response = await financiamentosAPI.criar(data)
+        await financiamentosAPI.criar(data)
         toast.success('Financiamento criado com sucesso!')
       }
       
-      // Fecha formulário primeiro
+      // Fecha formulário e limpa
       setShowForm(false)
       setSelectedFinanciamento(null)
       setSelectedItem(null)
       setFormData({
         item_id: '',
         valor_total: '',
+        valor_entrada: '0',
         numero_parcelas: '',
         taxa_juros: '',
         data_inicio: '',
@@ -108,7 +118,7 @@ export default function Financiamentos() {
       setParcelasFixas(true)
       setParcelasCustomizadas([])
       
-      // Recarrega a lista imediatamente
+      // Recarrega a lista
       await loadFinanciamentos()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao salvar financiamento')
@@ -145,23 +155,15 @@ export default function Financiamentos() {
     setFormData({
       item_id: fin.item_id,
       valor_total: fin.valor_total,
+      valor_entrada: fin.valor_entrada || 0,
       numero_parcelas: fin.numero_parcelas,
-      // Backend sempre retorna taxa como decimal (0.03 para 3%), então sempre multiplicamos por 100 para exibir
-      // Garante que sempre converte para porcentagem para exibição
+      // Backend sempre retorna taxa como decimal (0.02 = 2%), multiplica por 100 para exibir
       taxa_juros: fin.taxa_juros < 1 ? (fin.taxa_juros * 100).toFixed(2) : fin.taxa_juros.toFixed(2),
       data_inicio: fin.data_inicio,
       instituicao_financeira: fin.instituicao_financeira || '',
       observacoes: fin.observacoes || ''
     })
     setShowForm(true)
-  }
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-  }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('pt-BR')
   }
 
   return (
@@ -303,7 +305,25 @@ export default function Financiamentos() {
                   onChange={(e) => setFormData({ ...formData, valor_total: e.target.value })}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Valor total do bem"
                 />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Valor de Entrada</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.valor_entrada}
+                  onChange={(e) => setFormData({ ...formData, valor_entrada: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Valor dado de entrada (opcional)"
+                />
+                {formData.valor_total && formData.valor_entrada > 0 && (
+                  <p className="text-xs text-dark-400 mt-1">
+                    Valor financiado: {formatCurrency((parseFloat(formData.valor_total) || 0) - (parseFloat(formData.valor_entrada) || 0))}
+                  </p>
+                )}
               </div>
               
               <div>
@@ -502,6 +522,16 @@ export default function Financiamentos() {
                       <p className="text-sm text-dark-400">Valor Total</p>
                       <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_total)}</p>
                     </div>
+                    {fin.valor_entrada > 0 && (
+                      <div>
+                        <p className="text-sm text-dark-400">Entrada</p>
+                        <p className="text-lg font-semibold text-green-400">{formatCurrency(fin.valor_entrada)}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-dark-400">Valor Financiado</p>
+                      <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_financiado || (fin.valor_total - (fin.valor_entrada || 0)))}</p>
+                    </div>
                     <div>
                       <p className="text-sm text-dark-400">Parcelas</p>
                       <p className="text-lg font-semibold text-white">{fin.numero_parcelas}x</p>
@@ -512,8 +542,7 @@ export default function Financiamentos() {
                     </div>
                     <div>
                       <p className="text-sm text-dark-400">Taxa Juros</p>
-                      {/* Exibe taxa: se >= 1, já está em %, senão multiplica por 100 */}
-                      <p className="text-lg font-semibold text-white">{(fin.taxa_juros >= 1 ? fin.taxa_juros : fin.taxa_juros * 100).toFixed(2)}%</p>
+                      <p className="text-lg font-semibold text-white">{formatPercentage(fin.taxa_juros)}</p>
                     </div>
                   </div>
                   

@@ -371,59 +371,6 @@ class FluxoCaixaResponse(BaseModel):
 
 # ============= MODELOS FINANCIAMENTO =============
 
-class FinanciamentoUpdate(BaseModel):
-    valor_total: Optional[float] = None
-    taxa_juros: Optional[float] = None
-    status: Optional[str] = None
-    instituicao_financeira: Optional[str] = None
-    observacoes: Optional[str] = None
-
-class FinanciamentoResponse(BaseModel):
-    id: int
-    item_id: int
-    valor_total: float
-    numero_parcelas: int
-    valor_parcela: float
-    taxa_juros: float
-    data_inicio: date
-    status: str
-    instituicao_financeira: Optional[str] = None
-    observacoes: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
-
-class ParcelaFinanciamentoResponse(BaseModel):
-    id: int
-    financiamento_id: int
-    numero_parcela: int
-    valor_original: float
-    valor_pago: float
-    data_vencimento: date
-    data_pagamento: Optional[date] = None
-    status: str
-    juros: float
-    multa: float
-    desconto: float
-    
-    class Config:
-        from_attributes = True
-
-class PagarParcelaRequest(BaseModel):
-    valor_pago: float
-    data_pagamento: Optional[date] = None
-    juros: Optional[float] = 0.0
-    multa: Optional[float] = 0.0
-    desconto: Optional[float] = 0.0
-
-class ValorPresenteResponse(BaseModel):
-    valor_presente: float
-    taxa_desconto: float
-    parcelas_restantes: int
-    valor_total_restante: float
-
-# ============= MODELOS FINANCIAMENTO =============
-
 class ParcelaCustomizada(BaseModel):
     numero: int
     valor: float
@@ -437,9 +384,10 @@ class ParcelaUpdate(BaseModel):
 
 class FinanciamentoCreate(BaseModel):
     item_id: int
-    valor_total: float  # Valor financiado (principal)
+    valor_total: float  # Valor total do bem
+    valor_entrada: Optional[float] = 0.0  # Valor de entrada dado
     numero_parcelas: int
-    taxa_juros: float  # Taxa de juros mensal (ex: 0.01 para 1% ao mês)
+    taxa_juros: float  # Taxa de juros mensal em decimal (0.02 = 2%)
     data_inicio: date
     instituicao_financeira: Optional[str] = None
     observacoes: Optional[str] = None
@@ -447,6 +395,7 @@ class FinanciamentoCreate(BaseModel):
 
 class FinanciamentoUpdate(BaseModel):
     valor_total: Optional[float] = None
+    valor_entrada: Optional[float] = None
     taxa_juros: Optional[float] = None
     status: Optional[str] = None
     instituicao_financeira: Optional[str] = None
@@ -456,6 +405,8 @@ class FinanciamentoResponse(BaseModel):
     id: int
     item_id: int
     valor_total: float
+    valor_entrada: float
+    valor_financiado: float
     numero_parcelas: int
     valor_parcela: float
     taxa_juros: float
@@ -585,25 +536,11 @@ if is_production:
             "ERRO CRÍTICO: APP_USUARIO e APP_SENHA devem estar configuradas no Render!\n"
             "Configure em: Settings → Environment → Add Environment Variable"
         )
-    # Remove espaços extras e caracteres invisíveis
     APP_USUARIO = app_usuario_raw.strip() if app_usuario_raw else ""
     APP_SENHA = app_senha_raw.strip() if app_senha_raw else ""
-    
-    # Debug: mostra exatamente o que foi lido (sem mostrar senha completa)
-    print(f"[DEBUG] APP_USUARIO lido: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
-    if APP_SENHA:
-        print(f"[DEBUG] APP_SENHA lido: len={len(APP_SENHA)}, primeiro_char={repr(APP_SENHA[0])}, ultimo_char={repr(APP_SENHA[-1])}")
-    else:
-        print(f"[DEBUG] APP_SENHA lido: None")
 else:
-    # Em desenvolvimento local, permite valores padrão apenas para facilitar
-    # Mas ainda recomenda usar .env
+    # Em desenvolvimento local
     if not app_usuario_raw or not app_senha_raw:
-        print("⚠️ AVISO: APP_USUARIO e APP_SENHA não configuradas!")
-        print("   Configure no arquivo .env na raiz do projeto:")
-        print("   APP_USUARIO=seu_usuario")
-        print("   APP_SENHA=sua_senha")
-        print("   O servidor não iniciará sem essas variáveis configuradas.")
         raise ValueError(
             "APP_USUARIO e APP_SENHA devem estar configuradas no arquivo .env "
             "ou como variáveis de ambiente."
@@ -611,57 +548,11 @@ else:
     APP_USUARIO = app_usuario_raw.strip()
     APP_SENHA = app_senha_raw.strip()
 
-# Debug condicional - apenas se DEBUG ou DEBUG_AUTH estiver habilitado
-DEBUG_AUTH_INIT = os.getenv('DEBUG_AUTH', 'false').lower() == 'true' or DEBUG_MODE
-
-if DEBUG_AUTH_INIT:
-    print(f"\n{'='*60}")
-    print(f"🔐 CONFIGURAÇÃO DE AUTENTICAÇÃO")
-    print(f"{'='*60}")
-    print(f"Ambiente: {'PRODUÇÃO (Render)' if is_production else 'DESENVOLVIMENTO'}")
-    if DEBUG_MODE:
-        print(f"Variáveis Render detectadas:")
-        print(f"  RENDER: {os.getenv('RENDER')}")
-        print(f"  RENDER_SERVICE_NAME: {os.getenv('RENDER_SERVICE_NAME')}")
-        print(f"  RENDER_EXTERNAL_URL: {os.getenv('RENDER_EXTERNAL_URL')}")
-        print(f"APP_USUARIO (os.getenv): {repr(app_usuario_raw)}")
-        print(f"APP_SENHA (os.getenv): {'DEFINIDA' if app_senha_raw else 'NÃO DEFINIDA'}")
-        if app_usuario_raw:
-            print(f"Usuário final: {repr(APP_USUARIO)} (len={len(APP_USUARIO)})")
-        if app_senha_raw:
-            print(f"Senha final: DEFINIDA (len={len(APP_SENHA)})")
-        else:
-            print(f"Senha final: NÃO DEFINIDA")
-    
-    # Sempre mostra status crítico (sucesso ou erro)
-    if is_production:
-        if app_usuario_raw and app_senha_raw:
-            print("✅ Usando credenciais do Render (produção)")
-        else:
-            print("❌ ERRO CRÍTICO: Variáveis não configuradas no Render!")
-            print("   Configure em: Settings → Environment → Add Environment Variable")
-            print("   Variáveis necessárias: APP_USUARIO e APP_SENHA")
-    else:
-        if app_usuario_raw and app_senha_raw:
-            print("✅ Usando credenciais do .env (desenvolvimento)")
-        else:
-            print("❌ ERRO: Variáveis não configuradas!")
-            print("   Configure no arquivo .env na raiz do projeto")
-    print(f"{'='*60}\n")
-elif not (app_usuario_raw and app_senha_raw):
-    # Sempre mostra erro crítico mesmo sem debug
-    if is_production:
-        print("❌ ERRO CRÍTICO: APP_USUARIO e APP_SENHA não configuradas no Render!")
-        print("   Configure em: Settings → Environment → Add Environment Variable")
-    else:
-        print("❌ ERRO: APP_USUARIO e APP_SENHA não configuradas!")
-        print("   Configure no arquivo .env na raiz do projeto")
-
-# Armazenamento simples de tokens (em produção, use Redis ou banco de dados)
+# Cache de tokens válidos (em produção, considere Redis)
 active_tokens = {}
 
 def generate_token():
-    """Gera um token simples"""
+    """Gera um token seguro"""
     return secrets.token_urlsafe(32)
 
 class LoginRequest(BaseModel):
@@ -670,22 +561,18 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/login")
 async def login(credentials: LoginRequest):
-    """Endpoint de login"""
-    # Debug condicional - apenas se DEBUG_AUTH estiver habilitado
-    DEBUG_AUTH = os.getenv('DEBUG_AUTH', 'false').lower() == 'true'
-    
-    # Remove espaços extras e normaliza
+    """Endpoint de login otimizado"""
     usuario_recebido = credentials.usuario.strip() if credentials.usuario else ""
     senha_recebida = credentials.senha.strip() if credentials.senha else ""
     usuario_esperado = APP_USUARIO.strip() if APP_USUARIO else ""
     senha_esperada = APP_SENHA.strip() if APP_SENHA else ""
     
-    # Debug detalhado apenas se habilitado
-    if DEBUG_AUTH:
-        print(f"\n[LOGIN] ========== TENTATIVA DE LOGIN ==========")
-        print(f"  Usuario recebido: '{usuario_recebido}' (len={len(usuario_recebido)})")
-        print(f"  Usuario esperado: '{usuario_esperado}' (len={len(usuario_esperado)})")
-        print(f"  Match usuario: {usuario_recebido == usuario_esperado}")
+    if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
+        token = generate_token()
+        active_tokens[token] = usuario_recebido
+        return {"token": token, "usuario": usuario_recebido}
+    else:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
         print(f"[LOGIN] =========================================\n")
     
     if usuario_recebido == usuario_esperado and senha_recebida == senha_esperada:
@@ -1728,31 +1615,32 @@ async def obter_fluxo_caixa(
 # ============= ENDPOINTS FINANCIAMENTOS =============
 
 def financiamento_to_dict(fin):
-    """Converte Financiamento para dict"""
-    # Garante que fin é um objeto, não um dict ou Response
+    """Converte Financiamento para dict com formatação precisa de decimais"""
     if isinstance(fin, dict):
         # Se já é dict, apenas arredonda valores
         if 'valor_total' in fin:
             fin['valor_total'] = round(float(fin['valor_total']), 2)
+        if 'valor_entrada' in fin:
+            fin['valor_entrada'] = round(float(fin['valor_entrada']), 2)
         if 'valor_parcela' in fin:
             fin['valor_parcela'] = round(float(fin['valor_parcela']), 2)
         if 'taxa_juros' in fin:
-            fin['taxa_juros'] = round(float(fin['taxa_juros']), 6)  # Mantém mais precisão para taxa
+            fin['taxa_juros'] = round(float(fin['taxa_juros']), 6)
         return fin
     
-    # Se for Response do FastAPI, extrai o conteúdo
-    if hasattr(fin, 'json') or hasattr(fin, 'body'):
-        # Não deveria acontecer, mas trata caso venha Response
-        return {}
-    
+    # Calcula valores com precisão de 2 casas decimais
     valor_total = round(float(getattr(fin, 'valor_total', 0.0)), 2)
+    valor_entrada = round(float(getattr(fin, 'valor_entrada', 0.0)), 2)
     valor_parcela = round(float(getattr(fin, 'valor_parcela', 0.0)), 2)
-    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 6)  # Mantém mais precisão para taxa
+    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 6)  # Mais precisão para taxa
+    valor_financiado = round(valor_total - valor_entrada, 2)
     
     return {
         "id": getattr(fin, 'id', None),
         "item_id": getattr(fin, 'item_id', None),
         "valor_total": valor_total,
+        "valor_entrada": valor_entrada,
+        "valor_financiado": valor_financiado,
         "numero_parcelas": getattr(fin, 'numero_parcelas', 0),
         "valor_parcela": valor_parcela,
         "taxa_juros": taxa_juros,
@@ -1763,19 +1651,19 @@ def financiamento_to_dict(fin):
     }
 
 def parcela_to_dict(parcela):
-    """Converte ParcelaFinanciamento para dict"""
+    """Converte ParcelaFinanciamento para dict com formatação precisa de decimais"""
     return {
         "id": parcela.id,
         "financiamento_id": parcela.financiamento_id,
         "numero_parcela": parcela.numero_parcela,
-        "valor_original": parcela.valor_original,
-        "valor_pago": parcela.valor_pago,
+        "valor_original": round(float(parcela.valor_original), 2),
+        "valor_pago": round(float(parcela.valor_pago), 2),
         "data_vencimento": parcela.data_vencimento.isoformat() if isinstance(parcela.data_vencimento, date) else str(parcela.data_vencimento),
         "data_pagamento": parcela.data_pagamento.isoformat() if parcela.data_pagamento and isinstance(parcela.data_pagamento, date) else None,
         "status": parcela.status,
-        "juros": parcela.juros,
-        "multa": parcela.multa,
-        "desconto": parcela.desconto,
+        "juros": round(float(parcela.juros), 2),
+        "multa": round(float(parcela.multa), 2),
+        "desconto": round(float(parcela.desconto), 2),
         "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None
     }
 
@@ -1785,14 +1673,16 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
     try:
         # Se parcelas customizadas foram fornecidas, usa elas
         if fin.parcelas_customizadas and len(fin.parcelas_customizadas) > 0:
-            # Valida que soma das parcelas = valor_total
+            # Valida que soma das parcelas = valor_financiado (não valor_total)
+            valor_financiado = fin.valor_total - (fin.valor_entrada or 0.0)
             soma_parcelas = sum(p.valor for p in fin.parcelas_customizadas)
-            if abs(soma_parcelas - fin.valor_total) > 0.01:  # Tolerância de centavos
-                raise HTTPException(status_code=400, detail=f"Soma das parcelas ({soma_parcelas}) não confere com valor total ({fin.valor_total})")
+            if abs(soma_parcelas - valor_financiado) > 0.01:  # Tolerância de centavos
+                raise HTTPException(status_code=400, detail=f"Soma das parcelas ({soma_parcelas}) não confere com valor financiado ({valor_financiado})")
             
             novo_fin = db_module.criar_financiamento(
                 item_id=fin.item_id,
                 valor_total=fin.valor_total,
+                valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=len(fin.parcelas_customizadas),
                 taxa_juros=fin.taxa_juros,
                 data_inicio=fin.data_inicio,
@@ -1804,6 +1694,7 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
             novo_fin = db_module.criar_financiamento(
                 item_id=fin.item_id,
                 valor_total=fin.valor_total,
+                valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=fin.numero_parcelas,
                 taxa_juros=fin.taxa_juros,
                 data_inicio=fin.data_inicio,
@@ -1997,6 +1888,133 @@ async def obter_dashboard_financiamentos(token: str = Depends(verify_token)):
             'valor_total_pago': valor_total_pago,
             'valor_total_restante': valor_total_restante
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= ENDPOINTS PEÇAS EM CARROS =============
+
+class PecaCarroCreate(BaseModel):
+    peca_id: int
+    carro_id: int
+    quantidade: int = 1
+    data_instalacao: Optional[date] = None
+    observacoes: Optional[str] = None
+
+class PecaCarroUpdate(BaseModel):
+    quantidade: Optional[int] = None
+    data_instalacao: Optional[date] = None
+    observacoes: Optional[str] = None
+
+class PecaCarroResponse(BaseModel):
+    id: int
+    peca_id: int
+    carro_id: int
+    quantidade: int
+    data_instalacao: Optional[date] = None
+    observacoes: Optional[str] = None
+    peca: Optional[dict] = None
+    carro: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True
+
+def peca_carro_to_dict(pc):
+    """Converte PecaCarro para dict"""
+    result = {
+        "id": pc.id,
+        "peca_id": pc.peca_id,
+        "carro_id": pc.carro_id,
+        "quantidade": pc.quantidade,
+        "data_instalacao": pc.data_instalacao.isoformat() if pc.data_instalacao and isinstance(pc.data_instalacao, date) else None,
+        "observacoes": pc.observacoes
+    }
+    
+    # Adiciona informações da peça se disponível
+    if hasattr(pc, 'peca') and pc.peca:
+        result["peca"] = item_to_dict(pc.peca)
+    
+    # Adiciona informações do carro se disponível
+    if hasattr(pc, 'carro') and pc.carro:
+        result["carro"] = item_to_dict(pc.carro)
+    
+    return result
+
+@app.post("/api/pecas-carros", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token)):
+    """Associa uma peça a um carro"""
+    try:
+        nova_associacao = db_module.criar_peca_carro(
+            peca_id=peca_carro.peca_id,
+            carro_id=peca_carro.carro_id,
+            quantidade=peca_carro.quantidade,
+            data_instalacao=peca_carro.data_instalacao,
+            observacoes=peca_carro.observacoes
+        )
+        return peca_carro_to_dict(nova_associacao)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/pecas-carros", response_model=List[dict])
+async def listar_pecas_carros(
+    carro_id: Optional[int] = None,
+    peca_id: Optional[int] = None,
+    token: str = Depends(verify_token)
+):
+    """Lista associações de peças em carros com filtros opcionais"""
+    try:
+        associacoes = db_module.listar_pecas_carros(carro_id=carro_id, peca_id=peca_id)
+        return [peca_carro_to_dict(pc) for pc in associacoes]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/pecas-carros/{associacao_id}", response_model=dict)
+async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_token)):
+    """Busca uma associação peça-carro por ID"""
+    try:
+        associacao = db_module.buscar_peca_carro_por_id(associacao_id)
+        if not associacao:
+            raise HTTPException(status_code=404, detail="Associação não encontrada")
+        return peca_carro_to_dict(associacao)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/pecas-carros/{associacao_id}", response_model=dict)
+async def atualizar_peca_carro(
+    associacao_id: int, 
+    peca_carro: PecaCarroUpdate, 
+    token: str = Depends(verify_token)
+):
+    """Atualiza uma associação peça-carro"""
+    try:
+        associacao_atualizada = db_module.atualizar_peca_carro(
+            associacao_id=associacao_id,
+            quantidade=peca_carro.quantidade,
+            data_instalacao=peca_carro.data_instalacao,
+            observacoes=peca_carro.observacoes
+        )
+        if not associacao_atualizada:
+            raise HTTPException(status_code=404, detail="Associação não encontrada")
+        return peca_carro_to_dict(associacao_atualizada)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/pecas-carros/{associacao_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def deletar_peca_carro(associacao_id: int, token: str = Depends(verify_token)):
+    """Remove uma associação peça-carro"""
+    try:
+        sucesso = db_module.deletar_peca_carro(associacao_id)
+        if not sucesso:
+            raise HTTPException(status_code=404, detail="Associação não encontrada")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
