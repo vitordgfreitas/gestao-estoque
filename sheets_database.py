@@ -1765,7 +1765,9 @@ def listar_financiamentos(status=None, item_id=None):
                             cents_part = int(val_float) % 100
                             if cents_part != 0:  # Tem "centavos"
                                 # Provavelmente falta o ponto decimal - divide por 100
-                                return round(val_float / 100, 2)
+                                resultado = round(val_float / 100, 2)
+                                print(f"[PARSE] Corrigido: {val_float} -> {resultado}")
+                                return resultado
                         
                         # Para valores MUITO grandes (>= 1 milhão)
                         # Ex: 422968778 (deveria ser 4229.69 ou 42296.88)
@@ -1775,6 +1777,7 @@ def listar_financiamentos(status=None, item_id=None):
                                 test_val = val_float / divisor
                                 # Só aceita se o resultado for razoável (entre 1 e 100000)
                                 if 1 <= test_val < 100000:
+                                    print(f"[PARSE] Corrigido (>1M): {val_float} -> {round(test_val, 2)} (divisor: {divisor})")
                                     return round(test_val, 2)
                         
                         return round(val_float, 2)
@@ -1821,6 +1824,8 @@ def listar_financiamentos(status=None, item_id=None):
                 
                 valor_total_conv = parse_value(valor_total_raw)
                 valor_parcela_conv = parse_value(valor_parcela_raw)
+                
+                print(f"[DEBUG] Financiamento ID {record.get('ID')}: valor_parcela_raw={valor_parcela_raw}, valor_parcela_conv={valor_parcela_conv}")
                 
                 # Pega valor de entrada (nova coluna)
                 valor_entrada_raw = record.get('Valor Entrada', 0)
