@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import React from 'react'
 import { motion } from 'framer-motion'
 import { itensAPI, compromissosAPI, categoriasAPI } from '../services/api'
+import api from '../services/api'
 import { Search, Edit, Trash2, Eye, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
@@ -20,6 +21,7 @@ const MARCAS_CARROS = [
 export default function VisualizarDados() {
   const [itens, setItens] = useState([])
   const [compromissos, setCompromissos] = useState([])
+  const [pecasCarros, setPecasCarros] = useState([])
   const [categorias, setCategorias] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('itens')
@@ -48,6 +50,15 @@ export default function VisualizarDados() {
       setItens(itensRes.data)
       setCompromissos(compRes.data)
       setCategorias(catRes.data || [])
+      
+      // Load peças em carros
+      try {
+        const pecasRes = await api.get('/api/pecas-carros')
+        setPecasCarros(pecasRes.data || [])
+      } catch (error) {
+        console.error('Erro ao carregar peças em carros:', error)
+        setPecasCarros([])
+      }
     } catch (error) {
       toast.error('Erro ao carregar dados')
       console.error('Erro ao carregar dados:', error)
@@ -160,6 +171,16 @@ export default function VisualizarDados() {
           }`}
         >
           Compromissos ({compromissos.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('pecas-carros')}
+          className={`px-6 py-3 font-medium transition-colors border-b-2 ${
+            activeTab === 'pecas-carros'
+              ? 'border-primary-500 text-primary-400'
+              : 'border-transparent text-dark-400 hover:text-dark-200'
+          }`}
+        >
+          Peças em Carros ({pecasCarros.length})
         </button>
       </div>
 
@@ -354,6 +375,86 @@ export default function VisualizarDados() {
           </table>
         </div>
       </motion.div>
+
+      {/* Tabela de Peças em Carros */}
+      {activeTab === 'pecas-carros' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="card overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Carro</th>
+                  <th>Peça</th>
+                  <th>Quantidade</th>
+                  <th>Data Instalação</th>
+                  <th>Observações</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pecasCarros.length > 0 ? (
+                  pecasCarros.map((peca) => {
+                    const carro = itens.find(i => i.id === peca.carro_id)
+                    const pecaItem = itens.find(i => i.id === peca.peca_id)
+                    return (
+                      <motion.tr
+                        key={peca.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                      >
+                        <td className="text-dark-400 font-mono text-sm">{peca.id}</td>
+                        <td className="text-dark-50 font-medium">
+                          {carro ? formatItemName(carro) : 'Carro Deletado'}
+                        </td>
+                        <td className="text-dark-50">{pecaItem?.nome || 'Peça Deletada'}</td>
+                        <td className="text-dark-50">{peca.quantidade}</td>
+                        <td className="text-dark-50">
+                          {peca.data_instalacao ? new Date(peca.data_instalacao).toLocaleDateString('pt-BR') : '-'}
+                        </td>
+                        <td className="text-dark-400 text-sm max-w-xs truncate" title={peca.observacoes}>
+                          {peca.observacoes || '-'}
+                        </td>
+                        <td>
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={async () => {
+                                if (window.confirm('Deseja remover esta associação?')) {
+                                  try {
+                                    await api.delete(`/api/pecas-carros/${peca.id}`)
+                                    toast.success('Associação removida com sucesso!')
+                                    loadData()
+                                  } catch (error) {
+                                    toast.error('Erro ao remover associação')
+                                  }
+                                }
+                              }}
+                              className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+                              title="Remover"
+                            >
+                              <Trash2 size={16} className="text-red-400" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    )
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="text-center py-12 text-dark-400">
+                      Nenhuma peça associada a carros
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
 
       {/* Modal de Visualização de Item */}
       {viewingItem && (

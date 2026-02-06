@@ -18,17 +18,37 @@ import {
 } from 'lucide-react'
 import { infoAPI } from '../services/api'
 
-const menuItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/itens', icon: PlusCircle, label: 'Registrar Item' },
-  { path: '/compromissos', icon: CalendarCheck, label: 'Registrar Compromisso' },
-  { path: '/disponibilidade', icon: Search, label: 'Verificar Disponibilidade' },
-  { path: '/calendario', icon: Calendar, label: 'Calendário' },
-  { path: '/visualizar', icon: Table, label: 'Visualizar Dados' },
-  { path: '/financeiro', icon: DollarSign, label: 'Financeiro' },
-  { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
-  { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
-  { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' },
+const menuGroups = [
+  {
+    label: 'Principal',
+    items: [
+      { path: '/', icon: LayoutDashboard, label: 'Dashboard' }
+    ]
+  },
+  {
+    label: 'Estoque',
+    items: [
+      { path: '/itens', icon: PlusCircle, label: 'Registrar Item' },
+      { path: '/compromissos', icon: CalendarCheck, label: 'Registrar Compromisso' },
+      { path: '/disponibilidade', icon: Search, label: 'Verificar Disponibilidade' },
+      { path: '/visualizar', icon: Table, label: 'Visualizar Dados' }
+    ]
+  },
+  {
+    label: 'Agenda',
+    items: [
+      { path: '/calendario', icon: Calendar, label: 'Calendário' }
+    ]
+  },
+  {
+    label: 'Financeiro',
+    items: [
+      { path: '/financeiro', icon: DollarSign, label: 'Dashboard Financeiro' },
+      { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
+      { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
+      { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' }
+    ]
+  }
 ]
 
 export default function Layout({ children }) {
@@ -102,27 +122,36 @@ export default function Layout({ children }) {
 
               {/* Navigation */}
               <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                {menuItems.map((item) => {
-                  const Icon = item.icon
-                  const isActive = location.pathname === item.path
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => isMobile && setSidebarOpen(false)}
-                      className={`
-                        flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
-                        ${isActive 
-                          ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-500' 
-                          : 'text-dark-400 hover:bg-dark-700/50 hover:text-dark-200'
-                        }
-                      `}
-                    >
-                      <Icon size={20} />
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  )
-                })}
+                {menuGroups.map((group) => (
+                  <div key={group.label} className="mb-6">
+                    <h3 className="text-xs font-semibold text-dark-500 uppercase tracking-wider px-4 py-2 mb-1">
+                      {group.label}
+                    </h3>
+                    <div className="space-y-1">
+                      {group.items.map((item) => {
+                        const Icon = item.icon
+                        const isActive = location.pathname === item.path
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => isMobile && setSidebarOpen(false)}
+                            className={`
+                              flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+                              ${isActive 
+                                ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-500' 
+                                : 'text-dark-400 hover:bg-dark-700/50 hover:text-dark-200'
+                              }
+                            `}
+                          >
+                            <Icon size={20} />
+                            <span className="font-medium">{item.label}</span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </nav>
 
               {/* Footer */}
@@ -176,7 +205,7 @@ export default function Layout({ children }) {
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
             <h2 className="text-xl font-semibold text-dark-50">
-              {menuItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
+              {menuGroups.flatMap(g => g.items).find(item => item.path === location.pathname)?.label || 'Dashboard'}
             </h2>
           </div>
         </header>

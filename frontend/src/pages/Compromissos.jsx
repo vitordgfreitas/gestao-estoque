@@ -109,45 +109,75 @@ export default function Compromissos() {
     setLoading(true)
 
     try {
-      // Verifica disponibilidade antes de criar
-      const disponibilidade = await disponibilidadeAPI.verificar({
-        item_id: parseInt(formData.item_id),
-        data_consulta: formData.data_inicio,
-      })
+      if (formData.tipo_compromisso === 'pecas_carro') {
+        // Associar peça ao carro
+        await api.post('/api/pecas-carros', {
+          peca_id: parseInt(formData.peca_id),
+          carro_id: parseInt(formData.carro_id),
+          quantidade: parseInt(formData.quantidade),
+          data_instalacao: formData.data_inicio,
+          observacoes: formData.descricao || ''
+        })
+        toast.success('Peça associada ao carro com sucesso!')
+        setFormData({
+          tipo_compromisso: 'pecas_carro',
+          item_id: '',
+          peca_id: '',
+          carro_id: '',
+          quantidade: 1,
+          data_inicio: new Date().toISOString().split('T')[0],
+          data_fim: new Date().toISOString().split('T')[0],
+          descricao: '',
+          cidade: '',
+          uf: 'SP',
+          endereco: '',
+          contratante: '',
+        })
+      } else {
+        // Fluxo original para itens alugados
+        // Verifica disponibilidade antes de criar
+        const disponibilidade = await disponibilidadeAPI.verificar({
+          item_id: parseInt(formData.item_id),
+          data_consulta: formData.data_inicio,
+        })
 
-      const disponivelMinimo = disponibilidade.data.quantidade_disponivel
-      const quantidadeSolicitada = parseInt(formData.quantidade)
+        const disponivelMinimo = disponibilidade.data.quantidade_disponivel
+        const quantidadeSolicitada = parseInt(formData.quantidade)
 
-      if (disponivelMinimo < quantidadeSolicitada) {
-        toast.error(`Quantidade insuficiente! Disponível: ${disponivelMinimo}, Solicitado: ${quantidadeSolicitada}`)
-        setLoading(false)
-        return
+        if (disponivelMinimo < quantidadeSolicitada) {
+          toast.error(`Quantidade insuficiente! Disponível: ${disponivelMinimo}, Solicitado: ${quantidadeSolicitada}`)
+          setLoading(false)
+          return
+        }
+
+        await compromissosAPI.criar({
+          ...formData,
+          item_id: parseInt(formData.item_id),
+          quantidade: parseInt(formData.quantidade),
+        })
+        toast.success('Compromisso registrado com sucesso!')
+        setFormData({
+          tipo_compromisso: 'itens_alugados',
+          item_id: '',
+          peca_id: '',
+          carro_id: '',
+          quantidade: 1,
+          data_inicio: new Date().toISOString().split('T')[0],
+          data_fim: new Date().toISOString().split('T')[0],
+          descricao: '',
+          cidade: '',
+          uf: 'SP',
+          endereco: '',
+          contratante: '',
+        })
+        setItemSelecionado(null)
+        setQuantidadeFixa(false)
       }
-
-      await compromissosAPI.criar({
-        ...formData,
-        item_id: parseInt(formData.item_id),
-        quantidade: parseInt(formData.quantidade),
-      })
-      toast.success('Compromisso registrado com sucesso!')
-      setFormData({
-        item_id: '',
-        quantidade: 1,
-        data_inicio: new Date().toISOString().split('T')[0],
-        data_fim: new Date().toISOString().split('T')[0],
-        descricao: '',
-        cidade: '',
-        uf: 'SP',
-        endereco: '',
-        contratante: '',
-      })
-      setItemSelecionado(null)
-      setQuantidadeFixa(false)
     } catch (error) {
       if (error.response?.status === 400 && error.response?.data?.detail?.includes('insuficiente')) {
         toast.error(error.response.data.detail)
       } else {
-        toast.error(error.response?.data?.detail || 'Erro ao registrar compromisso')
+        toast.error(error.response?.data?.detail || 'Erro ao associar peça/registrar compromisso')
       }
     } finally {
       setLoading(false)
@@ -489,6 +519,25 @@ export default function Compromissos() {
         </button>
           </>
         )}
+
+        {/* Button moved outside conditional */}
+        <button
+          type="submit"
+          disabled={loading || (formData.tipo_compromisso === 'itens_alugados' && itensFiltrados.length === 0)}
+          className="btn btn-primary w-full flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Calendar size={20} />
+              {formData.tipo_compromisso === 'pecas_carro' ? 'Associar Peça ao Carro' : 'Registrar Compromisso'}
+            </>
+          )}
+        </button>
       </motion.form>
     </div>
   )
