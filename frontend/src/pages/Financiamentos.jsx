@@ -17,6 +17,8 @@ export default function Financiamentos() {
   const [selectedFinanciamento, setSelectedFinanciamento] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('Todos')
+  const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
+  const [itensFiltrados, setItensFiltrados] = useState([])
   const [parcelasFixas, setParcelasFixas] = useState(true)
   const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
   const [formData, setFormData] = useState({
@@ -34,6 +36,14 @@ export default function Financiamentos() {
     loadFinanciamentos()
     loadItens()
   }, [filtroStatus])
+
+  useEffect(() => {
+    if (categoriaFiltro === 'Todas') {
+      setItensFiltrados(itens)
+    } else {
+      setItensFiltrados(itens.filter(i => i.categoria === categoriaFiltro))
+    }
+  }, [categoriaFiltro, itens])
 
   const loadItens = async () => {
     try {
@@ -225,15 +235,30 @@ export default function Financiamentos() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Categoria</label>
+                <select
+                  value={categoriaFiltro}
+                  onChange={(e) => {
+                    setCategoriaFiltro(e.target.value)
+                    setFormData({ ...formData, item_id: '' })
+                    setSelectedItem(null)
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="Todas">Todas as Categorias</option>
+                  <option value="Carros">Carros</option>
+                  <option value="Estrutura de Evento">Estrutura de Evento</option>
+                  <option value="Peças de Carro">Peças de Carro</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-dark-300 mb-2">Item</label>
                 <select
                   value={formData.item_id}
                   onChange={(e) => {
                     const itemId = e.target.value
-                    const item = itens.find(i => i.id === parseInt(itemId))
-                    console.log('Item selecionado:', item)
-                    console.log('dados_categoria:', item?.dados_categoria)
-                    console.log('carro:', item?.carro)
+                    const item = itensFiltrados.find(i => i.id === parseInt(itemId))
                     setSelectedItem(item || null)
                     setFormData({ ...formData, item_id: itemId })
                   }}
@@ -241,19 +266,18 @@ export default function Financiamentos() {
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
                   <option value="">Selecione um item</option>
-                  {itens.map(item => {
-                    // Se for carro, mostra nome e placa
+                  {itensFiltrados.map(item => {
                     if (item.categoria === 'Carros') {
-                      const placa = item.dados_categoria?.Placa || 
-                                   item.dados_categoria?.placa || 
-                                   item.carro?.placa || ''
+                      const marca = item.dados_categoria?.Marca || item.carro?.marca || ''
+                      const modelo = item.dados_categoria?.Modelo || item.carro?.modelo || ''
+                      const placa = item.dados_categoria?.Placa || item.carro?.placa || ''
+                      const nomeCompleto = [marca, modelo].filter(Boolean).join(' ') || item.nome
                       return (
                         <option key={item.id} value={item.id}>
-                          {item.nome}{placa ? ` - ${placa}` : ''}
+                          {nomeCompleto}{placa ? ` - ${placa}` : ''}
                         </option>
                       )
                     }
-                    // Para outros itens, mostra apenas o nome
                     return (
                       <option key={item.id} value={item.id}>{item.nome}</option>
                     )

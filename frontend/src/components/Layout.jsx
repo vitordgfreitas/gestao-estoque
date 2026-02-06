@@ -14,8 +14,7 @@ import {
   ExternalLink,
   DollarSign,
   TrendingUp,
-  TrendingDown,
-  Wrench
+  TrendingDown
 } from 'lucide-react'
 import { infoAPI } from '../services/api'
 
@@ -30,7 +29,6 @@ const menuItems = [
   { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
   { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
   { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' },
-  { path: '/pecas-carros', icon: Wrench, label: 'Peças em Carros' },
 ]
 
 export default function Layout({ children }) {
@@ -93,10 +91,13 @@ export default function Layout({ children }) {
             >
               {/* Logo */}
               <div className="p-6 border-b border-dark-700">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">
-                  📦 CRM
-                </h1>
-                <p className="text-sm text-dark-400 mt-1">Gestão de Estoque</p>
+                <div className="flex items-center gap-3">
+                  <img 
+                    src="/starlogo.jpeg" 
+                    alt="STAR Locação" 
+                    className="w-full h-auto"
+                  />
+                </div>
               </div>
 
               {/* Navigation */}

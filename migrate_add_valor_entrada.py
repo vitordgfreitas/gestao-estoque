@@ -21,13 +21,13 @@ def migrate():
             break
     
     if not db_path:
-        print("❌ Banco de dados não encontrado!")
+        print("ERRO: Banco de dados nao encontrado!")
         print("Tentei os seguintes caminhos:")
         for path in db_paths:
             print(f"  - {path}")
         return False
     
-    print(f"✅ Banco de dados encontrado em: {db_path}")
+    print(f"OK: Banco de dados encontrado em: {db_path}")
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -38,25 +38,25 @@ def migrate():
         columns = [col[1] for col in cursor.fetchall()]
         
         if 'valor_entrada' in columns:
-            print("ℹ️  Coluna 'valor_entrada' já existe. Nenhuma migração necessária.")
+            print("INFO: Coluna 'valor_entrada' ja existe. Nenhuma migracao necessaria.")
             return True
         
         # Adiciona a coluna valor_entrada
-        print("🔄 Adicionando coluna 'valor_entrada'...")
+        print("Adicionando coluna 'valor_entrada'...")
         cursor.execute("""
             ALTER TABLE financiamentos 
             ADD COLUMN valor_entrada REAL NOT NULL DEFAULT 0.0
         """)
         
         conn.commit()
-        print("✅ Migração concluída com sucesso!")
+        print("OK: Migracao concluida com sucesso!")
         print("   - Coluna 'valor_entrada' adicionada à tabela 'financiamentos'")
         print("   - Valor padrão: 0.0 para registros existentes")
         
         return True
         
     except sqlite3.Error as e:
-        print(f"❌ Erro durante migração: {e}")
+        print(f"ERRO durante migracao: {e}")
         conn.rollback()
         return False
         
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     
     print()
     if success:
-        print("✅ Migração executada com sucesso!")
+        print("OK: Migracao executada com sucesso!")
     else:
-        print("❌ Falha na migração. Verifique os erros acima.")
+        print("ERRO: Falha na migracao. Verifique os erros acima.")
     print("="*60)

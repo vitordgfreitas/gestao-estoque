@@ -94,10 +94,14 @@ export default function Login() {
         <div className="card bg-dark-800 border-dark-700">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600/20 rounded-full mb-4">
-              <LogIn className="text-primary-400" size={32} />
+            <div className="flex justify-center mb-6">
+              <img 
+                src="/starlogo.jpeg" 
+                alt="STAR Locação" 
+                className="h-24 w-auto"
+              />
             </div>
-            <h1 className="text-3xl font-bold text-dark-50 mb-2">CRM Gestão</h1>
+            <h1 className="text-3xl font-bold text-dark-50 mb-2">Sistema de Gestão</h1>
             <p className="text-dark-400">Faça login para continuar</p>
             
             {/* Status do servidor */}

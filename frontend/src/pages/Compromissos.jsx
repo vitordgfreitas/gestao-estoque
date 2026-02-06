@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { compromissosAPI, itensAPI, categoriasAPI, disponibilidadeAPI } from '../services/api'
+import api from '../services/api'
 import { Calendar, Plus, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -14,7 +15,10 @@ export default function Compromissos() {
   const [itemSelecionado, setItemSelecionado] = useState(null)
   const [quantidadeFixa, setQuantidadeFixa] = useState(false)
   const [formData, setFormData] = useState({
+    tipo_compromisso: 'itens_alugados',
     item_id: '',
+    peca_id: '',
+    carro_id: '',
     quantidade: 1,
     data_inicio: new Date().toISOString().split('T')[0],
     data_fim: new Date().toISOString().split('T')[0],
@@ -214,6 +218,111 @@ export default function Compromissos() {
         onSubmit={handleSubmit}
         className="card space-y-6"
       >
+        {/* Tipo de Compromisso */}
+        <div>
+          <label className="label">Tipo de Compromisso *</label>
+          <select
+            value={formData.tipo_compromisso}
+            onChange={(e) => {
+              setFormData({ 
+                ...formData, 
+                tipo_compromisso: e.target.value,
+                item_id: '',
+                peca_id: '',
+                carro_id: ''
+              })
+              setItemSelecionado(null)
+            }}
+            className="input"
+            required
+          >
+            <option value="itens_alugados">Itens Alugados</option>
+            <option value="pecas_carro">Peças de Carro</option>
+          </select>
+        </div>
+
+        {formData.tipo_compromisso === 'pecas_carro' ? (
+          <>
+            {/* Interface para Peças de Carro */}
+            <div>
+              <label className="label">Carro *</label>
+              <select
+                value={formData.carro_id}
+                onChange={(e) => setFormData({ ...formData, carro_id: e.target.value })}
+                required
+                className="input"
+              >
+                <option value="">Selecione um carro</option>
+                {itens.filter(i => i.categoria === 'Carros').map(carro => {
+                  const marca = carro.dados_categoria?.Marca || carro.carro?.marca || ''
+                  const modelo = carro.dados_categoria?.Modelo || carro.carro?.modelo || ''
+                  const placa = carro.dados_categoria?.Placa || carro.carro?.placa || ''
+                  const nome = [marca, modelo].filter(Boolean).join(' ') || carro.nome
+                  return (
+                    <option key={carro.id} value={carro.id}>
+                      {nome}{placa ? ` - ${placa}` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Peça *</label>
+              <select
+                value={formData.peca_id}
+                onChange={(e) => setFormData({ ...formData, peca_id: e.target.value })}
+                required
+                className="input"
+              >
+                <option value="">Selecione uma peça</option>
+                {itens.filter(i => i.categoria === 'Peças de Carro').map(peca => (
+                  <option key={peca.id} value={peca.id}>
+                    {peca.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">Quantidade *</label>
+                <input
+                  type="number"
+                  value={formData.quantidade}
+                  onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
+                  required
+                  min="1"
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="label">Data de Instalação *</label>
+                <input
+                  type="date"
+                  value={formData.data_inicio}
+                  onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
+                  required
+                  className="input"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Observações</label>
+              <textarea
+                value={formData.descricao}
+                onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                rows="3"
+                className="input resize-none"
+                placeholder="Ex: Peça original, instalada na revisão..."
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Interface original para itens alugados */}
         {/* Filtro por categoria */}
         <div>
           <label className="label">Categoria *</label>
@@ -394,21 +503,23 @@ export default function Compromissos() {
 
         <button
           type="submit"
-          disabled={loading || itensFiltrados.length === 0}
+          disabled={loading || (formData.tipo_compromisso === 'itens_alugados' && itensFiltrados.length === 0)}
           className="btn btn-primary w-full flex items-center justify-center gap-2"
         >
           {loading ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-              Registrando...
+              Salvando...
             </>
           ) : (
             <>
               <Calendar size={20} />
-              Registrar Compromisso
+              {formData.tipo_compromisso === 'pecas_carro' ? 'Associar Peça ao Carro' : 'Registrar Compromisso'}
             </>
           )}
         </button>
+          </>
+        )}
       </motion.form>
     </div>
   )

@@ -1,4 +1,4 @@
-﻿from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento
+﻿from models import get_session, Item, Compromisso, Carro, ContaReceber, ContaPagar, Financiamento, ParcelaFinanciamento, PecaCarro
 from datetime import date, datetime
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
@@ -1195,7 +1195,7 @@ def obter_fluxo_caixa(data_inicio, data_fim):
 
 # ============= FINANCIAMENTOS =============
 
-def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     from datetime import timedelta
     import calendar
@@ -1207,32 +1207,41 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         if not item:
             raise ValueError(f"Item {item_id} n├úo encontrado")
         
+        # Converte valores para float e arredonda
+        valor_total = round(float(valor_total), 2)
+        valor_entrada = round(float(valor_entrada), 2)
+        taxa_juros = round(float(taxa_juros), 6)
+        
+        # Calcula valor financiado (deduz entrada)
+        valor_financiado = round(valor_total - valor_entrada, 2)
+        
+        if valor_financiado <= 0:
+            raise ValueError("Valor financiado deve ser maior que zero")
+        
         # Calcula valor da parcela com juros (Sistema Price - parcelas fixas)
         # PMT = PV * (i * (1+i)^n) / ((1+i)^n - 1)
-        # onde: PMT = valor da parcela, PV = valor financiado, i = taxa mensal, n = número de parcelas
         if not parcelas_customizadas and taxa_juros > 0:
-            i = float(taxa_juros)  # Taxa mensal (ex: 0.01 para 1%)
+            i = taxa_juros
             n = numero_parcelas
             if i > 0:
                 # Sistema Price (parcelas fixas com juros compostos)
-                valor_parcela = valor_total * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
+                valor_parcela = valor_financiado * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
             else:
-                valor_parcela = valor_total / numero_parcelas
+                valor_parcela = valor_financiado / numero_parcelas
         else:
-            valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
+            valor_parcela = valor_financiado / numero_parcelas if not parcelas_customizadas else 0
         
-        # Calcula valor total a pagar (com juros)
-        valor_total_a_pagar = valor_parcela * numero_parcelas if not parcelas_customizadas else valor_total
+        # Arredonda valor da parcela para 2 casas decimais
+        valor_parcela = round(valor_parcela, 2)
         
         # Cria financiamento
-        # valor_total armazena o valor financiado (principal)
-        # valor_parcela já inclui os juros calculados acima
         financiamento = Financiamento(
             item_id=item_id,
-            valor_total=float(valor_total),  # Valor financiado (principal)
+            valor_total=valor_total,
+            valor_entrada=valor_entrada,
             numero_parcelas=numero_parcelas,
-            valor_parcela=float(valor_parcela),  # Valor da parcela com juros
-            taxa_juros=float(taxa_juros),
+            valor_parcela=valor_parcela,
+            taxa_juros=taxa_juros,
             data_inicio=data_inicio,
             status='Ativo',
             instituicao_financeira=instituicao_financeira,
@@ -1249,7 +1258,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 parcela = ParcelaFinanciamento(
                     financiamento_id=financiamento.id,
                     numero_parcela=parcela_custom['numero'],
-                    valor_original=float(parcela_custom['valor']),
+                    valor_original=round(float(parcela_custom['valor']), 2),
                     valor_pago=0.0,
                     data_vencimento=parcela_custom['data_vencimento'] if isinstance(parcela_custom['data_vencimento'], date) else datetime.strptime(parcela_custom['data_vencimento'], '%Y-%m-%d').date(),
                     data_pagamento=None,
@@ -1283,7 +1292,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 parcela = ParcelaFinanciamento(
                     financiamento_id=financiamento.id,
                     numero_parcela=i,
-                    valor_original=float(valor_parcela),
+                    valor_original=valor_parcela,
                     valor_pago=0.0,
                     data_vencimento=data_vencimento,
                     data_pagamento=None,
@@ -1301,6 +1310,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         auditoria.registrar_auditoria('CREATE', 'Financiamentos', financiamento.id, valores_novos={
             'item_id': item_id,
             'valor_total': valor_total,
+            'valor_entrada': valor_entrada,
             'numero_parcelas': numero_parcelas
         })
         
@@ -1525,6 +1535,183 @@ def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, v
         })
         
         return parcela
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+# ============= PEÇAS EM CARROS =============
+
+def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, observacoes=None):
+    """Associa uma peça a um carro"""
+    session = get_session()
+    try:
+        # Verifica se peça existe e é da categoria correta
+        peca = session.query(Item).filter(Item.id == peca_id).first()
+        if not peca:
+            raise ValueError(f"Peça {peca_id} não encontrada")
+        if peca.categoria != "Peças de Carro":
+            raise ValueError(f"Item {peca_id} não é uma peça de carro (categoria: {peca.categoria})")
+        
+        # Verifica se carro existe e é da categoria correta
+        carro = session.query(Item).filter(Item.id == carro_id).first()
+        if not carro:
+            raise ValueError(f"Carro {carro_id} não encontrado")
+        if carro.categoria != "Carros":
+            raise ValueError(f"Item {carro_id} não é um carro (categoria: {carro.categoria})")
+        
+        # Cria associação
+        associacao = PecaCarro(
+            peca_id=peca_id,
+            carro_id=carro_id,
+            quantidade=quantidade,
+            data_instalacao=data_instalacao or date.today(),
+            observacoes=observacoes
+        )
+        
+        session.add(associacao)
+        session.commit()
+        session.refresh(associacao)
+        
+        # Carrega relacionamentos
+        if associacao.peca:
+            session.expunge(associacao.peca)
+        if associacao.carro:
+            session.expunge(associacao.carro)
+        session.expunge(associacao)
+        
+        auditoria.registrar_auditoria('CREATE', 'Pecas_Carros', associacao.id, valores_novos={
+            'peca_id': peca_id,
+            'carro_id': carro_id,
+            'quantidade': quantidade
+        })
+        
+        return associacao
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def listar_pecas_carros(carro_id=None, peca_id=None):
+    """Lista associações de peças em carros com filtros opcionais"""
+    from sqlalchemy.orm import joinedload
+    session = get_session()
+    try:
+        query = session.query(PecaCarro).options(
+            joinedload(PecaCarro.peca),
+            joinedload(PecaCarro.carro)
+        )
+        
+        if carro_id:
+            query = query.filter(PecaCarro.carro_id == carro_id)
+        if peca_id:
+            query = query.filter(PecaCarro.peca_id == peca_id)
+        
+        associacoes = query.all()
+        
+        # Desanexa objetos da sessão
+        for associacao in associacoes:
+            if associacao.peca:
+                session.expunge(associacao.peca)
+            if associacao.carro:
+                session.expunge(associacao.carro)
+            session.expunge(associacao)
+        
+        return associacoes
+    finally:
+        session.close()
+
+
+def buscar_peca_carro_por_id(associacao_id):
+    """Busca uma associação peça-carro por ID"""
+    from sqlalchemy.orm import joinedload
+    session = get_session()
+    try:
+        associacao = session.query(PecaCarro).options(
+            joinedload(PecaCarro.peca),
+            joinedload(PecaCarro.carro)
+        ).filter(PecaCarro.id == associacao_id).first()
+        
+        if associacao:
+            if associacao.peca:
+                session.expunge(associacao.peca)
+            if associacao.carro:
+                session.expunge(associacao.carro)
+            session.expunge(associacao)
+        
+        return associacao
+    finally:
+        session.close()
+
+
+def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, observacoes=None):
+    """Atualiza uma associação peça-carro"""
+    session = get_session()
+    try:
+        associacao = session.query(PecaCarro).filter(PecaCarro.id == associacao_id).first()
+        if not associacao:
+            return None
+        
+        valores_antigos = {
+            'quantidade': associacao.quantidade,
+            'data_instalacao': str(associacao.data_instalacao) if associacao.data_instalacao else None,
+            'observacoes': associacao.observacoes
+        }
+        
+        if quantidade is not None:
+            associacao.quantidade = quantidade
+        if data_instalacao is not None:
+            associacao.data_instalacao = data_instalacao
+        if observacoes is not None:
+            associacao.observacoes = observacoes
+        
+        session.commit()
+        session.refresh(associacao)
+        
+        if associacao.peca:
+            session.expunge(associacao.peca)
+        if associacao.carro:
+            session.expunge(associacao.carro)
+        session.expunge(associacao)
+        
+        auditoria.registrar_auditoria('UPDATE', 'Pecas_Carros', associacao_id, valores_antigos=valores_antigos, valores_novos={
+            'quantidade': associacao.quantidade,
+            'data_instalacao': str(associacao.data_instalacao) if associacao.data_instalacao else None,
+            'observacoes': associacao.observacoes
+        })
+        
+        return associacao
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def deletar_peca_carro(associacao_id):
+    """Remove uma associação peça-carro"""
+    session = get_session()
+    try:
+        associacao = session.query(PecaCarro).filter(PecaCarro.id == associacao_id).first()
+        if not associacao:
+            return False
+        
+        valores_antigos = {
+            'peca_id': associacao.peca_id,
+            'carro_id': associacao.carro_id,
+            'quantidade': associacao.quantidade
+        }
+        
+        session.delete(associacao)
+        session.commit()
+        
+        auditoria.registrar_auditoria('DELETE', 'Pecas_Carros', associacao_id, valores_antigos=valores_antigos)
+        
+        return True
     except Exception as e:
         session.rollback()
         raise e
