@@ -14,7 +14,9 @@ import {
   ExternalLink,
   DollarSign,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react'
 import { infoAPI } from '../services/api'
 
@@ -55,7 +57,20 @@ export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [sheetsUrl, setSheetsUrl] = useState(null)
+  const [expandedGroups, setExpandedGroups] = useState({
+    principal: true,
+    estoque: true,
+    agenda: true,
+    financeiro: true
+  })
   const location = useLocation()
+
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }))
+  }
 
   useEffect(() => {
     const checkMobile = () => {
@@ -122,36 +137,58 @@ export default function Layout({ children }) {
 
               {/* Navigation */}
               <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                {menuGroups.map((group) => (
-                  <div key={group.label} className="mb-6">
-                    <h3 className="text-xs font-semibold text-dark-500 uppercase tracking-wider px-4 py-2 mb-1">
-                      {group.label}
-                    </h3>
-                    <div className="space-y-1">
-                      {group.items.map((item) => {
-                        const Icon = item.icon
-                        const isActive = location.pathname === item.path
-                        return (
-                          <Link
-                            key={item.path}
-                            to={item.path}
-                            onClick={() => isMobile && setSidebarOpen(false)}
-                            className={`
-                              flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
-                              ${isActive 
-                                ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-500' 
-                                : 'text-dark-400 hover:bg-dark-700/50 hover:text-dark-200'
-                              }
-                            `}
+                {menuGroups.map((group) => {
+                  const groupKey = group.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                  const isExpanded = expandedGroups[groupKey]
+                  
+                  return (
+                    <div key={group.label} className="mb-4">
+                      {/* Group Header - Clicável */}
+                      <button
+                        onClick={() => toggleGroup(groupKey)}
+                        className="w-full flex items-center justify-between text-xs font-semibold text-dark-400 uppercase tracking-wider px-4 py-2 mb-1 hover:text-dark-300 transition-colors"
+                      >
+                        <span>{group.label}</span>
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                      
+                      {/* Group Items - Colapsáveis */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="space-y-1 overflow-hidden"
                           >
-                            <Icon size={20} />
-                            <span className="font-medium">{item.label}</span>
-                          </Link>
-                        )
-                      })}
+                            {group.items.map((item) => {
+                              const Icon = item.icon
+                              const isActive = location.pathname === item.path
+                              return (
+                                <Link
+                                  key={item.path}
+                                  to={item.path}
+                                  onClick={() => isMobile && setSidebarOpen(false)}
+                                  className={`
+                                    flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+                                    ${isActive 
+                                      ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-500' 
+                                      : 'text-dark-400 hover:bg-dark-700/50 hover:text-dark-200'
+                                    }
+                                  `}
+                                >
+                                  <Icon size={20} />
+                                  <span className="font-medium">{item.label}</span>
+                                </Link>
+                              )
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </nav>
 
               {/* Footer */}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { compromissosAPI, itensAPI, categoriasAPI, disponibilidadeAPI } from '../services/api'
 import api from '../services/api'
-import { Calendar, Plus, Info } from 'lucide-react'
+import { Calendar, Plus, Info, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatItemName } from '../utils/format'
 
@@ -15,6 +15,7 @@ export default function Compromissos() {
   const [itensFiltrados, setItensFiltrados] = useState([])
   const [itemSelecionado, setItemSelecionado] = useState(null)
   const [quantidadeFixa, setQuantidadeFixa] = useState(false)
+  const [pecasSelecionadas, setPecasSelecionadas] = useState([])
   const [formData, setFormData] = useState({
     tipo_compromisso: 'itens_alugados',
     item_id: '',
@@ -110,15 +111,26 @@ export default function Compromissos() {
 
     try {
       if (formData.tipo_compromisso === 'pecas_carro') {
-        // Associar peça ao carro
-        await api.post('/api/pecas-carros', {
-          peca_id: parseInt(formData.peca_id),
-          carro_id: parseInt(formData.carro_id),
-          quantidade: parseInt(formData.quantidade),
-          data_instalacao: formData.data_inicio,
-          observacoes: formData.descricao || ''
-        })
-        toast.success('Peça associada ao carro com sucesso!')
+        // Associar múltiplas peças ao carro
+        if (pecasSelecionadas.length === 0) {
+          toast.error('Adicione pelo menos uma peça antes de salvar')
+          setLoading(false)
+          return
+        }
+
+        const promises = pecasSelecionadas.map(peca =>
+          api.post('/api/pecas-carros', {
+            peca_id: parseInt(peca.peca_id),
+            carro_id: parseInt(formData.carro_id),
+            quantidade: parseInt(peca.quantidade),
+            data_instalacao: formData.data_inicio,
+            observacoes: formData.descricao || ''
+          })
+        )
+
+        await Promise.all(promises)
+        toast.success(`${pecasSelecionadas.length} peça(s) associada(s) ao carro com sucesso!`)
+        
         setFormData({
           tipo_compromisso: 'pecas_carro',
           item_id: '',
@@ -133,6 +145,7 @@ export default function Compromissos() {
           endereco: '',
           contratante: '',
         })
+        setPecasSelecionadas([])
       } else {
         // Fluxo original para itens alugados
         // Verifica disponibilidade antes de criar
@@ -266,36 +279,100 @@ export default function Compromissos() {
               </select>
             </div>
 
-            <div>
-              <label className="label">Peça *</label>
-              <select
-                value={formData.peca_id}
-                onChange={(e) => setFormData({ ...formData, peca_id: e.target.value })}
-                required
-                className="input"
-              >
-                <option value="">Selecione uma peça</option>
-                {itens.filter(i => i.categoria === 'Peças de Carro').map(peca => (
-                  <option key={peca.id} value={peca.id}>
-                    {peca.nome}
-                  </option>
-                ))}
-              </select>
+            {/* Adicionar Peças */}
+            <div className="space-y-4 p-4 bg-dark-700/30 rounded-lg border border-dark-600">
+              <h3 className="text-lg font-semibold text-dark-50">Adicionar Peças</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="label">Peça</label>
+                  <select
+                    value={formData.peca_id}
+                    onChange={(e) => setFormData({ ...formData, peca_id: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Selecione uma peça</option>
+                    {itens.filter(i => i.categoria === 'Peças de Carro').map(peca => (
+                      <option key={peca.id} value={peca.id}>
+                        {peca.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Quantidade</label>
+                  <input
+                    type="number"
+                    value={formData.quantidade}
+                    onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
+                    min="1"
+                    className="input"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!formData.peca_id) {
+                        toast.error('Selecione uma peça')
+                        return
+                      }
+                      const peca = itens.find(i => i.id === parseInt(formData.peca_id))
+                      const jaAdicionada = pecasSelecionadas.find(p => p.peca_id === formData.peca_id)
+                      
+                      if (jaAdicionada) {
+                        toast.error('Peça já adicionada à lista')
+                        return
+                      }
+
+                      setPecasSelecionadas([...pecasSelecionadas, {
+                        peca_id: formData.peca_id,
+                        peca_nome: peca?.nome || '',
+                        quantidade: formData.quantidade
+                      }])
+                      setFormData({ ...formData, peca_id: '', quantidade: 1 })
+                      toast.success('Peça adicionada à lista')
+                    }}
+                    className="btn btn-primary w-full flex items-center justify-center gap-2"
+                  >
+                    <Plus size={20} />
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista de Peças Selecionadas */}
+              {pecasSelecionadas.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <h4 className="text-sm font-semibold text-dark-300">Peças a Instalar ({pecasSelecionadas.length})</h4>
+                  <div className="space-y-2">
+                    {pecasSelecionadas.map((peca, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-dark-800 rounded-lg border border-dark-600">
+                        <div>
+                          <span className="text-dark-50 font-medium">{peca.peca_nome}</span>
+                          <span className="text-dark-400 text-sm ml-2">x{peca.quantidade}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPecasSelecionadas(pecasSelecionadas.filter((_, i) => i !== index))
+                            toast.success('Peça removida da lista')
+                          }}
+                          className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+                          title="Remover"
+                        >
+                          <X size={16} className="text-red-400" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Quantidade *</label>
-                <input
-                  type="number"
-                  value={formData.quantidade}
-                  onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
-                  required
-                  min="1"
-                  className="input"
-                />
-              </div>
-
               <div>
                 <label className="label">Data de Instalação *</label>
                 <input
