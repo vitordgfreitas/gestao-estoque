@@ -93,7 +93,7 @@ export default function Layout({ children }) {
               <div className="p-6 border-b border-dark-700">
                 <div className="flex items-center gap-3">
                   <img 
-                    src="/starlogo.jpeg" 
+                    src="/star_logo.jpg" 
                     alt="STAR Locação" 
                     className="w-full h-auto"
                   />

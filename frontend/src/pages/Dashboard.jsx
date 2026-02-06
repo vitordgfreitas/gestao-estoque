@@ -640,7 +640,7 @@ export default function Dashboard() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h4 className="font-medium text-dark-50 mb-1">{comp.item?.nome || 'Item Deletado'}</h4>
+                      <h4 className="font-medium text-dark-50 mb-1">{formatItemName(comp.item) || 'Item Deletado'}</h4>
                       <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-dark-400">
                         <span className="flex items-center gap-1">
                           <Calendar size={14} />
@@ -717,7 +717,7 @@ export default function Dashboard() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-dark-50">{comp.item?.nome || 'Item Deletado'}</h4>
+                          <h4 className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</h4>
                           {diasRestantes === 0 && (
                             <span className="px-2 py-0.5 bg-yellow-600/20 text-yellow-400 rounded text-xs font-medium">
                               Hoje

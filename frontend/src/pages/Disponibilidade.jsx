@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { disponibilidadeAPI, itensAPI, categoriasAPI } from '../services/api'
 import { Search, CheckCircle2, XCircle, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatItemName } from '../utils/format'
 
 export default function Disponibilidade() {
   const [itens, setItens] = useState([])
@@ -237,7 +238,7 @@ export default function Disponibilidade() {
               <option value="">Selecione um item</option>
               {itensFiltrados.map(item => (
                 <option key={item.id} value={item.id}>
-                  {construirNomeItem(item)}
+                  {formatItemName(item)}
                 </option>
               ))}
             </select>

@@ -1374,7 +1374,7 @@ def deletar_compromisso(compromisso_id):
 
 # ============= FINANCIAMENTOS =============
 
-def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
+def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     from datetime import timedelta
     import calendar
@@ -1394,19 +1394,30 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     except (IndexError, KeyError, ValueError):
         next_id = 1
     
+    # Converte valores para float e arredonda
+    valor_total = round(float(valor_total), 2)
+    valor_entrada = round(float(valor_entrada), 2)
+    taxa_juros = round(float(taxa_juros), 6)
+    
+    # Calcula valor financiado (deduz entrada)
+    valor_financiado = round(valor_total - valor_entrada, 2)
+    
+    if valor_financiado <= 0:
+        raise ValueError("Valor financiado deve ser maior que zero")
+    
     # Calcula valor da parcela com juros (Sistema Price - parcelas fixas)
     # PMT = PV * (i * (1+i)^n) / ((1+i)^n - 1)
     # onde: PMT = valor da parcela, PV = valor financiado, i = taxa mensal, n = número de parcelas
     if not parcelas_customizadas and taxa_juros > 0:
-        i = float(taxa_juros)  # Taxa mensal (ex: 0.01 para 1%)
+        i = taxa_juros  # Taxa mensal (ex: 0.01 para 1%)
         n = numero_parcelas
         if i > 0:
             # Sistema Price (parcelas fixas com juros compostos)
-            valor_parcela = valor_total * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
+            valor_parcela = valor_financiado * (i * ((1 + i) ** n)) / (((1 + i) ** n) - 1)
         else:
-            valor_parcela = valor_total / numero_parcelas
+            valor_parcela = valor_financiado / numero_parcelas
     else:
-        valor_parcela = valor_total / numero_parcelas if not parcelas_customizadas else 0
+        valor_parcela = valor_financiado / numero_parcelas if not parcelas_customizadas else 0
     
     # Formata data
     data_inicio_str = data_inicio.strftime('%Y-%m-%d') if isinstance(data_inicio, date) else str(data_inicio)
@@ -1414,14 +1425,15 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     # Adiciona financiamento
     try:
         # Arredonda valores antes de salvar (garante 2 casas decimais)
-        # Garante que sempre seja float, mesmo que seja número inteiro (ex: 80000.0 ao invés de 80000)
-        valor_total_rounded = round(float(valor_total), 2)
-        valor_parcela_rounded = round(float(valor_parcela), 2)
+        valor_parcela_rounded = round(valor_parcela, 2)
+        valor_entrada_rounded = round(valor_entrada, 2)
         
         # Garante que valores inteiros sejam salvos como float (ex: 80000.0)
         # Isso evita que o Google Sheets interprete como inteiro
-        if valor_total_rounded == int(valor_total_rounded):
-            valor_total_rounded = float(f"{valor_total_rounded:.2f}")
+        if valor_total == int(valor_total):
+            valor_total = float(f"{valor_total:.2f}")
+        if valor_entrada_rounded == int(valor_entrada_rounded):
+            valor_entrada_rounded = float(f"{valor_entrada_rounded:.2f}")
         if valor_parcela_rounded == int(valor_parcela_rounded):
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
@@ -1432,6 +1444,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             next_id,
             item_id,
             '',  # Placeholder para valor_total
+            '',  # Placeholder para valor_entrada
             numero_parcelas,
             '',  # Placeholder para valor_parcela
             float(taxa_juros),
@@ -1441,8 +1454,9 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             observacoes or ''
         ])
         # Agora atualiza os valores numéricos com formatação explícita
-        sheet_financiamentos.update_cell(row_num, 3, valor_total_rounded)  # Valor Total
-        sheet_financiamentos.update_cell(row_num, 5, valor_parcela_rounded)  # Valor Parcela
+        sheet_financiamentos.update_cell(row_num, 3, valor_total)  # Valor Total
+        sheet_financiamentos.update_cell(row_num, 4, valor_entrada_rounded)  # Valor Entrada
+        sheet_financiamentos.update_cell(row_num, 6, valor_parcela_rounded)  # Valor Parcela
         
         # Gera parcelas
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()

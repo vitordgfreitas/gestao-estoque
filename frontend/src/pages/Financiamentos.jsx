@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
-import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals } from '../utils/format'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -530,7 +530,7 @@ export default function Financiamentos() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-xl font-bold text-white">
-                      {itens.find(i => i.id === fin.item_id)?.nome || `Item #${fin.item_id}`}
+                      {formatItemName(itens.find(i => i.id === fin.item_id)) || `Item #${fin.item_id}`}
                     </h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       fin.status === 'Ativo' ? 'bg-green-500/20 text-green-400' :
@@ -635,7 +635,7 @@ export default function Financiamentos() {
                 <div>
                   <p className="text-sm text-dark-400">Item</p>
                   <p className="text-white font-semibold">
-                    {itens.find(i => i.id === selectedFinanciamento.item_id)?.nome || `Item #${selectedFinanciamento.item_id}`}
+                    {formatItemName(itens.find(i => i.id === selectedFinanciamento.item_id)) || `Item #${selectedFinanciamento.item_id}`}
                   </p>
                 </div>
                 <div>

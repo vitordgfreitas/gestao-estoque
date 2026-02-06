@@ -4,6 +4,7 @@ import { compromissosAPI, itensAPI, categoriasAPI } from '../services/api'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
+import { formatItemName } from '../utils/format'
 
 export default function Calendario() {
   const [compromissos, setCompromissos] = useState([])
@@ -306,7 +307,7 @@ export default function Calendario() {
                         onClick={() => setDetalhesDia({ data: dia, compromissos: [comp] })}
                         className="p-3 bg-dark-700/50 rounded-lg hover:bg-dark-700 cursor-pointer transition-colors"
                       >
-                        <p className="font-medium text-dark-50">{comp.item?.nome || 'Item Deletado'}</p>
+                        <p className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</p>
                         <p className="text-sm text-dark-400">
                           {comp.quantidade} unidades • {comp.contratante || 'Sem contratante'}
                         </p>
@@ -366,7 +367,7 @@ export default function Calendario() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h4 className="font-semibold text-dark-50 mb-2">
-                      {comp.item?.nome || 'Item Deletado'}
+                      {formatItemName(comp.item) || 'Item Deletado'}
                     </h4>
                     <div className="space-y-1 text-sm text-dark-400">
                       <p>Quantidade: {comp.quantidade} unidades</p>
@@ -501,7 +502,7 @@ export default function Calendario() {
               detalhesDia.compromissos.map(comp => (
                 <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
                   <h4 className="font-semibold text-dark-50 mb-3">
-                    {comp.item?.nome || 'Item Deletado'}
+                    {formatItemName(comp.item) || 'Item Deletado'}
                   </h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">

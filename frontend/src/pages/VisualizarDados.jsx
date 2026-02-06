@@ -6,6 +6,7 @@ import { Search, Edit, Trash2, Eye, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { formatItemName } from '../utils/format'
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 const MARCAS_CARROS = [
@@ -255,7 +256,7 @@ export default function VisualizarDados() {
                           className="hover:bg-dark-700/30"
                         >
                           <td className="font-mono text-xs text-dark-400">{item.id}</td>
-                          <td className="font-medium text-dark-50">{item.nome}</td>
+                          <td className="font-medium text-dark-50">{formatItemName(item)}</td>
                           <td>
                             <span className="px-2 py-1 bg-primary-600/20 text-primary-400 rounded text-xs">
                               {item.categoria}
@@ -309,7 +310,7 @@ export default function VisualizarDados() {
                       transition={{ delay: index * 0.05 }}
                     >
                       <td className="font-mono text-xs text-dark-400">{comp.id}</td>
-                      <td className="font-medium text-dark-50">{comp.item?.nome || 'Item Deletado'}</td>
+                      <td className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</td>
                       <td>{comp.quantidade}</td>
                       <td className="text-dark-400">{new Date(comp.data_inicio).toLocaleDateString('pt-BR')}</td>
                       <td className="text-dark-400">{new Date(comp.data_fim).toLocaleDateString('pt-BR')}</td>
@@ -811,7 +812,7 @@ function EditCompromissoModal({ compromisso, itens, onClose, onSave }) {
             <option value="">Selecione um item</option>
             {itens.map(item => (
               <option key={item.id} value={item.id}>
-                {item.nome}
+                {formatItemName(item)}
               </option>
             ))}
           </select>

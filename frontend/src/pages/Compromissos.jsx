@@ -4,6 +4,7 @@ import { compromissosAPI, itensAPI, categoriasAPI, disponibilidadeAPI } from '..
 import api from '../services/api'
 import { Calendar, Plus, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatItemName } from '../utils/format'
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
@@ -102,38 +103,6 @@ export default function Compromissos() {
     }
   }
 
-  const construirNomeItem = (item) => {
-    let nomeDisplay = item.nome
-    
-    // Adiciona identificadores se existirem
-    const dadosCat = item.dados_categoria || {}
-    const camposPrioridade = ['Marca', 'Modelo', 'Placa', 'Serial', 'Código']
-    const camposChave = []
-    
-    for (const campo of camposPrioridade) {
-      if (dadosCat[campo]) {
-        camposChave.push(String(dadosCat[campo]))
-      }
-    }
-    
-    if (camposChave.length > 0) {
-      nomeDisplay = `${item.nome} - ${camposChave.join(' ')}`
-    }
-    
-    // Compatibilidade: para Carros, usa carro se existir
-    if (item.categoria === 'Carros' && item.carro) {
-      nomeDisplay = `${item.carro.marca || ''} ${item.carro.modelo || ''} - ${item.carro.placa || ''}`.trim()
-    }
-    
-    // Adiciona estoque se não for item único
-    const camposItemUnico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único']
-    const temCampoItemUnico = Object.keys(dadosCat).some(campo => camposItemUnico.includes(campo))
-    if (item.categoria !== 'Carros' && !temCampoItemUnico && item.quantidade_total) {
-      nomeDisplay += ` (Estoque: ${item.quantidade_total})`
-    }
-    
-    return nomeDisplay
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -359,7 +328,7 @@ export default function Compromissos() {
               <option value="">Selecione um item</option>
               {itensFiltrados.map(item => (
                 <option key={item.id} value={item.id}>
-                  {construirNomeItem(item)}
+                  {formatItemName(item)}
                 </option>
               ))}
             </select>

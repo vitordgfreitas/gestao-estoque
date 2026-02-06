@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { contasPagarAPI, itensAPI } from '../services/api'
 import { Plus, CheckCircle, XCircle, Clock, Filter } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatItemName } from '../utils/format'
 
 const CATEGORIAS = ['Fornecedor', 'Manutenção', 'Despesa', 'Outro']
 
@@ -227,7 +228,7 @@ export default function ContasPagar() {
                 >
                   <option value="">Nenhum</option>
                   {itens.map(item => (
-                    <option key={item.id} value={item.id}>{item.nome}</option>
+                    <option key={item.id} value={item.id}>{formatItemName(item)}</option>
                   ))}
                 </select>
               </div>

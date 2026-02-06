@@ -121,3 +121,49 @@ export const formatNumber = (value, decimals = 0) => {
     maximumFractionDigits: decimals
   }).format(numValue)
 }
+
+/**
+ * Formata o nome de exibição de um item, incluindo informações da categoria
+ * Para carros: sempre retorna "Marca Modelo - Placa"
+ * @param {Object} item - Item a ser formatado
+ * @returns {string} Nome formatado do item
+ */
+export const formatItemName = (item) => {
+  if (!item) return 'Item Desconhecido'
+  
+  // Para carros, SEMPRE exibir Marca Modelo - Placa
+  if (item.categoria === 'Carros') {
+    const dados = item.dados_categoria || {}
+    const marca = dados.Marca || dados.marca || item.carro?.marca || ''
+    const modelo = dados.Modelo || dados.modelo || item.carro?.modelo || ''
+    const placa = dados.Placa || dados.placa || item.carro?.placa || ''
+    
+    const nomeBase = [marca, modelo].filter(Boolean).join(' ')
+    
+    if (nomeBase && placa) {
+      return `${nomeBase} - ${placa}`
+    } else if (nomeBase) {
+      return nomeBase
+    } else if (placa) {
+      return placa
+    }
+    return item.nome || 'Carro sem identificação'
+  }
+  
+  // Para outros itens, adiciona identificadores se existirem
+  const dadosCat = item.dados_categoria || {}
+  const camposPrioridade = ['Marca', 'Modelo', 'Placa', 'Serial', 'Código']
+  const camposChave = []
+  
+  for (const campo of camposPrioridade) {
+    if (dadosCat[campo]) {
+      camposChave.push(String(dadosCat[campo]))
+    }
+  }
+  
+  if (camposChave.length > 0) {
+    return `${item.nome} - ${camposChave.join(' ')}`
+  }
+  
+  return item.nome || 'Item sem nome'
+}
