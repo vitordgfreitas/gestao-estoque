@@ -2910,3 +2910,227 @@ def obter_fluxo_caixa(data_inicio, data_fim):
         })
     
     return resultado
+
+
+# ============= PEÇAS EM CARROS =============
+
+def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, observacoes=None):
+    """Associa uma peça a um carro"""
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    # Obtém ou cria aba de Peças em Carros
+    try:
+        sheet_pecas_carros = spreadsheet.worksheet("Pecas_Carros")
+    except gspread.exceptions.WorksheetNotFound:
+        sheet_pecas_carros = spreadsheet.add_worksheet(title="Pecas_Carros", rows=1000, cols=10)
+        sheet_pecas_carros.append_row(["ID", "Peca ID", "Carro ID", "Quantidade", "Data Instalacao", "Observacoes"])
+    
+    # Verifica se peça e carro existem
+    try:
+        itens = listar_itens()
+        peca = next((i for i in itens if i.id == peca_id), None)
+        carro = next((i for i in itens if i.id == carro_id), None)
+        
+        if not peca:
+            raise ValueError(f"Peça {peca_id} não encontrada")
+        if peca.categoria != "Peças de Carro":
+            raise ValueError(f"Item {peca_id} não é uma peça de carro (categoria: {peca.categoria})")
+        
+        if not carro:
+            raise ValueError(f"Carro {carro_id} não encontrado")
+        if carro.categoria != "Carros":
+            raise ValueError(f"Item {carro_id} não é um carro (categoria: {carro.categoria})")
+    except Exception as e:
+        raise ValueError(f"Erro ao verificar itens: {str(e)}")
+    
+    # Gera próximo ID
+    try:
+        all_records = _retry_with_backoff(lambda: sheet_pecas_carros.get_all_records())
+        if all_records:
+            valid_ids = [int(record.get('ID', 0)) for record in all_records if record and record.get('ID')]
+            next_id = max(valid_ids) + 1 if valid_ids else 1
+        else:
+            next_id = 1
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_peca_carro (buscar próximo ID)")
+    except (IndexError, KeyError, ValueError):
+        next_id = 1
+    
+    # Formata data
+    if data_instalacao is None:
+        data_instalacao = date.today()
+    data_instalacao_str = data_instalacao.strftime('%Y-%m-%d') if isinstance(data_instalacao, date) else str(data_instalacao)
+    
+    # Adiciona associação
+    try:
+        sheet_pecas_carros.append_row([
+            next_id,
+            peca_id,
+            carro_id,
+            quantidade,
+            data_instalacao_str,
+            observacoes or ''
+        ])
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "criar_peca_carro (adicionar linha)")
+    
+    # Limpa cache
+    _clear_cache()
+    
+    # Retorna objeto similar ao modelo PecaCarro
+    class PecaCarro:
+        def __init__(self, id, peca_id, carro_id, quantidade, data_instalacao, observacoes):
+            self.id = int(id)
+            self.peca_id = int(peca_id)
+            self.carro_id = int(carro_id)
+            self.quantidade = int(quantidade)
+            if isinstance(data_instalacao, str) and data_instalacao:
+                try:
+                    self.data_instalacao = datetime.strptime(data_instalacao, '%Y-%m-%d').date()
+                except ValueError:
+                    self.data_instalacao = date.today()
+            else:
+                self.data_instalacao = data_instalacao if isinstance(data_instalacao, date) else date.today()
+            self.observacoes = observacoes or ''
+    
+    return PecaCarro(next_id, peca_id, carro_id, quantidade, data_instalacao_str, observacoes)
+
+
+def listar_pecas_carros(carro_id=None, peca_id=None):
+    """Lista associações de peças em carros com filtros opcionais"""
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    # Obtém aba de Peças em Carros
+    try:
+        sheet_pecas_carros = spreadsheet.worksheet("Pecas_Carros")
+    except gspread.exceptions.WorksheetNotFound:
+        return []
+    
+    try:
+        records = _retry_with_backoff(lambda: sheet_pecas_carros.get_all_records())
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "listar_pecas_carros")
+    except (IndexError, KeyError):
+        return []
+    
+    class PecaCarro:
+        def __init__(self, id, peca_id, carro_id, quantidade, data_instalacao, observacoes):
+            self.id = int(id) if id else None
+            self.peca_id = int(peca_id) if peca_id else None
+            self.carro_id = int(carro_id) if carro_id else None
+            self.quantidade = int(quantidade) if quantidade else 1
+            if isinstance(data_instalacao, str) and data_instalacao:
+                try:
+                    self.data_instalacao = datetime.strptime(data_instalacao, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        self.data_instalacao = datetime.strptime(data_instalacao, '%d/%m/%Y').date()
+                    except ValueError:
+                        self.data_instalacao = date.today()
+            else:
+                self.data_instalacao = data_instalacao if isinstance(data_instalacao, date) else date.today()
+            self.observacoes = observacoes or ''
+    
+    associacoes = []
+    for record in records:
+        if record and record.get('ID'):
+            try:
+                associacao = PecaCarro(
+                    record.get('ID'),
+                    record.get('Peca ID'),
+                    record.get('Carro ID'),
+                    record.get('Quantidade', 1),
+                    record.get('Data Instalacao', ''),
+                    record.get('Observacoes', '')
+                )
+                
+                # Aplica filtros
+                if carro_id and associacao.carro_id != int(carro_id):
+                    continue
+                if peca_id and associacao.peca_id != int(peca_id):
+                    continue
+                
+                associacoes.append(associacao)
+            except (ValueError, TypeError):
+                continue
+    
+    return associacoes
+
+
+def buscar_peca_carro_por_id(associacao_id):
+    """Busca uma associação peça-carro por ID"""
+    associacoes = listar_pecas_carros()
+    return next((a for a in associacoes if a.id == associacao_id), None)
+
+
+def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, observacoes=None):
+    """Atualiza uma associação peça-carro"""
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    try:
+        sheet_pecas_carros = spreadsheet.worksheet("Pecas_Carros")
+    except gspread.exceptions.WorksheetNotFound:
+        return None
+    
+    try:
+        records = _retry_with_backoff(lambda: sheet_pecas_carros.get_all_records())
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "atualizar_peca_carro")
+    except (IndexError, KeyError):
+        return None
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(associacao_id):
+            valores_antigos = record.copy()
+            
+            # Atualiza valores
+            if quantidade is not None:
+                sheet_pecas_carros.update_cell(i, 4, int(quantidade))
+            if data_instalacao is not None:
+                data_str = data_instalacao.strftime('%Y-%m-%d') if isinstance(data_instalacao, date) else str(data_instalacao)
+                sheet_pecas_carros.update_cell(i, 5, data_str)
+            if observacoes is not None:
+                sheet_pecas_carros.update_cell(i, 6, observacoes)
+            
+            # Limpa cache
+            _clear_cache()
+            
+            # Retorna associação atualizada
+            return buscar_peca_carro_por_id(associacao_id)
+    
+    return None
+
+
+def deletar_peca_carro(associacao_id):
+    """Remove uma associação peça-carro"""
+    sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
+    
+    try:
+        sheet_pecas_carros = spreadsheet.worksheet("Pecas_Carros")
+    except gspread.exceptions.WorksheetNotFound:
+        return False
+    
+    try:
+        records = _retry_with_backoff(lambda: sheet_pecas_carros.get_all_records())
+    except gspread.exceptions.APIError as e:
+        _handle_api_error(e, "deletar_peca_carro")
+    except (IndexError, KeyError):
+        return False
+    
+    for i, record in enumerate(records, start=2):
+        if record and str(record.get('ID')) == str(associacao_id):
+            valores_antigos = record.copy()
+            
+            try:
+                sheet_pecas_carros.delete_rows(i)
+                auditoria.registrar_auditoria('DELETE', 'Pecas_Carros', associacao_id, valores_antigos=valores_antigos)
+                _clear_cache()
+                return True
+            except gspread.exceptions.APIError as e:
+                _handle_api_error(e, "deletar_peca_carro (deletar linha)")
+    
+    return False
