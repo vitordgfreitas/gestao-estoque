@@ -449,12 +449,15 @@ def listar_itens():
             try:
                 sheet_categoria = spreadsheet.worksheet(categoria)
                 categoria_records = sheet_categoria.get_all_records()
+                print(f"[DEBUG] Aba '{categoria}': {len(categoria_records)} registros encontrados")
                 for cat_record in categoria_records:
                     if cat_record and cat_record.get('Item ID'):
                         item_id = int(cat_record.get('Item ID'))
                         dados_categoria_dict[item_id] = {'categoria': categoria, 'dados': cat_record}
-            except (gspread.exceptions.WorksheetNotFound, IndexError, KeyError, ValueError, gspread.exceptions.APIError):
+                        print(f"[DEBUG] Item {item_id} - Dados: {cat_record}")
+            except (gspread.exceptions.WorksheetNotFound, IndexError, KeyError, ValueError, gspread.exceptions.APIError) as e:
                 # Aba não existe ou erro ao ler, continua
+                print(f"[DEBUG] Erro ao ler aba '{categoria}': {type(e).__name__} - {str(e)}")
                 pass
     except Exception:
         # Em caso de erro geral, continua sem dados de categoria
