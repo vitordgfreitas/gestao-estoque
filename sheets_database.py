@@ -44,20 +44,31 @@ def _handle_api_error(e, operation_name):
     """Trata erros da API do Google Sheets"""
     if isinstance(e, gspread.exceptions.APIError):
         # Tenta extrair informações do erro
-        error_code = getattr(e, 'response', {}).get('status', 0) if hasattr(e, 'response') else 0
         error_message = str(e)
+        error_dict = getattr(e, 'response', None)
+        
+        # Se response for um objeto Response do requests, pega o json
+        if error_dict and hasattr(error_dict, 'json'):
+            try:
+                error_dict = error_dict.json()
+            except:
+                error_dict = {}
+        elif not isinstance(error_dict, dict):
+            error_dict = {}
+        
+        error_code = error_dict.get('code', 0) if error_dict else 0
         
         # Verifica se é erro 429 (quota exceeded)
         if error_code == 429 or '429' in error_message or 'Quota exceeded' in error_message or 'RATE_LIMIT_EXCEEDED' in error_message:
             raise Exception(
-                f"⚠️ Limite de Requisições do Google Sheets Excedido!\n\n"
-                f"O Google Sheets tem um limite de 60 requisições de leitura por minuto.\n\n"
-                f"Operação: {operation_name}\n\n"
-                f"Soluções:\n"
+                f"[!] Limite de Requisicoes do Google Sheets Excedido!\n\n"
+                f"O Google Sheets tem um limite de 60 requisicoes de leitura por minuto.\n\n"
+                f"Operacao: {operation_name}\n\n"
+                f"Solucoes:\n"
                 f"1. Aguarde 1-2 minutos antes de tentar novamente\n"
-                f"2. Evite fazer muitas operações em sequência\n"
+                f"2. Evite fazer muitas operacoes em sequencia\n"
                 f"3. Use SQLite local para desenvolvimento/testes (configure USE_GOOGLE_SHEETS=false)\n"
-                f"4. Solicite aumento de quota no Google Cloud Console se necessário"
+                f"4. Solicite aumento de quota no Google Cloud Console se necessario"
             )
     # Re-raise o erro original se não for 429
     raise e
