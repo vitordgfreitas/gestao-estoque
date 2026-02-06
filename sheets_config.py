@@ -214,10 +214,10 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         try:
             header = sheet_carros.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_carros.insert_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"], 1)
+                sheet_carros.insert_row(["ID", "Item ID", "Placa", "Chassi", "Renavam", "Marca", "Modelo", "Ano"], 1)
             else:
                 headers = sheet_carros.row_values(1)
-                expected_headers = ["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"]
+                expected_headers = ["ID", "Item ID", "Placa", "Chassi", "Renavam", "Marca", "Modelo", "Ano"]
                 for i, expected_header in enumerate(expected_headers):
                     if i >= len(headers) or headers[i] != expected_header:
                         col_letter = chr(65 + i)
@@ -336,10 +336,10 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         try:
             header = sheet_financiamentos.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_financiamentos.insert_row(["ID", "Item ID", "Valor Total", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"], 1)
+                sheet_financiamentos.insert_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"], 1)
             else:
                 headers = sheet_financiamentos.row_values(1)
-                expected_headers = ["ID", "Item ID", "Valor Total", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"]
+                expected_headers = ["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"]
                 for i, expected_header in enumerate(expected_headers):
                     if i >= len(headers) or headers[i] != expected_header:
                         col_letter = chr(65 + i)
@@ -348,12 +348,12 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             try:
                 all_values = sheet_financiamentos.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
+                    sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
             except Exception:
                 pass
     else:
-        sheet_financiamentos = spreadsheet.add_worksheet(title=sheet_financiamentos_name, rows=1000, cols=10)
-        sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
+        sheet_financiamentos = spreadsheet.add_worksheet(title=sheet_financiamentos_name, rows=1000, cols=12)
+        sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
     
     # Obtém ou cria aba de Parcelas Financiamento
     if sheet_parcelas_financiamento_name in existing_worksheets:
