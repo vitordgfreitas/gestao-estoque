@@ -67,6 +67,7 @@ export const statsAPI = {
 export const categoriasAPI = {
   listar: () => api.get('/api/categorias'),
   obterCampos: (categoria) => api.get(`/api/categorias/${encodeURIComponent(categoria)}/campos`),
+  criar: (nomeCategoria) => api.post('/api/categorias', { nome_categoria: nomeCategoria })
 }
 
 // Informações da API

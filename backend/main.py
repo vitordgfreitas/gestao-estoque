@@ -1,7 +1,7 @@
 """
 Backend FastAPI para o CRM de Gestão de Estoque
 """
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import date, datetime, timedelta
@@ -1127,6 +1127,45 @@ async def listar_categorias():
             ]))
         
         return categorias if categorias else []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/categorias", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def criar_categoria(nome_categoria: str = Body(..., embed=True), token: str = Depends(verify_token)):
+    """Cria uma nova categoria e sua aba correspondente no Google Sheets"""
+    try:
+        if db_module is None:
+            raise HTTPException(status_code=500, detail="Database module not initialized")
+        
+        # Validação
+        if not nome_categoria or not nome_categoria.strip():
+            raise HTTPException(status_code=400, detail="Nome da categoria não pode ser vazio")
+        
+        nome_categoria = nome_categoria.strip()
+        
+        # Verifica se categoria já existe
+        if hasattr(db_module, 'obter_categorias'):
+            categorias_existentes = db_module.obter_categorias()
+            if nome_categoria in categorias_existentes:
+                raise HTTPException(status_code=400, detail=f"Categoria '{nome_categoria}' já existe")
+        
+        # Cria aba no Google Sheets (apenas para Google Sheets)
+        if hasattr(db_module, 'obter_ou_criar_aba_categoria'):
+            db_module.obter_ou_criar_aba_categoria(nome_categoria)
+            return {
+                "success": True,
+                "message": f"Categoria '{nome_categoria}' criada com sucesso",
+                "categoria": nome_categoria
+            }
+        else:
+            # Para SQLite, apenas retorna sucesso (categorias são criadas automaticamente ao adicionar item)
+            return {
+                "success": True,
+                "message": f"Categoria '{nome_categoria}' será criada ao adicionar o primeiro item",
+                "categoria": nome_categoria
+            }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

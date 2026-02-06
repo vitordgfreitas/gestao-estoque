@@ -18,6 +18,9 @@ export default function Itens() {
   const [camposCategoria, setCamposCategoria] = useState([])
   const [loadingCategorias, setLoadingCategorias] = useState(true)
   const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
+  const [mostrarModalNovaCategoria, setMostrarModalNovaCategoria] = useState(false)
+  const [novaCategoria, setNovaCategoria] = useState('')
+  const [criandoCategoria, setCriandoCategoria] = useState(false)
   const [formData, setFormData] = useState({
     nome: '',
     quantidade_total: 1,
@@ -65,13 +68,42 @@ export default function Itens() {
     } catch (error) {
       console.error('Erro ao carregar categorias:', error)
       toast.error('Erro ao carregar categorias')
-      // Fallback para categorias padrão
-      setCategorias(['Estrutura de Evento', 'Carros'])
-      if (!formData.categoria) {
-        setFormData(prev => ({ ...prev, categoria: 'Estrutura de Evento' }))
-      }
+      setCategorias([])
     } finally {
       setLoadingCategorias(false)
+    }
+  }
+
+  const handleCriarCategoria = async () => {
+    if (!novaCategoria.trim()) {
+      toast.error('Digite o nome da categoria')
+      return
+    }
+
+    if (categorias.includes(novaCategoria.trim())) {
+      toast.error('Categoria já existe')
+      return
+    }
+
+    setCriandoCategoria(true)
+    try {
+      await categoriasAPI.criar(novaCategoria.trim())
+      toast.success(`Categoria "${novaCategoria}" criada com sucesso!`)
+      
+      // Recarrega categorias
+      await loadCategorias()
+      
+      // Seleciona a nova categoria
+      setFormData(prev => ({ ...prev, categoria: novaCategoria.trim() }))
+      
+      // Fecha modal e limpa
+      setMostrarModalNovaCategoria(false)
+      setNovaCategoria('')
+    } catch (error) {
+      console.error('Erro ao criar categoria:', error)
+      toast.error(error.response?.data?.detail || 'Erro ao criar categoria')
+    } finally {
+      setCriandoCategoria(false)
     }
   }
 
@@ -350,24 +382,29 @@ export default function Itens() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="label">Categoria *</label>
-              <select
-                name="categoria"
-                value={formData.categoria}
-                onChange={handleChange}
-                required
-                className="input"
-              >
-                {categorias.length === 0 ? (
-                  <>
-                    <option value="Estrutura de Evento">Estrutura de Evento</option>
-                    <option value="Carros">Carros</option>
-                  </>
-                ) : (
-                  categorias.map(cat => (
+              <div className="flex gap-2">
+                <select
+                  name="categoria"
+                  value={formData.categoria}
+                  onChange={handleChange}
+                  required
+                  className="input flex-1"
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {categorias.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
-                  ))
-                )}
-              </select>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalNovaCategoria(true)}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  title="Nova Categoria"
+                >
+                  <Plus size={20} />
+                  Nova
+                </button>
+              </div>
             </div>
 
             {!quantidadeFixa && (
@@ -579,6 +616,69 @@ export default function Itens() {
           </button>
         </div>
       </motion.form>
+
+      {/* Modal Nova Categoria */}
+      {mostrarModalNovaCategoria && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-dark-800 rounded-xl shadow-2xl max-w-md w-full p-6"
+          >
+            <h2 className="text-2xl font-bold text-dark-50 mb-4">Nova Categoria</h2>
+            <p className="text-dark-400 mb-6">
+              Digite o nome da nova categoria. Uma aba será criada automaticamente no Google Sheets.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="label">Nome da Categoria *</label>
+                <input
+                  type="text"
+                  value={novaCategoria}
+                  onChange={(e) => setNovaCategoria(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleCriarCategoria()}
+                  placeholder="Ex: Móveis, Equipamentos, etc."
+                  className="input"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarModalNovaCategoria(false)
+                    setNovaCategoria('')
+                  }}
+                  disabled={criandoCategoria}
+                  className="btn btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCriarCategoria}
+                  disabled={criandoCategoria || !novaCategoria.trim()}
+                  className="btn btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {criandoCategoria ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                      Criando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={20} />
+                      Criar Categoria
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
