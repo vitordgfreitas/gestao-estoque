@@ -266,22 +266,11 @@ export default function Financiamentos() {
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
                   <option value="">Selecione um item</option>
-                  {itensFiltrados.map(item => {
-                    if (item.categoria === 'Carros') {
-                      const marca = item.dados_categoria?.Marca || item.carro?.marca || ''
-                      const modelo = item.dados_categoria?.Modelo || item.carro?.modelo || ''
-                      const placa = item.dados_categoria?.Placa || item.carro?.placa || ''
-                      const nomeCompleto = [marca, modelo].filter(Boolean).join(' ') || item.nome
-                      return (
-                        <option key={item.id} value={item.id}>
-                          {nomeCompleto}{placa ? ` - ${placa}` : ''}
-                        </option>
-                      )
-                    }
-                    return (
-                      <option key={item.id} value={item.id}>{item.nome}</option>
-                    )
-                  })}
+                  {itensFiltrados.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {formatItemName(item)}
+                    </option>
+                  ))}
                 </select>
                 {selectedItem && selectedItem.categoria === 'Carros' && (
                   <div className="mt-2 p-2 bg-dark-700/50 rounded text-sm text-dark-300">

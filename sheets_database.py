@@ -1627,10 +1627,11 @@ def listar_financiamentos(status=None, item_id=None):
         return []
     
     class Financiamento:
-        def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+        def __init__(self, id, item_id, valor_total, valor_entrada, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
             self.id = int(id) if id else None
             self.item_id = int(item_id) if item_id else None
             self.valor_total = round(float(valor_total), 2) if valor_total else 0.0  # Arredonda para 2 casas decimais
+            self.valor_entrada = round(float(valor_entrada), 2) if valor_entrada else 0.0  # Valor de entrada
             self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
             self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0  # Arredonda para 2 casas decimais
             self.taxa_juros = float(taxa_juros) if taxa_juros else 0.0  # Mantém precisão para taxa
@@ -1733,10 +1734,15 @@ def listar_financiamentos(status=None, item_id=None):
                 valor_total_conv = parse_value(valor_total_raw)
                 valor_parcela_conv = parse_value(valor_parcela_raw)
                 
+                # Pega valor de entrada (nova coluna)
+                valor_entrada_raw = record.get('Valor Entrada', 0)
+                valor_entrada_conv = parse_value(valor_entrada_raw)
+                
                 fin = Financiamento(
                     record.get('ID'),
                     record.get('Item ID'),
                     valor_total_conv,
+                    valor_entrada_conv,
                     record.get('Numero Parcelas', 0),
                     valor_parcela_conv,
                     record.get('Taxa Juros', 0),
