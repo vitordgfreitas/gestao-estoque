@@ -210,28 +210,11 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
     # Obtém ou cria aba de Carros
     if sheet_carros_name in existing_worksheets:
         sheet_carros = spreadsheet.worksheet(sheet_carros_name)
-        # Verifica se tem cabeçalhos
-        try:
-            header = sheet_carros.get('A1')
-            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_carros.insert_row(["ID", "Item ID", "Placa", "Chassi", "Renavam", "Marca", "Modelo", "Ano"], 1)
-            else:
-                headers = sheet_carros.row_values(1)
-                expected_headers = ["ID", "Item ID", "Placa", "Chassi", "Renavam", "Marca", "Modelo", "Ano"]
-                for i, expected_header in enumerate(expected_headers):
-                    if i >= len(headers) or headers[i] != expected_header:
-                        col_letter = chr(65 + i)
-                        sheet_carros.update(f'{col_letter}1', [[expected_header]])
-        except Exception:
-            try:
-                all_values = sheet_carros.get_all_values()
-                if not all_values or len(all_values) == 0:
-                    sheet_carros.append_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"])
-            except Exception:
-                pass
+        # NÃO VERIFICA/CORRIGE HEADERS - deixa como está para evitar problemas
+        # Headers devem ser corrigidos manualmente se necessário
     else:
         sheet_carros = spreadsheet.add_worksheet(title=sheet_carros_name, rows=1000, cols=10)
-        sheet_carros.append_row(["ID", "Item ID", "Placa", "Marca", "Modelo", "Ano"])
+        sheet_carros.append_row(["ID", "Item ID", "Placa", "Chassi", "Renavam", "Marca", "Modelo", "Ano"])
     
     # Obtém ou cria aba de Compromissos
     if sheet_compromissos_name in existing_worksheets:
@@ -333,24 +316,8 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
     # Obtém ou cria aba de Financiamentos
     if sheet_financiamentos_name in existing_worksheets:
         sheet_financiamentos = spreadsheet.worksheet(sheet_financiamentos_name)
-        try:
-            header = sheet_financiamentos.get('A1')
-            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_financiamentos.insert_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"], 1)
-            else:
-                headers = sheet_financiamentos.row_values(1)
-                expected_headers = ["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"]
-                for i, expected_header in enumerate(expected_headers):
-                    if i >= len(headers) or headers[i] != expected_header:
-                        col_letter = chr(65 + i)
-                        sheet_financiamentos.update(f'{col_letter}1', [[expected_header]])
-        except Exception:
-            try:
-                all_values = sheet_financiamentos.get_all_values()
-                if not all_values or len(all_values) == 0:
-                    sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
-            except Exception:
-                pass
+        # NÃO VERIFICA/CORRIGE HEADERS - deixa como está para evitar problemas
+        # Headers devem ser corrigidos manualmente se necessário
     else:
         sheet_financiamentos = spreadsheet.add_worksheet(title=sheet_financiamentos_name, rows=1000, cols=12)
         sheet_financiamentos.append_row(["ID", "Item ID", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
