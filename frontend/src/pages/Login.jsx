@@ -96,7 +96,7 @@ export default function Login() {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
               <img 
-                src="/star_logo.jpg" 
+                src="/star_logo.jpeg" 
                 alt="STAR Locação" 
                 className="h-24 w-auto"
               />
