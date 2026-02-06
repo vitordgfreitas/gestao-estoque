@@ -1310,6 +1310,18 @@ async def obter_info():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/cache/clear")
+async def limpar_cache(token: str = Depends(verify_token)):
+    """Limpa o cache de dados do Google Sheets"""
+    try:
+        if USE_GOOGLE_SHEETS:
+            db_module._clear_cache()
+            return {"message": "Cache limpo com sucesso", "success": True}
+        else:
+            return {"message": "Cache nao disponivel (usando SQLite)", "success": False}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============= ENDPOINTS FINANCEIRO =============
 
 def conta_receber_to_dict(conta):
