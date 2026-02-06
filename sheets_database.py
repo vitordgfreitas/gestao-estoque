@@ -153,24 +153,39 @@ def get_sheets():
 
 
 def obter_categorias():
-    """Obtém todas as categorias únicas da coluna Categoria na aba Itens"""
+    """Obtém todas as categorias - tanto das abas existentes quanto dos itens cadastrados"""
     sheets = get_sheets()
+    spreadsheet = sheets['spreadsheet']
     sheet_itens = sheets['sheet_itens']
     
+    categorias = set()
+    
+    # 1. Obtém categorias das abas existentes (exceto abas de sistema)
+    abas_sistema = ['Itens', 'Compromissos', 'Carros', 'Container', 'Estrutura', 
+                    'Contas a Receber', 'Contas a Pagar', 'Financiamentos', 
+                    'Parcelas Financiamento', 'Pecas_Carros']
+    
+    try:
+        todas_abas = [ws.title for ws in spreadsheet.worksheets()]
+        for aba in todas_abas:
+            if aba not in abas_sistema and not aba.startswith('Sheet'):
+                categorias.add(aba)
+    except Exception as e:
+        print(f"Erro ao obter abas: {e}")
+    
+    # 2. Obtém categorias dos itens cadastrados
     try:
         records = sheet_itens.get_all_records()
-        categorias = set()
         for record in records:
             if record and record.get('Categoria'):
                 categoria = record.get('Categoria').strip()
                 if categoria:
                     categorias.add(categoria)
-        
-        # Retorna apenas categorias que existem no Google Sheets
-        return sorted(list(categorias)) if categorias else []
     except Exception as e:
-        # Em caso de erro, retorna lista vazia
-        return []
+        print(f"Erro ao obter categorias dos itens: {e}")
+    
+    # Retorna lista ordenada
+    return sorted(list(categorias)) if categorias else []
 
 
 def obter_campos_categoria(categoria):
