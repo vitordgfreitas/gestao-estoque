@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { statsAPI, compromissosAPI, infoAPI, itensAPI } from '../services/api'
+import { formatItemName } from '../utils/format'
 import { 
   TrendingUp, 
   Package, 
