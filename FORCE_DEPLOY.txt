@@ -1,0 +1,2 @@
+Force deploy trigger - Fix valor_parcela parsing with debug logs
+Timestamp: 2026-02-06 18:45:00
