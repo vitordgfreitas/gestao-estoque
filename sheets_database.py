@@ -153,23 +153,23 @@ def get_sheets():
 
 
 def obter_categorias():
-    """Obtém todas as categorias únicas da coluna Categoria na aba Itens"""
+    """Obtém todas as categorias cadastradas na tabela Categorias_Itens"""
     sheets = get_sheets()
-    sheet_itens = sheets['sheet_itens']
+    sheet_categorias = sheets['sheet_categorias_itens']
     
     try:
-        records = sheet_itens.get_all_records()
-        categorias = set()
+        records = _retry_with_backoff(lambda: sheet_categorias.get_all_records())
+        categorias = []
         for record in records:
-            if record and record.get('Categoria'):
-                categoria = record.get('Categoria').strip()
+            if record and record.get('Nome'):
+                categoria = record.get('Nome').strip()
                 if categoria:
-                    categorias.add(categoria)
+                    categorias.append(categoria)
         
-        # Retorna apenas categorias que existem na aba Itens
-        return sorted(list(categorias)) if categorias else []
+        # Retorna lista ordenada de categorias
+        return sorted(categorias) if categorias else []
     except Exception as e:
-        # Em caso de erro, retorna lista vazia
+        print(f"Erro ao obter categorias: {e}")
         return []
 
 
@@ -200,6 +200,51 @@ def obter_campos_categoria(categoria):
     except Exception:
         # Outro erro, retorna lista vazia
         return []
+
+
+def criar_categoria(nome_categoria):
+    """Cria uma nova categoria na tabela Categorias_Itens
+    
+    Args:
+        nome_categoria: Nome da categoria a ser criada
+        
+    Returns:
+        ID da categoria criada ou None se já existir
+    """
+    sheets = get_sheets()
+    sheet_categorias = sheets['sheet_categorias_itens']
+    
+    # Verifica se categoria já existe
+    try:
+        records = _retry_with_backoff(lambda: sheet_categorias.get_all_records())
+        for record in records:
+            if record.get('Nome', '').strip().lower() == nome_categoria.strip().lower():
+                return record.get('ID')  # Já existe
+    except Exception as e:
+        print(f"Erro ao verificar categorias existentes: {e}")
+    
+    # Cria nova categoria
+    try:
+        # Obtém último ID
+        all_values = _retry_with_backoff(lambda: sheet_categorias.get_all_values())
+        if len(all_values) > 1:
+            ultimo_id = max([int(row[0]) for row in all_values[1:] if row and row[0].isdigit()])
+        else:
+            ultimo_id = 0
+        
+        novo_id = ultimo_id + 1
+        data_criacao = datetime.now().strftime('%Y-%m-%d')
+        
+        # Adiciona nova categoria
+        sheet_categorias.append_row([novo_id, nome_categoria.strip(), data_criacao])
+        
+        # Também cria a aba para a categoria
+        obter_ou_criar_aba_categoria(nome_categoria)
+        
+        return novo_id
+    except Exception as e:
+        print(f"Erro ao criar categoria: {e}")
+        return None
 
 
 def obter_ou_criar_aba_categoria(categoria):

@@ -347,6 +347,32 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         sheet_parcelas = spreadsheet.add_worksheet(title=sheet_parcelas_financiamento_name, rows=1000, cols=12)
         sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto"])
     
+    # Obtém ou cria aba de Categorias_Itens
+    sheet_categorias_itens_name = "Categorias_Itens"
+    if sheet_categorias_itens_name in existing_worksheets:
+        sheet_categorias_itens = spreadsheet.worksheet(sheet_categorias_itens_name)
+        try:
+            header = sheet_categorias_itens.get('A1')
+            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
+                sheet_categorias_itens.insert_row(["ID", "Nome", "Data Criacao"], 1)
+            else:
+                headers = sheet_categorias_itens.row_values(1)
+                expected_headers = ["ID", "Nome", "Data Criacao"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        col_letter = chr(65 + i)
+                        sheet_categorias_itens.update(f'{col_letter}1', [[expected_header]])
+        except Exception:
+            try:
+                all_values = sheet_categorias_itens.get_all_values()
+                if not all_values or len(all_values) == 0:
+                    sheet_categorias_itens.append_row(["ID", "Nome", "Data Criacao"])
+            except Exception:
+                pass
+    else:
+        sheet_categorias_itens = spreadsheet.add_worksheet(title=sheet_categorias_itens_name, rows=1000, cols=3)
+        sheet_categorias_itens.append_row(["ID", "Nome", "Data Criacao"])
+    
     return {
         'spreadsheet': spreadsheet,
         'sheet_itens': sheet_itens,
@@ -356,6 +382,7 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         'sheet_contas_pagar': sheet_contas_pagar,
         'sheet_financiamentos': sheet_financiamentos,
         'sheet_parcelas_financiamento': sheet_parcelas,
+        'sheet_categorias_itens': sheet_categorias_itens,
         'spreadsheet_id': spreadsheet.id,
         'spreadsheet_url': spreadsheet.url
     }
