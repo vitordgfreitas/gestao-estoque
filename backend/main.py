@@ -1,9 +1,10 @@
 """
 Backend FastAPI para o CRM de Gestão de Estoque
 """
-from fastapi import FastAPI, HTTPException, Depends, status, Body
+from fastapi import FastAPI, HTTPException, Depends, status, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 import os
