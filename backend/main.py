@@ -166,34 +166,24 @@ if is_dev:
         "http://127.0.0.1:3002",
         "http://127.0.0.1:5173",
     ]
+    print(f"[CORS] Modo desenvolvimento - Origens permitidas: {allow_origins}")
 else:
     # Produção: permite o frontend do Render
-    # Lista explícita (FastAPI não suporta wildcards)
-    allow_origins = [
-        "https://crm-frontend-nbrm.onrender.com",
-        "https://crm-frontend-wtcf.onrender.com",  # Nova URL do frontend
-        "http://crm-frontend-nbrm.onrender.com",
-        "http://crm-frontend-wtcf.onrender.com",
-    ]
-    # Se tiver FRONTEND_URL configurado, adiciona também
-    frontend_url = os.getenv('FRONTEND_URL')
-    if frontend_url:
-        if frontend_url not in allow_origins:
-            allow_origins.append(frontend_url)
-        # Adiciona versão HTTP também
-        http_url = frontend_url.replace('https://', 'http://')
-        if http_url not in allow_origins:
-            allow_origins.append(http_url)
+    # Usa wildcard temporariamente para garantir que funcione
+    allow_origins = ["*"]  # Permite qualquer origem (temporário para debug)
     
-    print(f"[CORS] Origens permitidas em produção: {allow_origins}")
+    print(f"[CORS] Modo produção - CORS configurado para aceitar qualquer origem (wildcard)")
+    print(f"[CORS] RENDER env: {os.getenv('RENDER')}")
+    print(f"[CORS] FRONTEND_URL env: {os.getenv('FRONTEND_URL')}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=True,
+    allow_credentials=False if allow_origins == ["*"] else True,  # credentials=False quando wildcard
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,  # Cache preflight por 1 hora
 )
 
 # Security
