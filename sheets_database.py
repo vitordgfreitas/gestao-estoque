@@ -369,6 +369,17 @@ def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=No
         ano: Ano do carro (obrigatório se categoria='Carros')
         campos_categoria: Dicionário com campos específicos da categoria {nome_campo: valor}
     """
+    # Se campos de carros vieram em campos_categoria, extrai para os parâmetros corretos
+    if categoria == 'Carros' and campos_categoria:
+        if not placa and 'Placa' in campos_categoria:
+            placa = campos_categoria.get('Placa')
+        if not marca and 'Marca' in campos_categoria:
+            marca = campos_categoria.get('Marca')
+        if not modelo and 'Modelo' in campos_categoria:
+            modelo = campos_categoria.get('Modelo')
+        if not ano and 'Ano' in campos_categoria:
+            ano = campos_categoria.get('Ano')
+    
     # Validações robustas
     valido, msg_erro = validacoes.validar_item_completo(
         nome=nome,
@@ -676,6 +687,17 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     categoria_final = categoria if categoria is not None else (item_atual.categoria or '')
     cidade_final = cidade if cidade else (item_atual.cidade or '')
     uf_final = uf if uf else (item_atual.uf or '')
+    
+    # Se campos de carros vieram em campos_categoria, extrai para os parâmetros corretos
+    if categoria_final == 'Carros' and campos_categoria:
+        if not placa and 'Placa' in campos_categoria:
+            placa = campos_categoria.get('Placa')
+        if not marca and 'Marca' in campos_categoria:
+            marca = campos_categoria.get('Marca')
+        if not modelo and 'Modelo' in campos_categoria:
+            modelo = campos_categoria.get('Modelo')
+        if not ano and 'Ano' in campos_categoria:
+            ano = campos_categoria.get('Ano')
     
     # Validações robustas
     valido, msg_erro = validacoes.validar_item_completo(
