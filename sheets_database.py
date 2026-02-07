@@ -509,7 +509,9 @@ def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=No
             self.compromissos = []
     
     # Busca dados da categoria se aplicável
+    carro_obj = None
     dados_cat_obj = None
+    
     if categoria == 'Carros':
         class Carro:
             def __init__(self, item_id, placa, marca, modelo, ano):
@@ -517,13 +519,20 @@ def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=No
                 self.placa = placa
                 self.marca = marca
                 self.modelo = modelo
-                self.ano = int(ano)
-        carro_obj = Carro(next_id, placa.upper().strip(), marca.strip(), modelo.strip(), int(ano))
+                self.ano = ano
+        
+        # Garante valores seguros para o objeto Carro
+        placa_safe = (placa or '').upper().strip() if placa else ''
+        marca_safe = (marca or '').strip() if marca else ''
+        modelo_safe = (modelo or '').strip() if modelo else ''
+        ano_safe = int(ano) if ano and str(ano).isdigit() else 0
+        
+        carro_obj = Carro(next_id, placa_safe, marca_safe, modelo_safe, ano_safe)
         dados_cat_obj = {'carro': carro_obj}
     elif campos_categoria:
         dados_cat_obj = campos_categoria
     
-    return Item(next_id, nome, quantidade_total, categoria, descricao, cidade, uf, endereco, carro_obj if categoria == 'Carros' else None, dados_cat_obj)
+    return Item(next_id, nome, quantidade_total, categoria, descricao, cidade, uf, endereco, carro_obj, dados_cat_obj)
 
 
 def listar_itens():
