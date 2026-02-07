@@ -27,7 +27,7 @@ export default function Itens() {
     categoria: '',
     descricao: '',
     cidade: '',
-    uf: 'SP',
+    uf: 'DF',
     endereco: '',
   })
   const [camposDinamicos, setCamposDinamicos] = useState({})
@@ -150,11 +150,16 @@ export default function Itens() {
       [campo]: value
     }))
 
-    // Para Carros, gera nome automaticamente quando marca e modelo são preenchidos
+    // Para Carros, gera nome automaticamente quando marca, modelo e placa são preenchidos
     if (formData.categoria === 'Carros') {
       const marca = campo === 'Marca' ? value : camposDinamicos['Marca'] || ''
       const modelo = campo === 'Modelo' ? value : camposDinamicos['Modelo'] || ''
-      if (marca && modelo) {
+      const placa = campo === 'Placa' ? value : camposDinamicos['Placa'] || ''
+      
+      if (marca && modelo && placa) {
+        setFormData(prev => ({ ...prev, nome: `${marca} ${modelo} - ${placa}`.trim() }))
+      } else if (marca && modelo) {
+        // Se só tem marca e modelo, mostra temporariamente sem placa
         setFormData(prev => ({ ...prev, nome: `${marca} ${modelo}`.trim() }))
       }
     }
@@ -234,7 +239,7 @@ export default function Itens() {
         categoria: formData.categoria, // Mantém categoria selecionada
         descricao: '',
         cidade: '',
-        uf: 'SP',
+        uf: 'DF',
         endereco: '',
       })
       setCamposDinamicos({})

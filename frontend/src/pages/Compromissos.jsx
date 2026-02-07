@@ -28,7 +28,7 @@ export default function Compromissos() {
     data_fim: new Date().toISOString().split('T')[0],
     descricao: '',
     cidade: '',
-    uf: 'SP',
+    uf: 'DF',
     endereco: '',
     contratante: '',
   })
@@ -152,7 +152,7 @@ export default function Compromissos() {
           data_fim: new Date().toISOString().split('T')[0],
           descricao: '',
           cidade: '',
-          uf: 'SP',
+          uf: 'DF',
           endereco: '',
           contratante: '',
         })
@@ -190,7 +190,7 @@ export default function Compromissos() {
           data_fim: new Date().toISOString().split('T')[0],
           descricao: '',
           cidade: '',
-          uf: 'SP',
+          uf: 'DF',
           endereco: '',
           contratante: '',
         })
