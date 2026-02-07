@@ -1,0 +1,2 @@
+Deploy trigger for Categorias_Itens implementation
+Timestamp: 2026-02-07 - Força deploy após implementação da tabela Categorias_Itens
