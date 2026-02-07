@@ -145,6 +145,33 @@ async def startup_event():
         except Exception as e:
             print(f"[STARTUP] Erro ao limpar cache: {e}")
 
+# Middleware adicional para garantir CORS em TODAS as respostas
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    """Adiciona headers CORS em todas as respostas"""
+    # Se for OPTIONS (preflight), retorna imediatamente com headers CORS
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            content={"message": "OK"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    
+    # Processa request normal
+    response = await call_next(request)
+    
+    # Adiciona headers CORS na resposta
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    
+    return response
+
 # Handler explícito para OPTIONS (preflight requests)
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
