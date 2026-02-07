@@ -1149,14 +1149,18 @@ async def criar_categoria(nome_categoria: str = Body(..., embed=True), token: st
             if nome_categoria in categorias_existentes:
                 raise HTTPException(status_code=400, detail=f"Categoria '{nome_categoria}' já existe")
         
-        # Cria aba no Google Sheets (apenas para Google Sheets)
-        if hasattr(db_module, 'obter_ou_criar_aba_categoria'):
-            db_module.obter_ou_criar_aba_categoria(nome_categoria)
-            return {
-                "success": True,
-                "message": f"Categoria '{nome_categoria}' criada com sucesso",
-                "categoria": nome_categoria
-            }
+        # Cria categoria na tabela Categorias_Itens e aba no Google Sheets
+        if hasattr(db_module, 'criar_categoria'):
+            categoria_id = db_module.criar_categoria(nome_categoria)
+            if categoria_id:
+                return {
+                    "success": True,
+                    "message": f"Categoria '{nome_categoria}' criada com sucesso",
+                    "categoria": nome_categoria,
+                    "id": categoria_id
+                }
+            else:
+                raise HTTPException(status_code=500, detail="Erro ao criar categoria")
         else:
             # Para SQLite, apenas retorna sucesso (categorias são criadas automaticamente ao adicionar item)
             return {
