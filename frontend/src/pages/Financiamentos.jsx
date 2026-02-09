@@ -592,7 +592,18 @@ export default function Financiamentos() {
                     </div>
                     <div>
                       <p className="text-sm text-dark-400">Taxa Juros</p>
-                      <p className="text-lg font-semibold text-white">{(fin.taxa_juros * 100).toFixed(2)}%</p>
+                      <p className="text-lg font-semibold text-white">
+                        {(() => {
+                          let taxa = parseFloat(String(fin.taxa_juros).replace(',', '.'))
+                          // Normaliza: se >= 100, divide por 10000; se >= 1, divide por 100; se < 1, multiplica por 100
+                          if (taxa >= 100) {
+                            taxa = taxa / 10000
+                          } else if (taxa >= 1) {
+                            taxa = taxa / 100
+                          }
+                          return (taxa * 100).toFixed(2)
+                        })()}%
+                      </p>
                     </div>
                   </div>
                   
