@@ -592,7 +592,7 @@ export default function Financiamentos() {
                     </div>
                     <div>
                       <p className="text-sm text-dark-400">Taxa Juros</p>
-                      <p className="text-lg font-semibold text-white">{formatPercentage(fin.taxa_juros)}</p>
+                      <p className="text-lg font-semibold text-white">{(fin.taxa_juros * 100).toFixed(2)}%</p>
                     </div>
                   </div>
                   
