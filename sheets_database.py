@@ -1759,7 +1759,9 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 self.valor_total = round(float(valor_total), 2)  # Arredonda para 2 casas decimais
                 self.numero_parcelas = int(numero_parcelas)
                 self.valor_parcela = round(float(valor_parcela), 2)  # Arredonda para 2 casas decimais
-                self.taxa_juros = float(taxa_juros)  # Mantém precisão para taxa
+                # Converte vírgula para ponto antes de converter para float
+                taxa_str = str(taxa_juros).replace(',', '.')
+                self.taxa_juros = float(taxa_str)
                 self.data_inicio = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio, '%Y-%m-%d').date()
                 self.status = status or 'Ativo'
                 self.instituicao_financeira = instituicao_financeira or ''
@@ -1814,7 +1816,9 @@ def listar_financiamentos(status=None, item_id=None):
             self.valor_entrada = round(float(valor_entrada), 2) if valor_entrada else 0.0  # Valor de entrada
             self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
             self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0  # Arredonda para 2 casas decimais
-            self.taxa_juros = float(taxa_juros) if taxa_juros else 0.0  # Mantém precisão para taxa
+            # Converte vírgula para ponto e normaliza taxa_juros
+            taxa_str = str(taxa_juros).replace(',', '.') if taxa_juros else '0'
+            self.taxa_juros = float(taxa_str) if taxa_str else 0.0
             if isinstance(data_inicio, str) and data_inicio:
                 try:
                     self.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
