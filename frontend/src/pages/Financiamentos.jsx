@@ -323,19 +323,17 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_total}
                   onChange={(e) => {
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
+                    // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
                     setFormData({ ...formData, valor_total: formatted })
                   }}
                   onBlur={(e) => {
-                    // Ao sair do campo, garante formato completo se tiver valor
+                    // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
                     if (formData.valor_total && formData.valor_total.trim() !== '') {
-                      const numValue = parseDecimalInput(formData.valor_total)
-                      if (numValue > 0) {
-                        // Se não tem vírgula e autoDecimal está ativo, formata automaticamente
-                        if (!formData.valor_total.includes(',')) {
-                          const formatted = formatDecimalWhileTyping(formData.valor_total, 2, false, true)
-                          setFormData({ ...formData, valor_total: formatted })
-                        }
+                      if (!formData.valor_total.includes(',')) {
+                        // Não tem vírgula: assume que últimos 2 dígitos são centavos
+                        const formatted = formatDecimalWhileTyping(formData.valor_total, 2, false, true)
+                        setFormData({ ...formData, valor_total: formatted })
                       }
                     }
                   }}
@@ -352,19 +350,17 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_entrada}
                   onChange={(e) => {
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
+                    // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
                     setFormData({ ...formData, valor_entrada: formatted })
                   }}
                   onBlur={(e) => {
-                    // Ao sair do campo, garante formato completo se tiver valor
+                    // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
                     if (formData.valor_entrada && formData.valor_entrada.trim() !== '') {
-                      const numValue = parseDecimalInput(formData.valor_entrada)
-                      if (numValue > 0) {
-                        // Se não tem vírgula e autoDecimal está ativo, formata automaticamente
-                        if (!formData.valor_entrada.includes(',')) {
-                          const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, false, true)
-                          setFormData({ ...formData, valor_entrada: formatted })
-                        }
+                      if (!formData.valor_entrada.includes(',')) {
+                        // Não tem vírgula: assume que últimos 2 dígitos são centavos
+                        const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, false, true)
+                        setFormData({ ...formData, valor_entrada: formatted })
                       }
                     }
                   }}
@@ -427,16 +423,17 @@ export default function Financiamentos() {
                           type="text"
                           value={parcela.valor}
                           onChange={(e) => {
-                            const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
+                            // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
+                            const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
                             const novas = [...parcelasCustomizadas]
                             novas[idx].valor = formatted
                             setParcelasCustomizadas(novas)
                           }}
                           onBlur={(e) => {
-                            // Ao sair do campo, garante formato completo se tiver valor
+                            // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
                             if (parcelasCustomizadas[idx].valor && parcelasCustomizadas[idx].valor.trim() !== '') {
-                              const numValue = parseDecimalInput(parcelasCustomizadas[idx].valor)
-                              if (numValue > 0 && !parcelasCustomizadas[idx].valor.includes(',')) {
+                              if (!parcelasCustomizadas[idx].valor.includes(',')) {
+                                // Não tem vírgula: assume que últimos 2 dígitos são centavos
                                 const formatted = formatDecimalWhileTyping(parcelasCustomizadas[idx].valor, 2, false, true)
                                 const novas = [...parcelasCustomizadas]
                                 novas[idx].valor = formatted
