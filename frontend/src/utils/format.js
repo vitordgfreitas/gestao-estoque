@@ -61,7 +61,7 @@ export const formatDateTime = (dateString) => {
 /**
  * Formata porcentagem
  * @param {number|string} value - Valor a ser formatado (0.02 = 2%)
- * @param {number} decimals - Número de casas decimais (padrão: 2)
+ * @param {number} decimals - Número de casas decimais (padrão: 2, mínimo: 2)
  * @returns {string} Valor formatado como X,XX%
  */
 export const formatPercentage = (value, decimals = 2) => {
@@ -72,7 +72,14 @@ export const formatPercentage = (value, decimals = 2) => {
   // Se valor < 1, multiplica por 100 (ex: 0.02 = 2%)
   const percentValue = numValue >= 1 ? numValue : numValue * 100
   
-  return `${percentValue.toFixed(decimals).replace('.', ',')}%`
+  // Garante pelo menos 2 casas decimais para valores pequenos (ex: 0.15%)
+  // Para valores maiores, usa o número de casas especificado
+  const minDecimals = Math.max(decimals, 2)
+  
+  // Se o valor é muito pequeno (< 1%), mostra mais casas decimais automaticamente
+  const finalDecimals = percentValue < 1 ? Math.max(minDecimals, 2) : minDecimals
+  
+  return `${percentValue.toFixed(finalDecimals).replace('.', ',')}%`
 }
 
 /**
@@ -95,15 +102,141 @@ export const parseCurrency = (currencyString) => {
 }
 
 /**
+ * Formata valor numérico para exibição com vírgula como separador decimal
+ * @param {number|string} value - Valor a ser formatado
+ * @param {number} decimals - Número de casas decimais (padrão: 2)
+ * @returns {string} Valor formatado (ex: "80000,50")
+ */
+export const formatDecimalInput = (value, decimals = 2) => {
+  if (value === '' || value === null || value === undefined) return ''
+  
+  const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value
+  if (isNaN(numValue)) return ''
+  
+  // Formata com vírgula como separador decimal
+  return numValue.toFixed(decimals).replace('.', ',')
+}
+
+/**
+ * Converte valor formatado (com vírgula) para número
+ * @param {string} value - Valor formatado (ex: "80000,50")
+ * @returns {number} Valor numérico
+ */
+export const parseDecimalInput = (value) => {
+  if (!value || value === '') return 0
+  if (typeof value === 'number') return value
+  
+  // Remove pontos de milhar e substitui vírgula por ponto
+  const cleanValue = value.toString()
+    .replace(/\./g, '')  // Remove pontos (separadores de milhar)
+    .replace(',', '.')   // Substitui vírgula por ponto (separador decimal)
+  const numValue = parseFloat(cleanValue)
+  
+  return isNaN(numValue) ? 0 : numValue
+}
+
+/**
+ * Formata valor enquanto digita, permitindo vírgula como separador decimal
+ * e adicionando pontos como separadores de milhar automaticamente
+ * @param {string} value - Valor digitado
+ * @param {number} maxDecimals - Máximo de casas decimais (padrão: 2)
+ * @returns {string} Valor formatado para exibição (ex: "80.000,50")
+ */
+export const formatDecimalWhileTyping = (value, maxDecimals = 2) => {
+  if (!value) return ''
+  
+  // Remove tudo exceto números, vírgula e ponto
+  let cleaned = value.replace(/[^\d,.]/g, '')
+  
+  // Se tem vírgula, remove pontos (vírgula tem prioridade como separador decimal)
+  if (cleaned.includes(',')) {
+    cleaned = cleaned.replace(/\./g, '')
+    // Garante apenas uma vírgula
+    const parts = cleaned.split(',')
+    if (parts.length > 2) {
+      cleaned = parts[0] + ',' + parts.slice(1).join('')
+    }
+    // Limita casas decimais
+    if (parts[1] && parts[1].length > maxDecimals) {
+      cleaned = parts[0] + ',' + parts[1].substring(0, maxDecimals)
+    }
+    
+    // Formata parte inteira com separadores de milhar
+    const parteInteira = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+    const parteDecimal = parts[1] || ''
+    
+    return parteDecimal ? `${parteInteira},${parteDecimal}` : parteInteira
+  } else if (cleaned.includes('.')) {
+    // Se tem ponto, verifica se é separador decimal ou de milhar
+    const parts = cleaned.split('.')
+    
+    // Se tem mais de um ponto, assume que são separadores de milhar
+    // e o último ponto pode ser decimal (se for seguido de 1-2 dígitos)
+    if (parts.length > 2) {
+      // Última parte pode ser decimal se tiver 1-2 dígitos
+      const ultimaParte = parts[parts.length - 1]
+      const penultimaParte = parts[parts.length - 2]
+      
+      // Se última parte tem 1-2 dígitos e penúltima tem 3 dígitos, assume decimal
+      if (ultimaParte.length <= 2 && penultimaParte.length === 3) {
+        const parteInteira = parts.slice(0, -1).join('')
+        const parteDecimal = ultimaParte
+        // Formata parte inteira
+        const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+        return `${parteInteiraFormatada},${parteDecimal}`
+      } else {
+        // Todos são separadores de milhar
+        const parteInteira = parts.join('')
+        return parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      }
+    } else {
+      // Um ponto: pode ser decimal ou milhar
+      const parteInteira = parts[0]
+      const parteDepoisPonto = parts[1] || ''
+      
+      // Se parte depois do ponto tem 1-2 dígitos, assume decimal
+      if (parteDepoisPonto.length <= 2) {
+        // Converte ponto para vírgula e formata milhares
+        const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+        return parteDepoisPonto ? `${parteInteiraFormatada},${parteDepoisPonto}` : parteInteiraFormatada
+      } else {
+        // Mais de 2 dígitos, assume separador de milhar
+        const numeroCompleto = cleaned.replace(/\./g, '')
+        return numeroCompleto.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      }
+    }
+  } else {
+    // Apenas números, formata com separadores de milhar automaticamente
+    // Remove qualquer ponto existente primeiro (caso tenha sido digitado incorretamente)
+    const numeroLimpo = cleaned.replace(/\./g, '')
+    // Adiciona pontos de milhar
+    return numeroLimpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  }
+}
+
+/**
  * Garante que um valor decimal tenha exatamente 2 casas decimais
  * @param {number|string} value - Valor a ser arredondado
  * @returns {number} Valor com 2 casas decimais
  */
 export const roundToTwoDecimals = (value) => {
-  const numValue = typeof value === 'string' ? parseFloat(value) : value
-  if (isNaN(numValue)) return 0
+  // Se já é número, usa diretamente
+  if (typeof value === 'number') {
+    return Math.round(value * 100) / 100
+  }
   
-  return Math.round(numValue * 100) / 100
+  // Se é string, converte primeiro
+  if (typeof value === 'string') {
+    // Remove espaços e caracteres não numéricos (exceto ponto e vírgula)
+    const cleanValue = value.trim().replace(/[^\d.,-]/g, '')
+    // Substitui vírgula por ponto para parseFloat
+    const normalizedValue = cleanValue.replace(',', '.')
+    const numValue = parseFloat(normalizedValue)
+    if (isNaN(numValue)) return 0
+    return Math.round(numValue * 100) / 100
+  }
+  
+  return 0
 }
 
 /**

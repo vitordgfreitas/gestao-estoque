@@ -41,14 +41,44 @@ def _is_cache_valid():
         return False
     return (time.time() - _data_cache['cache_time']) < _data_cache['cache_ttl']
 
-def _retry_with_backoff(func, max_retries=3, initial_delay=1.0):
+# Rate Limiter para evitar exceder limites da API
+class RateLimiter:
+    """Limita a taxa de requisições à API do Google Sheets"""
+    def __init__(self, max_calls=50, period=60):
+        self.max_calls = max_calls  # Máximo de chamadas
+        self.period = period  # Período em segundos
+        self.calls = []  # Timestamps das chamadas
+    
+    def wait_if_needed(self):
+        """Aguarda se necessário para não exceder o limite"""
+        now = time.time()
+        # Remove chamadas antigas (fora do período)
+        self.calls = [t for t in self.calls if now - t < self.period]
+        
+        # Se atingiu o limite, espera até a chamada mais antiga expirar
+        if len(self.calls) >= self.max_calls:
+            oldest_call = self.calls[0]
+            sleep_time = self.period - (now - oldest_call) + 0.1  # +0.1 para margem
+            if sleep_time > 0:
+                print(f"[RATE_LIMIT] Aguardando {sleep_time:.1f}s para não exceder limite...")
+                time.sleep(sleep_time)
+                # Remove a chamada mais antiga após esperar
+                self.calls.pop(0)
+        
+        # Registra esta chamada
+        self.calls.append(time.time())
+
+# Instância global do rate limiter
+_rate_limiter = RateLimiter(max_calls=50, period=60)  # 50 chamadas por minuto (margem de segurança)
+
+def _retry_with_backoff(func, max_retries=5, initial_delay=2.0):
     """
     Executa uma função com retry exponencial em caso de erro 429
     
     Args:
         func: Função a ser executada (sem argumentos)
-        max_retries: Número máximo de tentativas
-        initial_delay: Delay inicial em segundos
+        max_retries: Número máximo de tentativas (aumentado para 5)
+        initial_delay: Delay inicial em segundos (aumentado para 2.0)
     
     Returns:
         Resultado da função
@@ -57,6 +87,8 @@ def _retry_with_backoff(func, max_retries=3, initial_delay=1.0):
     
     for attempt in range(max_retries):
         try:
+            # Aplica rate limiting antes de cada tentativa
+            _rate_limiter.wait_if_needed()
             return func()
         except gspread.exceptions.APIError as e:
             # Verifica se é erro 429

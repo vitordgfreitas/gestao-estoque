@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
-import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName } from '../utils/format'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -72,10 +72,10 @@ export default function Financiamentos() {
     try {
       setFormLoading(true)
       
-      // Converte valores com precisão
-      const valorTotal = roundToTwoDecimals(formData.valor_total)
-      const valorEntrada = roundToTwoDecimals(formData.valor_entrada || 0)
-      const taxaJuros = parseFloat(formData.taxa_juros)
+      // Converte valores com precisão (converte vírgula para ponto)
+      const valorTotal = roundToTwoDecimals(parseDecimalInput(formData.valor_total))
+      const valorEntrada = roundToTwoDecimals(parseDecimalInput(formData.valor_entrada || '0'))
+      const taxaJuros = parseDecimalInput(formData.taxa_juros)
       
       // Valida entrada
       if (valorEntrada > valorTotal) {
@@ -98,7 +98,7 @@ export default function Financiamentos() {
       if (!parcelasFixas && parcelasCustomizadas.length > 0) {
         data.parcelas_customizadas = parcelasCustomizadas.map((p, idx) => ({
           numero: idx + 1,
-          valor: roundToTwoDecimals(p.valor),
+          valor: roundToTwoDecimals(parseDecimalInput(p.valor)),
           data_vencimento: p.data_vencimento
         }))
       }
@@ -164,11 +164,14 @@ export default function Financiamentos() {
     setSelectedItem(item || null)
     setFormData({
       item_id: fin.item_id,
-      valor_total: fin.valor_total,
-      valor_entrada: fin.valor_entrada || 0,
+      // Converte ponto para vírgula para exibição
+      valor_total: formatDecimalInput(fin.valor_total, 2),
+      valor_entrada: formatDecimalInput(fin.valor_entrada || 0, 2),
       numero_parcelas: fin.numero_parcelas,
       // Backend sempre retorna taxa como decimal (0.02 = 2%), multiplica por 100 para exibir
-      taxa_juros: fin.taxa_juros < 1 ? (fin.taxa_juros * 100).toFixed(2) : fin.taxa_juros.toFixed(2),
+      // Usa 4 casas decimais para preservar precisão (ex: 2.75% ou 0.15%)
+      // Converte ponto para vírgula para exibição
+      taxa_juros: fin.taxa_juros < 1 ? formatDecimalInput(fin.taxa_juros * 100, 4) : formatDecimalInput(fin.taxa_juros, 4),
       data_inicio: fin.data_inicio,
       instituicao_financeira: fin.instituicao_financeira || '',
       observacoes: fin.observacoes || ''
@@ -312,29 +315,35 @@ export default function Financiamentos() {
               <div>
                 <label className="block text-sm font-medium text-dark-300 mb-2">Valor Total</label>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
                   value={formData.valor_total}
-                  onChange={(e) => setFormData({ ...formData, valor_total: e.target.value })}
+                  onChange={(e) => {
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2)
+                    setFormData({ ...formData, valor_total: formatted })
+                  }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Valor total do bem"
+                  placeholder="Ex: 80000,50"
                 />
+                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para centavos (ex: 80000,50 = R$ 80.000,50)</p>
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-dark-300 mb-2">Valor de Entrada</label>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
                   value={formData.valor_entrada}
-                  onChange={(e) => setFormData({ ...formData, valor_entrada: e.target.value })}
+                  onChange={(e) => {
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2)
+                    setFormData({ ...formData, valor_entrada: formatted })
+                  }}
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Valor dado de entrada (opcional)"
+                  placeholder="Ex: 5000,25"
                 />
-                {formData.valor_total && formData.valor_entrada > 0 && (
+                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para centavos (opcional)</p>
+                {formData.valor_total && parseDecimalInput(formData.valor_entrada) > 0 && (
                   <p className="text-xs text-dark-400 mt-1">
-                    Valor financiado: {formatCurrency((parseFloat(formData.valor_total) || 0) - (parseFloat(formData.valor_entrada) || 0))}
+                    Valor financiado: {formatCurrency(parseDecimalInput(formData.valor_total) - parseDecimalInput(formData.valor_entrada))}
                   </p>
                 )}
               </div>
@@ -384,15 +393,15 @@ export default function Financiamentos() {
                     {parcelasCustomizadas.map((parcela, idx) => (
                       <div key={idx} className="flex gap-2">
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
                           value={parcela.valor}
                           onChange={(e) => {
+                            const formatted = formatDecimalWhileTyping(e.target.value, 2)
                             const novas = [...parcelasCustomizadas]
-                            novas[idx].valor = e.target.value
+                            novas[idx].valor = formatted
                             setParcelasCustomizadas(novas)
                           }}
-                          placeholder="Valor"
+                          placeholder="Ex: 4229,69"
                           className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                         />
                         <input
@@ -427,7 +436,7 @@ export default function Financiamentos() {
                     </button>
                     {parcelasCustomizadas.length > 0 && (
                       <div className="text-sm text-dark-400">
-                        Total: {formatCurrency(parcelasCustomizadas.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0))}
+                        Total: {formatCurrency(parcelasCustomizadas.reduce((sum, p) => sum + parseDecimalInput(p.valor), 0))}
                       </div>
                     )}
                   </div>
@@ -437,13 +446,17 @@ export default function Financiamentos() {
               <div>
                 <label className="block text-sm font-medium text-dark-300 mb-2">Taxa de Juros (% ao mês)</label>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
                   value={formData.taxa_juros}
-                  onChange={(e) => setFormData({ ...formData, taxa_juros: e.target.value })}
+                  onChange={(e) => {
+                    const formatted = formatDecimalWhileTyping(e.target.value, 4)
+                    setFormData({ ...formData, taxa_juros: formatted })
+                  }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: 2,75 ou 0,15"
                 />
+                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para decimais (ex: 2,75% ou 0,15%)</p>
               </div>
               
               <div>
