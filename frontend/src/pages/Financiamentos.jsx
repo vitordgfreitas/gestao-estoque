@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
-import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput } from '../utils/format'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -323,25 +323,15 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_total}
                   onChange={(e) => {
-                    // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
+                    // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                    const formatted = formatCurrencyInput(e.target.value)
                     setFormData({ ...formData, valor_total: formatted })
-                  }}
-                  onBlur={(e) => {
-                    // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
-                    if (formData.valor_total && formData.valor_total.trim() !== '') {
-                      if (!formData.valor_total.includes(',')) {
-                        // Não tem vírgula: assume que últimos 2 dígitos são centavos
-                        const formatted = formatDecimalWhileTyping(formData.valor_total, 2, false, true)
-                        setFormData({ ...formData, valor_total: formatted })
-                      }
-                    }
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 8000050"
+                  placeholder="Ex: 8000050 será R$ 80.000,50"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite apenas números - os últimos 2 dígitos serão centavos (ex: 8000050 = R$ 80.000,50)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos centavos (ex: 8000050 = R$ 80.000,50)</p>
               </div>
               
               <div>
@@ -350,24 +340,14 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_entrada}
                   onChange={(e) => {
-                    // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
+                    // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                    const formatted = formatCurrencyInput(e.target.value)
                     setFormData({ ...formData, valor_entrada: formatted })
                   }}
-                  onBlur={(e) => {
-                    // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
-                    if (formData.valor_entrada && formData.valor_entrada.trim() !== '') {
-                      if (!formData.valor_entrada.includes(',')) {
-                        // Não tem vírgula: assume que últimos 2 dígitos são centavos
-                        const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, false, true)
-                        setFormData({ ...formData, valor_entrada: formatted })
-                      }
-                    }
-                  }}
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 500025"
+                  placeholder="Ex: 500025 será R$ 5.000,25"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite apenas números - os últimos 2 dígitos serão centavos (ex: 500025 = R$ 5.000,25)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos centavos (ex: 500025 = R$ 5.000,25)</p>
                 {formData.valor_total && parseDecimalInput(formData.valor_entrada) > 0 && (
                   <p className="text-xs text-dark-400 mt-1">
                     Valor financiado: {formatCurrency(parseDecimalInput(formData.valor_total) - parseDecimalInput(formData.valor_entrada))}
@@ -423,25 +403,13 @@ export default function Financiamentos() {
                           type="text"
                           value={parcela.valor}
                           onChange={(e) => {
-                            // Durante a digitação: apenas formata com separadores de milhar, sem interpretar centavos
-                            const formatted = formatDecimalWhileTyping(e.target.value, 2, false, false)
+                            // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                            const formatted = formatCurrencyInput(e.target.value)
                             const novas = [...parcelasCustomizadas]
                             novas[idx].valor = formatted
                             setParcelasCustomizadas(novas)
                           }}
-                          onBlur={(e) => {
-                            // Ao sair do campo: aplica formatação de centavos se não tiver vírgula
-                            if (parcelasCustomizadas[idx].valor && parcelasCustomizadas[idx].valor.trim() !== '') {
-                              if (!parcelasCustomizadas[idx].valor.includes(',')) {
-                                // Não tem vírgula: assume que últimos 2 dígitos são centavos
-                                const formatted = formatDecimalWhileTyping(parcelasCustomizadas[idx].valor, 2, false, true)
-                                const novas = [...parcelasCustomizadas]
-                                novas[idx].valor = formatted
-                                setParcelasCustomizadas(novas)
-                              }
-                            }
-                          }}
-                          placeholder="Ex: 422969"
+                          placeholder="Ex: 422969 será R$ 4.229,69"
                           className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                         />
                         <input

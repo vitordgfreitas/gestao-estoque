@@ -39,6 +39,28 @@ export const formatDate = (dateString) => {
 }
 
 /**
+ * Formata valor tipo "caixa registradora" - sempre assume últimos 2 dígitos como centavos
+ * @param {string} value - Valor digitado
+ * @returns {string} Valor formatado (ex: "80.000,50")
+ */
+export const formatCurrencyInput = (value) => {
+  // Remove tudo exceto números
+  const onlyNumbers = value.replace(/[^\d]/g, '')
+  
+  // Se está vazio, retorna vazio
+  if (!onlyNumbers || onlyNumbers.length === 0) return ''
+  
+  // Converte para número e divide por 100 (para ter 2 casas decimais)
+  const numberValue = parseInt(onlyNumbers, 10) / 100
+  
+  // Formata com separadores de milhar e vírgula decimal
+  return numberValue.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+/**
  * Formata uma data e hora no padrão brasileiro (DD/MM/AAAA HH:MM)
  * @param {string|Date} dateString - Data/hora a ser formatada
  * @returns {string} Data/hora formatada como DD/MM/AAAA HH:MM
