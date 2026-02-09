@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
-import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput } from '../utils/format'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput, formatPercentageInput } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -73,8 +73,9 @@ export default function Financiamentos() {
       setFormLoading(true)
       
       // Converte valores com precisão (converte vírgula para ponto)
-      const valorTotal = roundToTwoDecimals(parseDecimalInput(formData.valor_total))
+      const valorTotal = roundToTwoDecimals(parseDecimalInput(formData.valor_total || '0'))
       const valorEntrada = roundToTwoDecimals(parseDecimalInput(formData.valor_entrada || '0'))
+      // Taxa já está formatada como decimal (ex: 0,0275 = 2,75%), apenas converte vírgula para ponto
       const taxaJuros = parseDecimalInput(formData.taxa_juros)
       
       // Valida entrada
@@ -90,8 +91,8 @@ export default function Financiamentos() {
         valor_total: valorTotal,
         valor_entrada: valorEntrada,
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
-        // Converte % para decimal: usuário digita 2 (querendo 2%), salva como 0.02
-        taxa_juros: taxaJuros >= 1 ? taxaJuros / 100 : taxaJuros,
+        // Taxa já está no formato decimal correto (ex: 0.0275 = 2,75%)
+        taxa_juros: taxaJuros,
       }
       
       // Se parcelas variáveis, adiciona array de parcelas
@@ -172,10 +173,9 @@ export default function Financiamentos() {
       valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
       valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
       numero_parcelas: fin.numero_parcelas,
-      // Backend sempre retorna taxa como decimal (0.02 = 2%), multiplica por 100 para exibir
-      // Usa 4 casas decimais para preservar precisão (ex: 2.75% ou 0.15%)
-      // Converte ponto para vírgula para exibição
-      taxa_juros: fin.taxa_juros < 1 ? formatDecimalInput(fin.taxa_juros * 100, 4) : formatDecimalInput(fin.taxa_juros, 4),
+      // Backend retorna taxa como decimal (0.0275 = 2,75%)
+      // Formata para exibir no input com 4 casas decimais
+      taxa_juros: formatDecimalInput(fin.taxa_juros, 4),
       data_inicio: fin.data_inicio,
       instituicao_financeira: fin.instituicao_financeira || '',
       observacoes: fin.observacoes || ''
@@ -457,14 +457,15 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.taxa_juros}
                   onChange={(e) => {
-                    const formatted = formatDecimalWhileTyping(e.target.value, 4)
+                    // Formata tipo "caixa registradora" - sempre últimos 4 dígitos são decimais
+                    const formatted = formatPercentageInput(e.target.value)
                     setFormData({ ...formData, taxa_juros: formatted })
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 2,75 ou 0,15"
+                  placeholder="Ex: 275 será 0,0275 (2,75%)"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para decimais (ex: 2,75% ou 0,15%)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos decimais (ex: 275 = 0,0275 ou 2,75%)</p>
               </div>
               
               <div>

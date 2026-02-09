@@ -61,6 +61,28 @@ export const formatCurrencyInput = (value) => {
 }
 
 /**
+ * Formata taxa de juros tipo "caixa registradora" - sempre assume últimos 4 dígitos como decimais
+ * @param {string} value - Valor digitado
+ * @returns {string} Valor formatado (ex: "2,7500" ou "0,1500")
+ */
+export const formatPercentageInput = (value) => {
+  // Remove tudo exceto números
+  const onlyNumbers = value.replace(/[^\d]/g, '')
+  
+  // Se está vazio, retorna vazio
+  if (!onlyNumbers || onlyNumbers.length === 0) return ''
+  
+  // Converte para número e divide por 10000 (para ter 4 casas decimais)
+  const numberValue = parseInt(onlyNumbers, 10) / 10000
+  
+  // Formata com vírgula decimal (sem separadores de milhar para %)
+  return numberValue.toLocaleString('pt-BR', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
+  })
+}
+
+/**
  * Formata uma data e hora no padrão brasileiro (DD/MM/AAAA HH:MM)
  * @param {string|Date} dateString - Data/hora a ser formatada
  * @returns {string} Data/hora formatada como DD/MM/AAAA HH:MM
