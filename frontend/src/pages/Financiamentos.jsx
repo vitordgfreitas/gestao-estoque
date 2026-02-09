@@ -75,8 +75,23 @@ export default function Financiamentos() {
       // Converte valores com precisão (converte vírgula para ponto)
       const valorTotal = roundToTwoDecimals(parseDecimalInput(formData.valor_total || '0'))
       const valorEntrada = roundToTwoDecimals(parseDecimalInput(formData.valor_entrada || '0'))
-      // Taxa já está formatada como decimal (ex: 0,0275 = 2,75%), apenas converte vírgula para ponto
-      const taxaJuros = parseDecimalInput(formData.taxa_juros)
+      // Taxa: converte e garante que está em formato decimal (0.0155 = 1,55%)
+      let taxaJuros = parseDecimalInput(formData.taxa_juros)
+      // Se a taxa for >= 1, assume que o usuário digitou em % (ex: 1.55 = 1,55%), divide por 100
+      if (taxaJuros >= 1) {
+        taxaJuros = taxaJuros / 100
+      }
+      // Se a taxa for >= 0.1 (10%), provavelmente digitou errado, avisa
+      if (taxaJuros >= 0.1) {
+        const confirmacao = window.confirm(
+          `A taxa de juros está ${(taxaJuros * 100).toFixed(2)}% ao mês. Isso está correto?\n\n` +
+          `Se você quis dizer ${(taxaJuros).toFixed(4)}%, clique em Cancelar e corrija.`
+        )
+        if (!confirmacao) {
+          setFormLoading(false)
+          return
+        }
+      }
       
       // Valida entrada
       if (valorEntrada > valorTotal) {
@@ -463,9 +478,9 @@ export default function Financiamentos() {
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 275 será 0,0275 (2,75%)"
+                  placeholder="Ex: 155 será 0,0155 (1,55%) ou digite 1,55"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos decimais (ex: 275 = 0,0275 ou 2,75%)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite números (155 = 1,55%) ou com vírgula (1,55 = 1,55%)</p>
               </div>
               
               <div>
