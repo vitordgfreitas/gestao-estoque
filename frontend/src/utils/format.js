@@ -108,13 +108,20 @@ export const parseCurrency = (currencyString) => {
  * @returns {string} Valor formatado (ex: "80000,50")
  */
 export const formatDecimalInput = (value, decimals = 2) => {
-  if (value === '' || value === null || value === undefined) return ''
+  if (value === '' || value === null || value === undefined) return decimals === 2 ? '0,00' : '0'
   
-  const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value
-  if (isNaN(numValue)) return ''
+  const numValue = typeof value === 'string' ? parseFloat(value.toString().replace(/\./g, '').replace(',', '.')) : value
+  if (isNaN(numValue)) return decimals === 2 ? '0,00' : '0'
   
-  // Formata com vírgula como separador decimal
-  return numValue.toFixed(decimals).replace('.', ',')
+  // Formata com vírgula como separador decimal e sempre mostra o número de casas solicitado
+  const formatted = numValue.toFixed(decimals).replace('.', ',')
+  
+  // Adiciona separadores de milhar na parte inteira
+  const parts = formatted.split(',')
+  const parteInteira = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  const parteDecimal = parts[1] || ''
+  
+  return parteDecimal ? `${parteInteira},${parteDecimal}` : parteInteira
 }
 
 /**
@@ -142,8 +149,8 @@ export const parseDecimalInput = (value) => {
  * @param {number} maxDecimals - Máximo de casas decimais (padrão: 2)
  * @returns {string} Valor formatado para exibição (ex: "80.000,50")
  */
-export const formatDecimalWhileTyping = (value, maxDecimals = 2) => {
-  if (!value) return ''
+export const formatDecimalWhileTyping = (value, maxDecimals = 2, forceDecimals = false, autoDecimal = false) => {
+  if (!value) return forceDecimals ? '0,00' : ''
   
   // Remove tudo exceto números, vírgula e ponto
   let cleaned = value.replace(/[^\d,.]/g, '')
@@ -156,61 +163,110 @@ export const formatDecimalWhileTyping = (value, maxDecimals = 2) => {
     if (parts.length > 2) {
       cleaned = parts[0] + ',' + parts.slice(1).join('')
     }
+    
+    const parteInteira = parts[0] || '0'
+    let parteDecimal = parts[1] || ''
+    
     // Limita casas decimais
-    if (parts[1] && parts[1].length > maxDecimals) {
-      cleaned = parts[0] + ',' + parts[1].substring(0, maxDecimals)
+    if (parteDecimal.length > maxDecimals) {
+      parteDecimal = parteDecimal.substring(0, maxDecimals)
+    }
+    
+    // Se forceDecimals e não tem decimais, adiciona zeros
+    if (forceDecimals && parteDecimal.length === 0) {
+      parteDecimal = '00'
+    } else if (forceDecimals && parteDecimal.length === 1) {
+      parteDecimal = parteDecimal + '0'
     }
     
     // Formata parte inteira com separadores de milhar
-    const parteInteira = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-    const parteDecimal = parts[1] || ''
+    const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
     
-    return parteDecimal ? `${parteInteira},${parteDecimal}` : parteInteira
+    return parteDecimal ? `${parteInteiraFormatada},${parteDecimal}` : (forceDecimals ? `${parteInteiraFormatada},00` : parteInteiraFormatada)
   } else if (cleaned.includes('.')) {
-    // Se tem ponto, verifica se é separador decimal ou de milhar
+    // Se tem ponto, converte para vírgula
     const parts = cleaned.split('.')
     
     // Se tem mais de um ponto, assume que são separadores de milhar
-    // e o último ponto pode ser decimal (se for seguido de 1-2 dígitos)
     if (parts.length > 2) {
       // Última parte pode ser decimal se tiver 1-2 dígitos
       const ultimaParte = parts[parts.length - 1]
       const penultimaParte = parts[parts.length - 2]
       
-      // Se última parte tem 1-2 dígitos e penúltima tem 3 dígitos, assume decimal
-      if (ultimaParte.length <= 2 && penultimaParte.length === 3) {
+      // Se última parte tem 1-2 dígitos e penultima tem 3 dígitos, assume decimal
+      if (ultimaParte.length <= maxDecimals && penultimaParte.length === 3) {
         const parteInteira = parts.slice(0, -1).join('')
-        const parteDecimal = ultimaParte
-        // Formata parte inteira
+        let parteDecimal = ultimaParte
+        // Garante 2 dígitos se forceDecimals
+        if (forceDecimals && parteDecimal.length === 1) {
+          parteDecimal = parteDecimal + '0'
+        } else if (forceDecimals && parteDecimal.length === 0) {
+          parteDecimal = '00'
+        }
         const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
         return `${parteInteiraFormatada},${parteDecimal}`
       } else {
-        // Todos são separadores de milhar
-        const parteInteira = parts.join('')
-        return parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+        // Todos são separadores de milhar, converte último ponto para vírgula
+        const parteInteira = parts.slice(0, -1).join('')
+        const parteDecimal = parts[parts.length - 1]
+        const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+        let decimalFormatado = parteDecimal
+        if (forceDecimals && decimalFormatado.length === 1) {
+          decimalFormatado = decimalFormatado + '0'
+        } else if (forceDecimals && decimalFormatado.length === 0) {
+          decimalFormatado = '00'
+        }
+        return decimalFormatado ? `${parteInteiraFormatada},${decimalFormatado}` : (forceDecimals ? `${parteInteiraFormatada},00` : parteInteiraFormatada)
       }
     } else {
-      // Um ponto: pode ser decimal ou milhar
-      const parteInteira = parts[0]
-      const parteDepoisPonto = parts[1] || ''
+      // Um ponto: converte para vírgula
+      const parteInteira = parts[0] || '0'
+      let parteDepoisPonto = parts[1] || ''
       
-      // Se parte depois do ponto tem 1-2 dígitos, assume decimal
-      if (parteDepoisPonto.length <= 2) {
-        // Converte ponto para vírgula e formata milhares
-        const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-        return parteDepoisPonto ? `${parteInteiraFormatada},${parteDepoisPonto}` : parteInteiraFormatada
-      } else {
-        // Mais de 2 dígitos, assume separador de milhar
-        const numeroCompleto = cleaned.replace(/\./g, '')
-        return numeroCompleto.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      // Limita casas decimais
+      if (parteDepoisPonto.length > maxDecimals) {
+        parteDepoisPonto = parteDepoisPonto.substring(0, maxDecimals)
       }
+      
+      // Se forceDecimals, garante 2 dígitos
+      if (forceDecimals && parteDepoisPonto.length === 0) {
+        parteDepoisPonto = '00'
+      } else if (forceDecimals && parteDepoisPonto.length === 1) {
+        parteDepoisPonto = parteDepoisPonto + '0'
+      }
+      
+      // Formata parte inteira com separadores de milhar
+      const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      
+      return parteDepoisPonto ? `${parteInteiraFormatada},${parteDepoisPonto}` : (forceDecimals ? `${parteInteiraFormatada},00` : parteInteiraFormatada)
     }
   } else {
-    // Apenas números, formata com separadores de milhar automaticamente
-    // Remove qualquer ponto existente primeiro (caso tenha sido digitado incorretamente)
+    // Apenas números
     const numeroLimpo = cleaned.replace(/\./g, '')
-    // Adiciona pontos de milhar
-    return numeroLimpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+    if (!numeroLimpo) return forceDecimals ? '0,00' : ''
+    
+    // Se autoDecimal está ativado e temos pelo menos 3 dígitos, assume que os últimos 2 são centavos
+    if (autoDecimal && numeroLimpo.length >= 3) {
+      const parteInteira = numeroLimpo.slice(0, -maxDecimals) || '0'
+      const parteDecimal = numeroLimpo.slice(-maxDecimals)
+      
+      // Formata parte inteira com separadores de milhar
+      const parteInteiraFormatada = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      
+      return `${parteInteiraFormatada},${parteDecimal}`
+    } else if (autoDecimal && numeroLimpo.length === 2) {
+      // Se tem apenas 2 dígitos, são centavos
+      return `0,${numeroLimpo}`
+    } else if (autoDecimal && numeroLimpo.length === 1) {
+      // Se tem apenas 1 dígito, é centavo
+      return `0,0${numeroLimpo}`
+    } else {
+      // Formata apenas com separadores de milhar (sem decimais)
+      const parteInteiraFormatada = numeroLimpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      
+      // Se forceDecimals, adiciona vírgula e zeros
+      return forceDecimals ? `${parteInteiraFormatada},00` : parteInteiraFormatada
+    }
   }
 }
 

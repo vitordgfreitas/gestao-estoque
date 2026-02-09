@@ -24,7 +24,7 @@ export default function Financiamentos() {
   const [formData, setFormData] = useState({
     item_id: '',
     valor_total: '',
-    valor_entrada: '0',
+    valor_entrada: '0,00',
     numero_parcelas: '',
     taxa_juros: '',
     data_inicio: '',
@@ -118,7 +118,7 @@ export default function Financiamentos() {
       setFormData({
         item_id: '',
         valor_total: '',
-        valor_entrada: '0',
+        valor_entrada: '0,00',
         numero_parcelas: '',
         taxa_juros: '',
         data_inicio: '',
@@ -162,11 +162,15 @@ export default function Financiamentos() {
     setSelectedFinanciamento(fin)
     const item = itens.find(i => i.id === fin.item_id)
     setSelectedItem(item || null)
+    // Garante que valores sempre tenham 2 casas decimais com vírgula
+    const valorTotalFormatado = formatDecimalInput(fin.valor_total, 2)
+    const valorEntradaFormatado = formatDecimalInput(fin.valor_entrada || 0, 2)
+    
     setFormData({
       item_id: fin.item_id,
-      // Converte ponto para vírgula para exibição
-      valor_total: formatDecimalInput(fin.valor_total, 2),
-      valor_entrada: formatDecimalInput(fin.valor_entrada || 0, 2),
+      // Converte ponto para vírgula para exibição, sempre com 2 casas decimais
+      valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
+      valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
       numero_parcelas: fin.numero_parcelas,
       // Backend sempre retorna taxa como decimal (0.02 = 2%), multiplica por 100 para exibir
       // Usa 4 casas decimais para preservar precisão (ex: 2.75% ou 0.15%)
@@ -197,6 +201,7 @@ export default function Financiamentos() {
             setFormData({
               item_id: '',
               valor_total: '',
+              valor_entrada: '0,00',
               numero_parcelas: '',
               taxa_juros: '',
               data_inicio: '',
@@ -318,14 +323,21 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_total}
                   onChange={(e) => {
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2)
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
                     setFormData({ ...formData, valor_total: formatted })
+                  }}
+                  onBlur={(e) => {
+                    // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
+                    if (formData.valor_total && !formData.valor_total.includes(',')) {
+                      const formatted = formatDecimalWhileTyping(formData.valor_total, 2, true, true)
+                      setFormData({ ...formData, valor_total: formatted })
+                    }
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 80000,50"
+                  placeholder="Ex: 8000050"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para centavos (ex: 80000,50 = R$ 80.000,50)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - os últimos 2 dígitos serão centavos (ex: 8000050 = R$ 80.000,50)</p>
               </div>
               
               <div>
@@ -334,13 +346,22 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.valor_entrada}
                   onChange={(e) => {
-                    const formatted = formatDecimalWhileTyping(e.target.value, 2)
+                    const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
                     setFormData({ ...formData, valor_entrada: formatted })
                   }}
+                  onBlur={(e) => {
+                    // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
+                    if (formData.valor_entrada && formData.valor_entrada !== '0' && formData.valor_entrada !== '0,00' && !formData.valor_entrada.includes(',')) {
+                      const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, true, true)
+                      setFormData({ ...formData, valor_entrada: formatted })
+                    } else if (formData.valor_entrada === '0' || !formData.valor_entrada) {
+                      setFormData({ ...formData, valor_entrada: '0,00' })
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 5000,25"
+                  placeholder="Ex: 500025"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite com vírgula para centavos (opcional)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - os últimos 2 dígitos serão centavos (ex: 500025 = R$ 5.000,25)</p>
                 {formData.valor_total && parseDecimalInput(formData.valor_entrada) > 0 && (
                   <p className="text-xs text-dark-400 mt-1">
                     Valor financiado: {formatCurrency(parseDecimalInput(formData.valor_total) - parseDecimalInput(formData.valor_entrada))}
@@ -396,12 +417,21 @@ export default function Financiamentos() {
                           type="text"
                           value={parcela.valor}
                           onChange={(e) => {
-                            const formatted = formatDecimalWhileTyping(e.target.value, 2)
+                            const formatted = formatDecimalWhileTyping(e.target.value, 2, true, true)
                             const novas = [...parcelasCustomizadas]
                             novas[idx].valor = formatted
                             setParcelasCustomizadas(novas)
                           }}
-                          placeholder="Ex: 4229,69"
+                          onBlur={(e) => {
+                            // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
+                            if (parcelasCustomizadas[idx].valor && !parcelasCustomizadas[idx].valor.includes(',')) {
+                              const formatted = formatDecimalWhileTyping(parcelasCustomizadas[idx].valor, 2, true, true)
+                              const novas = [...parcelasCustomizadas]
+                              novas[idx].valor = formatted
+                              setParcelasCustomizadas(novas)
+                            }
+                          }}
+                          placeholder="Ex: 422969"
                           className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                         />
                         <input
