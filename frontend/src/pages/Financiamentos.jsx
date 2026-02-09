@@ -24,7 +24,7 @@ export default function Financiamentos() {
   const [formData, setFormData] = useState({
     item_id: '',
     valor_total: '',
-    valor_entrada: '0,00',
+    valor_entrada: '',
     numero_parcelas: '',
     taxa_juros: '',
     data_inicio: '',
@@ -118,7 +118,7 @@ export default function Financiamentos() {
       setFormData({
         item_id: '',
         valor_total: '',
-        valor_entrada: '0,00',
+        valor_entrada: '',
         numero_parcelas: '',
         taxa_juros: '',
         data_inicio: '',
@@ -201,7 +201,7 @@ export default function Financiamentos() {
             setFormData({
               item_id: '',
               valor_total: '',
-              valor_entrada: '0,00',
+              valor_entrada: '',
               numero_parcelas: '',
               taxa_juros: '',
               data_inicio: '',
@@ -327,10 +327,16 @@ export default function Financiamentos() {
                     setFormData({ ...formData, valor_total: formatted })
                   }}
                   onBlur={(e) => {
-                    // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
-                    if (formData.valor_total && !formData.valor_total.includes(',')) {
-                      const formatted = formatDecimalWhileTyping(formData.valor_total, 2, true, true)
-                      setFormData({ ...formData, valor_total: formatted })
+                    // Ao sair do campo, garante formato completo se tiver valor
+                    if (formData.valor_total && formData.valor_total.trim() !== '') {
+                      const numValue = parseDecimalInput(formData.valor_total)
+                      if (numValue > 0) {
+                        // Se não tem vírgula e autoDecimal está ativo, formata automaticamente
+                        if (!formData.valor_total.includes(',')) {
+                          const formatted = formatDecimalWhileTyping(formData.valor_total, 2, false, true)
+                          setFormData({ ...formData, valor_total: formatted })
+                        }
+                      }
                     }
                   }}
                   required
@@ -350,12 +356,16 @@ export default function Financiamentos() {
                     setFormData({ ...formData, valor_entrada: formatted })
                   }}
                   onBlur={(e) => {
-                    // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
-                    if (formData.valor_entrada && formData.valor_entrada !== '0' && formData.valor_entrada !== '0,00' && !formData.valor_entrada.includes(',')) {
-                      const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, true, true)
-                      setFormData({ ...formData, valor_entrada: formatted })
-                    } else if (formData.valor_entrada === '0' || !formData.valor_entrada) {
-                      setFormData({ ...formData, valor_entrada: '0,00' })
+                    // Ao sair do campo, garante formato completo se tiver valor
+                    if (formData.valor_entrada && formData.valor_entrada.trim() !== '') {
+                      const numValue = parseDecimalInput(formData.valor_entrada)
+                      if (numValue > 0) {
+                        // Se não tem vírgula e autoDecimal está ativo, formata automaticamente
+                        if (!formData.valor_entrada.includes(',')) {
+                          const formatted = formatDecimalWhileTyping(formData.valor_entrada, 2, false, true)
+                          setFormData({ ...formData, valor_entrada: formatted })
+                        }
+                      }
                     }
                   }}
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
@@ -423,12 +433,15 @@ export default function Financiamentos() {
                             setParcelasCustomizadas(novas)
                           }}
                           onBlur={(e) => {
-                            // Garante que sempre tenha vírgula e 2 casas decimais ao sair do campo
-                            if (parcelasCustomizadas[idx].valor && !parcelasCustomizadas[idx].valor.includes(',')) {
-                              const formatted = formatDecimalWhileTyping(parcelasCustomizadas[idx].valor, 2, true, true)
-                              const novas = [...parcelasCustomizadas]
-                              novas[idx].valor = formatted
-                              setParcelasCustomizadas(novas)
+                            // Ao sair do campo, garante formato completo se tiver valor
+                            if (parcelasCustomizadas[idx].valor && parcelasCustomizadas[idx].valor.trim() !== '') {
+                              const numValue = parseDecimalInput(parcelasCustomizadas[idx].valor)
+                              if (numValue > 0 && !parcelasCustomizadas[idx].valor.includes(',')) {
+                                const formatted = formatDecimalWhileTyping(parcelasCustomizadas[idx].valor, 2, false, true)
+                                const novas = [...parcelasCustomizadas]
+                                novas[idx].valor = formatted
+                                setParcelasCustomizadas(novas)
+                              }
                             }
                           }}
                           placeholder="Ex: 422969"
