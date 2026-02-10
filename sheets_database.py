@@ -1767,9 +1767,18 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 self.valor_total = round(float(valor_total), 2)  # Arredonda para 2 casas decimais
                 self.numero_parcelas = int(numero_parcelas)
                 self.valor_parcela = round(float(valor_parcela), 2)  # Arredonda para 2 casas decimais
-                # Converte vírgula para ponto antes de converter para float
-                taxa_str = str(taxa_juros).replace(',', '.')
-                self.taxa_juros = float(taxa_str)
+                # Converte vírgula para ponto e normaliza taxa_juros
+                taxa_str = str(taxa_juros).replace(',', '.') if taxa_juros else '0'
+                taxa_float = float(taxa_str) if taxa_str else 0.0
+                
+                # NORMALIZAÇÃO: Garante que taxa está em formato decimal (< 1)
+                if taxa_float >= 100:  # Ex: 1550 → 0.0155 (1.55%)
+                    taxa_float = taxa_float / 10000
+                elif taxa_float >= 1:  # Ex: 1.55 → 0.0155 (1.55%)
+                    taxa_float = taxa_float / 100
+                # Se < 1, já está correto (0.0155)
+                
+                self.taxa_juros = round(taxa_float, 6)
                 self.data_inicio = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio, '%Y-%m-%d').date()
                 self.status = status or 'Ativo'
                 self.instituicao_financeira = instituicao_financeira or ''
