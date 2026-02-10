@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
-import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput, formatPercentageInput } from '../utils/format'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput, formatPercentageInput, formatPercentageDisplay } from '../utils/format'
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -21,6 +21,7 @@ export default function Financiamentos() {
   const [itensFiltrados, setItensFiltrados] = useState([])
   const [parcelasFixas, setParcelasFixas] = useState(true)
   const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
+  const [selectedItens, setSelectedItens] = useState([])  // Array de {id, nome, valor}
   const [formData, setFormData] = useState({
     item_id: '',
     valor_total: '',
@@ -67,6 +68,36 @@ export default function Financiamentos() {
     }
   }
 
+  // Handlers para múltiplos itens
+  const addItem = (itemId) => {
+    if (!itemId) return
+    
+    const item = itens.find(i => i.id === parseInt(itemId))
+    if (!item) return
+    
+    // Verifica se já foi adicionado
+    if (selectedItens.find(i => i.id === item.id)) {
+      toast.error('Item já adicionado')
+      return
+    }
+    
+    setSelectedItens([...selectedItens, { 
+      id: item.id, 
+      nome: formatItemName(item), 
+      valor: '' 
+    }])
+  }
+
+  const removeItem = (index) => {
+    setSelectedItens(selectedItens.filter((_, i) => i !== index))
+  }
+
+  const updateItemValor = (index, valor) => {
+    const newSelectedItens = [...selectedItens]
+    newSelectedItens[index].valor = formatCurrencyInput(valor)
+    setSelectedItens(newSelectedItens)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
@@ -100,9 +131,37 @@ export default function Financiamentos() {
         return
       }
       
+      // Valida que pelo menos um item foi selecionado
+      if (selectedItens.length === 0) {
+        toast.error('Selecione pelo menos um item para financiar')
+        setFormLoading(false)
+        return
+      }
+      
+      // Prepara itens_valores
+      const itens_valores = selectedItens.map(item => ({
+        id: parseInt(item.id),
+        valor: roundToTwoDecimals(parseDecimalInput(item.valor || '0'))
+      }))
+      
+      // Valida que todos os itens têm valor
+      if (itens_valores.some(item => item.valor <= 0)) {
+        toast.error('Todos os itens devem ter um valor maior que zero')
+        setFormLoading(false)
+        return
+      }
+      
+      // Valida que a soma dos valores dos itens é igual ao valor total
+      const somaItens = itens_valores.reduce((sum, item) => sum + item.valor, 0)
+      if (Math.abs(somaItens - valorTotal) > 0.01) {
+        toast.error(`Soma dos valores dos itens (${formatCurrency(somaItens)}) deve ser igual ao Valor Total (${formatCurrency(valorTotal)})`)
+        setFormLoading(false)
+        return
+      }
+      
       const data = {
         ...formData,
-        item_id: parseInt(formData.item_id),
+        itens_valores: itens_valores,
         valor_total: valorTotal,
         valor_entrada: valorEntrada,
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
@@ -131,6 +190,7 @@ export default function Financiamentos() {
       setShowForm(false)
       setSelectedFinanciamento(null)
       setSelectedItem(null)
+      setSelectedItens([])
       setFormData({
         item_id: '',
         valor_total: '',
@@ -276,58 +336,58 @@ export default function Financiamentos() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Item</label>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Itens Financiados</label>
                 <select
-                  value={formData.item_id}
                   onChange={(e) => {
-                    const itemId = e.target.value
-                    const item = itensFiltrados.find(i => i.id === parseInt(itemId))
-                    setSelectedItem(item || null)
-                    setFormData({ ...formData, item_id: itemId })
+                    addItem(e.target.value)
+                    e.target.value = '' // Reseta o select
                   }}
-                  required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
-                  <option value="">Selecione um item</option>
+                  <option value="">+ Adicionar item</option>
                   {itensFiltrados.map(item => (
                     <option key={item.id} value={item.id}>
                       {formatItemName(item)}
                     </option>
                   ))}
                 </select>
-                {selectedItem && selectedItem.categoria === 'Carros' && (
-                  <div className="mt-2 p-2 bg-dark-700/50 rounded text-sm text-dark-300">
-                    <p><span className="font-semibold">Nome:</span> {selectedItem.nome}</p>
-                    {/* Tenta obter placa de diferentes fontes */}
-                    {(selectedItem.dados_categoria?.Placa || 
-                      selectedItem.dados_categoria?.placa || 
-                      selectedItem.carro?.placa) && (
-                      <p><span className="font-semibold">Placa:</span> {
-                        selectedItem.dados_categoria?.Placa || 
-                        selectedItem.dados_categoria?.placa || 
-                        selectedItem.carro?.placa
-                      }</p>
-                    )}
-                    {/* Tenta obter marca de diferentes fontes */}
-                    {(selectedItem.dados_categoria?.Marca || 
-                      selectedItem.dados_categoria?.marca || 
-                      selectedItem.carro?.marca) && (
-                      <p><span className="font-semibold">Marca:</span> {
-                        selectedItem.dados_categoria?.Marca || 
-                        selectedItem.dados_categoria?.marca || 
-                        selectedItem.carro?.marca
-                      }</p>
-                    )}
-                    {/* Tenta obter modelo de diferentes fontes */}
-                    {(selectedItem.dados_categoria?.Modelo || 
-                      selectedItem.dados_categoria?.modelo || 
-                      selectedItem.carro?.modelo) && (
-                      <p><span className="font-semibold">Modelo:</span> {
-                        selectedItem.dados_categoria?.Modelo || 
-                        selectedItem.dados_categoria?.modelo || 
-                        selectedItem.carro?.modelo
-                      }</p>
-                    )}
+                
+                {/* Lista de itens selecionados */}
+                {selectedItens.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {selectedItens.map((item, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-dark-700 p-3 rounded-lg">
+                        <span className="flex-1 text-white font-medium">{item.nome}</span>
+                        <div className="flex-1">
+                          <input 
+                            type="text" 
+                            value={item.valor}
+                            onChange={(e) => updateItemValor(idx, e.target.value)}
+                            placeholder="Valor (ex: 8000050)"
+                            className="w-full px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white"
+                            required
+                          />
+                          <p className="text-xs text-dark-400 mt-1">Digite sem vírgula, últimos 2 dígitos = centavos</p>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="bg-dark-700/50 p-2 rounded text-sm">
+                      <p className="text-dark-300">
+                        <span className="font-semibold">Soma dos valores:</span> {formatCurrency(
+                          selectedItens.reduce((sum, item) => sum + (parseDecimalInput(item.valor || '0')), 0)
+                        )}
+                      </p>
+                      <p className="text-xs text-dark-400 mt-1">
+                        A soma deve ser igual ao Valor Total do financiamento
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -472,15 +532,15 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.taxa_juros}
                   onChange={(e) => {
-                    // Formata tipo "caixa registradora" - sempre últimos 4 dígitos são decimais
+                    // Formata tipo "caixa registradora" - sempre últimos 6 dígitos são decimais
                     const formatted = formatPercentageInput(e.target.value)
                     setFormData({ ...formData, taxa_juros: formatted })
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 155 será 0,0155 (1,55%) ou digite 1,55"
+                  placeholder="Ex: 123456 = 1,23456% ou digite 1,23456"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite números (155 = 1,55%) ou com vírgula (1,55 = 1,55%)</p>
+                <p className="text-xs text-dark-400 mt-1">Digite números (até 6 decimais). Ex: 123456 = 1,23456%</p>
               </div>
               
               <div>
@@ -555,9 +615,20 @@ export default function Financiamentos() {
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-bold text-white">
-                      {formatItemName(itens.find(i => i.id === fin.item_id)) || `Item #${fin.item_id}`}
-                    </h3>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-white mb-1">
+                        Financiamento #{fin.id}
+                      </h3>
+                      {fin.itens && fin.itens.length > 0 && (
+                        <div className="text-sm text-dark-300">
+                          {fin.itens.length === 1 ? (
+                            <span>{fin.itens[0].nome}</span>
+                          ) : (
+                            <span>{fin.itens.length} itens: {fin.itens.map(i => i.nome).join(', ')}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       fin.status === 'Ativo' ? 'bg-green-500/20 text-green-400' :
                       fin.status === 'Quitado' ? 'bg-blue-500/20 text-blue-400' :
@@ -566,6 +637,19 @@ export default function Financiamentos() {
                       {fin.status}
                     </span>
                   </div>
+                  
+                  {/* Detalhamento dos itens */}
+                  {fin.itens && fin.itens.length > 1 && (
+                    <div className="mb-3 p-2 bg-dark-700/50 rounded">
+                      <p className="text-xs text-dark-400 mb-1">Itens Financiados:</p>
+                      {fin.itens.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-sm text-dark-300">
+                          <span>• {item.nome}</span>
+                          <span className="text-primary-400">{formatCurrency(item.valor)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <div>
@@ -593,7 +677,7 @@ export default function Financiamentos() {
                     <div>
                       <p className="text-sm text-dark-400">Taxa Juros</p>
                       <p className="text-lg font-semibold text-white">
-                        {(fin.taxa_juros * 100).toFixed(2)}%
+                        {formatPercentageDisplay(fin.taxa_juros)}
                       </p>
                     </div>
                   </div>
@@ -659,13 +743,20 @@ export default function Financiamentos() {
             </div>
             
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-dark-400">Item</p>
-                  <p className="text-white font-semibold">
-                    {formatItemName(itens.find(i => i.id === selectedFinanciamento.item_id)) || `Item #${selectedFinanciamento.item_id}`}
-                  </p>
+              {/* Itens Financiados */}
+              {selectedFinanciamento.itens && selectedFinanciamento.itens.length > 0 && (
+                <div className="bg-dark-700/50 p-4 rounded-lg">
+                  <p className="text-sm text-dark-400 mb-2">Itens Financiados</p>
+                  {selectedFinanciamento.itens.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-2 border-b border-dark-600 last:border-0">
+                      <span className="text-white font-medium">{item.nome}</span>
+                      <span className="text-primary-400 font-semibold">{formatCurrency(item.valor)}</span>
+                    </div>
+                  ))}
                 </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-dark-400">Status</p>
                   <p className="text-white font-semibold">{selectedFinanciamento.status}</p>

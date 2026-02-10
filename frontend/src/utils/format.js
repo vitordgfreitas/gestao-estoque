@@ -61,9 +61,9 @@ export const formatCurrencyInput = (value) => {
 }
 
 /**
- * Formata taxa de juros tipo "caixa registradora" - sempre assume últimos 4 dígitos como decimais
+ * Formata taxa de juros tipo "caixa registradora" - sempre assume últimos 6 dígitos como decimais
  * @param {string} value - Valor digitado
- * @returns {string} Valor formatado (ex: "2,7500" ou "0,1500")
+ * @returns {string} Valor formatado (ex: "2,750000" ou "1,234567")
  */
 export const formatPercentageInput = (value) => {
   // Remove tudo exceto números
@@ -72,14 +72,27 @@ export const formatPercentageInput = (value) => {
   // Se está vazio, retorna vazio
   if (!onlyNumbers || onlyNumbers.length === 0) return ''
   
-  // Converte para número e divide por 10000 (para ter 4 casas decimais)
-  const numberValue = parseInt(onlyNumbers, 10) / 10000
+  // Converte para número e divide por 1000000 (para ter 6 casas decimais)
+  const numberValue = parseInt(onlyNumbers, 10) / 1000000
   
   // Formata com vírgula decimal (sem separadores de milhar para %)
   return numberValue.toLocaleString('pt-BR', {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 6
   })
+}
+
+/**
+ * Formata valor decimal como porcentagem para exibição, removendo zeros à direita
+ * @param {number} value - Valor decimal (ex: 0.0123456 = 1.23456%)
+ * @returns {string} Valor formatado (ex: "1.23456%")
+ */
+export const formatPercentageDisplay = (value) => {
+  if (!value || isNaN(value)) return '0%'
+  
+  const percentage = value * 100
+  // Remove trailing zeros: 1.234500 → 1.2345
+  return percentage.toFixed(6).replace(/\.?0+$/, '') + '%'
 }
 
 /**

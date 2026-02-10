@@ -1553,14 +1553,88 @@ def deletar_compromisso(compromisso_id):
 
 # ============= FINANCIAMENTOS =============
 
-def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_inicio, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None):
-    """Cria um novo financiamento e gera as parcelas automaticamente"""
+def criar_financiamento_item(financiamento_id, item_id, valor_proporcional):
+    """Associa um item a um financiamento (relacionamento many-to-many)"""
+    sheets = get_sheets()
+    sheet_fin_itens = sheets['sheet_financiamentos_itens']
+    
+    # Busca próximo ID
+    try:
+        all_records = sheet_fin_itens.get_all_records()
+        if all_records:
+            valid_ids = [int(record.get('ID', 0)) for record in all_records if record and record.get('ID')]
+            next_id = max(valid_ids) + 1 if valid_ids else 1
+        else:
+            next_id = 1
+    except (IndexError, KeyError, ValueError):
+        next_id = 1
+    
+    # Arredonda valor proporcional para 2 casas decimais
+    valor_proporcional = round(float(valor_proporcional), 2)
+    
+    # Adiciona o registro
+    sheet_fin_itens.append_row([next_id, financiamento_id, item_id, valor_proporcional])
+    
+    return next_id
+
+
+def listar_itens_financiamento(financiamento_id):
+    """Lista todos os itens associados a um financiamento"""
+    sheets = get_sheets()
+    sheet_fin_itens = sheets['sheet_financiamentos_itens']
+    
+    try:
+        all_records = sheet_fin_itens.get_all_records()
+        # Filtra registros que pertencem ao financiamento
+        itens = []
+        for record in all_records:
+            if record and record.get('Financiamento ID') == financiamento_id:
+                itens.append({
+                    'id': record.get('ID'),
+                    'item_id': record.get('Item ID'),
+                    'valor_proporcional': parse_value(record.get('Valor Proporcional', 0))
+                })
+        return itens
+    except Exception as e:
+        print(f"Erro ao listar itens do financiamento {financiamento_id}: {str(e)}")
+        return []
+
+
+def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, taxa_juros=None, data_inicio=None, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None, itens_valores=None):
+    """
+    Cria um novo financiamento e gera as parcelas automaticamente.
+    
+    Args:
+        item_id: ID do item (compatibilidade reversa - uso único item)
+        itens_valores: Lista de dicts com {id: int, valor: float} para múltiplos itens
+        valor_total: Valor total do financiamento
+        numero_parcelas: Número de parcelas
+        taxa_juros: Taxa de juros mensal (decimal)
+        data_inicio: Data de início
+        valor_entrada: Valor da entrada
+        instituicao_financeira: Nome da instituição
+        observacoes: Observações
+        parcelas_customizadas: Lista de parcelas customizadas
+    """
     from datetime import timedelta
     import calendar
     
     sheets = get_sheets()
     sheet_financiamentos = sheets['sheet_financiamentos']
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    
+    # Compatibilidade reversa: se item_id for fornecido e não houver itens_valores
+    if item_id and not itens_valores:
+        itens_valores = [{'id': item_id, 'valor': valor_total}]
+    
+    # Validação: deve ter itens_valores
+    if not itens_valores:
+        raise ValueError("É necessário fornecer pelo menos um item (itens_valores)")
+    
+    # Validação: soma dos valores dos itens deve ser igual ao valor total
+    soma_valores_itens = sum(item['valor'] for item in itens_valores)
+    if abs(soma_valores_itens - valor_total) > 0.01:  # Tolerância de 1 centavo
+        raise ValueError(f"Soma dos valores dos itens ({soma_valores_itens}) deve ser igual ao valor total ({valor_total})")
     
     # Busca próximo ID de financiamento
     try:
@@ -1625,11 +1699,10 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
         # Usa update ao invés de append_row para garantir formatação correta
-        # Primeiro adiciona a linha
+        # Primeiro adiciona a linha (SEM item_id - agora é many-to-many)
         row_num = len(sheet_financiamentos.get_all_values()) + 1
         sheet_financiamentos.append_row([
             next_id,
-            item_id,
             '',  # Placeholder para valor_total
             '',  # Placeholder para valor_entrada
             numero_parcelas,
@@ -1641,9 +1714,13 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             observacoes or ''
         ])
         # Agora atualiza os valores numéricos com formatação explícita
-        sheet_financiamentos.update_cell(row_num, 3, valor_total)  # Valor Total
-        sheet_financiamentos.update_cell(row_num, 4, valor_entrada_rounded)  # Valor Entrada
-        sheet_financiamentos.update_cell(row_num, 6, valor_parcela_rounded)  # Valor Parcela
+        sheet_financiamentos.update_cell(row_num, 2, valor_total)  # Valor Total (coluna B)
+        sheet_financiamentos.update_cell(row_num, 3, valor_entrada_rounded)  # Valor Entrada (coluna C)
+        sheet_financiamentos.update_cell(row_num, 5, valor_parcela_rounded)  # Valor Parcela (coluna E)
+        
+        # Cria registros na tabela Financiamentos_Itens (relacionamento many-to-many)
+        for item_data in itens_valores:
+            criar_financiamento_item(next_id, item_data['id'], item_data['valor'])
         
         # Gera parcelas
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
@@ -1752,7 +1829,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                     raise Exception(f"Erro ao criar parcela {i} de {numero_parcelas}: {str(e)}")
         
         auditoria.registrar_auditoria('CREATE', 'Financiamentos', next_id, valores_novos={
-            'item_id': item_id,
+            'itens': [item['id'] for item in itens_valores],
             'valor_total': valor_total,
             'numero_parcelas': numero_parcelas
         })
@@ -1761,29 +1838,23 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
         
         # Retorna objeto similar ao modelo Financiamento
         class Financiamento:
-            def __init__(self, id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+            def __init__(self, id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes, valor_entrada):
                 self.id = int(id)
-                self.item_id = int(item_id)
-                self.valor_total = round(float(valor_total), 2)  # Arredonda para 2 casas decimais
+                self.valor_total = round(float(valor_total), 2)
+                self.valor_entrada = round(float(valor_entrada), 2)
                 self.numero_parcelas = int(numero_parcelas)
-                self.valor_parcela = round(float(valor_parcela), 2)  # Arredonda para 2 casas decimais
+                self.valor_parcela = round(float(valor_parcela), 2)
                 # Converte vírgula para ponto e normaliza taxa_juros
-                # Trata None, string vazia, ou valores inválidos
                 if not taxa_juros or (isinstance(taxa_juros, str) and taxa_juros.strip() == ''):
                     self.taxa_juros = 0.0
                 else:
-                    # Remove símbolo % se presente (ex: "1,32%" → "1,32")
                     taxa_str = str(taxa_juros).replace('%', '').replace(',', '.').strip()
                     try:
                         taxa_float = float(taxa_str)
-                        
-                        # NORMALIZAÇÃO: Garante que taxa está em formato decimal (< 1)
-                        if taxa_float >= 100:  # Ex: 1550 → 0.0155 (1.55%)
+                        if taxa_float >= 100:
                             taxa_float = taxa_float / 10000
-                        elif taxa_float >= 1:  # Ex: 1.55 → 0.0155 (1.55%)
+                        elif taxa_float >= 1:
                             taxa_float = taxa_float / 100
-                        # Se < 1, já está correto (0.0155)
-                        
                         self.taxa_juros = round(taxa_float, 6)
                     except (ValueError, TypeError):
                         self.taxa_juros = 0.0
@@ -1791,18 +1862,41 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 self.status = status or 'Ativo'
                 self.instituicao_financeira = instituicao_financeira or ''
                 self.observacoes = observacoes or ''
-                self._item_cache = None
+                self._itens_cache = None
                 self._parcelas_cache = None
             
-            def _get_item(self):
-                if self._item_cache is None:
-                    from sheets_database import buscar_item_por_id
-                    self._item_cache = buscar_item_por_id(self.item_id)
-                return self._item_cache
+            def _get_itens(self):
+                if self._itens_cache is None:
+                    # Busca os itens associados ao financiamento
+                    fin_itens = listar_itens_financiamento(self.id)
+                    todos_itens = listar_itens()
+                    self._itens_cache = []
+                    for fin_item in fin_itens:
+                        item_obj = next((item for item in todos_itens if item.id == fin_item['item_id']), None)
+                        if item_obj:
+                            # Adiciona informações do item + valor proporcional
+                            self._itens_cache.append({
+                                'id': item_obj.id,
+                                'nome': item_obj.nome,
+                                'valor': fin_item['valor_proporcional'],
+                                'item': item_obj
+                            })
+                return self._itens_cache
+            
+            @property
+            def itens(self):
+                return self._get_itens()
+            
+            # Compatibilidade: retorna o primeiro item se houver
+            @property
+            def item_id(self):
+                itens = self.itens
+                return itens[0]['id'] if itens else None
             
             @property
             def item(self):
-                return self._get_item()
+                itens = self.itens
+                return itens[0]['item'] if itens else None
             
             def _get_parcelas(self):
                 if self._parcelas_cache is None:
@@ -1813,7 +1907,7 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
             def parcelas(self):
                 return self._get_parcelas()
         
-        return Financiamento(next_id, item_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio_str, 'Ativo', instituicao_financeira, observacoes)
+        return Financiamento(next_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio_str, 'Ativo', instituicao_financeira, observacoes, valor_entrada)
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "criar_financiamento")
     except Exception as e:
@@ -1834,31 +1928,23 @@ def listar_financiamentos(status=None, item_id=None):
         return []
     
     class Financiamento:
-        def __init__(self, id, item_id, valor_total, valor_entrada, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+        def __init__(self, id, valor_total, valor_entrada, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
             self.id = int(id) if id else None
-            self.item_id = int(item_id) if item_id else None
-            self.valor_total = round(float(valor_total), 2) if valor_total else 0.0  # Arredonda para 2 casas decimais
-            self.valor_entrada = round(float(valor_entrada), 2) if valor_entrada else 0.0  # Valor de entrada
+            self.valor_total = round(float(valor_total), 2) if valor_total else 0.0
+            self.valor_entrada = round(float(valor_entrada), 2) if valor_entrada else 0.0
             self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
-            self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0  # Arredonda para 2 casas decimais
+            self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0
             # Converte vírgula para ponto e normaliza taxa_juros
-            # Trata None, string vazia, ou valores inválidos
             if not taxa_juros or (isinstance(taxa_juros, str) and taxa_juros.strip() == ''):
                 self.taxa_juros = 0.0
             else:
-                # Remove símbolo % se presente (ex: "1,32%" → "1,32")
                 taxa_str = str(taxa_juros).replace('%', '').replace(',', '.').strip()
                 try:
                     taxa_float = float(taxa_str)
-                    
-                    # NORMALIZAÇÃO: Garante que taxa está em formato decimal (< 1)
-                    # Isso trata múltiplos formatos vindos do Google Sheets
-                    if taxa_float >= 100:  # Ex: 1550 → 0.0155 (1.55%)
+                    if taxa_float >= 100:
                         taxa_float = taxa_float / 10000
-                    elif taxa_float >= 1:  # Ex: 1.55 → 0.0155 (1.55%)
+                    elif taxa_float >= 1:
                         taxa_float = taxa_float / 100
-                    # Se < 1, já está correto (0.0155)
-                    
                     self.taxa_juros = round(taxa_float, 6)
                 except (ValueError, TypeError):
                     self.taxa_juros = 0.0
@@ -1875,18 +1961,40 @@ def listar_financiamentos(status=None, item_id=None):
             self.status = status or 'Ativo'
             self.instituicao_financeira = instituicao_financeira or ''
             self.observacoes = observacoes or ''
-            self._item_cache = None
+            self._itens_cache = None
             self._parcelas_cache = None
         
-        def _get_item(self):
-            if self._item_cache is None:
-                from sheets_database import buscar_item_por_id
-                self._item_cache = buscar_item_por_id(self.item_id)
-            return self._item_cache
+        def _get_itens(self):
+            if self._itens_cache is None:
+                # Busca os itens associados ao financiamento
+                fin_itens = listar_itens_financiamento(self.id)
+                todos_itens = listar_itens()
+                self._itens_cache = []
+                for fin_item in fin_itens:
+                    item_obj = next((item for item in todos_itens if item.id == fin_item['item_id']), None)
+                    if item_obj:
+                        self._itens_cache.append({
+                            'id': item_obj.id,
+                            'nome': item_obj.nome,
+                            'valor': fin_item['valor_proporcional'],
+                            'item': item_obj
+                        })
+            return self._itens_cache
+        
+        @property
+        def itens(self):
+            return self._get_itens()
+        
+        # Compatibilidade: retorna o primeiro item se houver
+        @property
+        def item_id(self):
+            itens = self.itens
+            return itens[0]['id'] if itens else None
         
         @property
         def item(self):
-            return self._get_item()
+            itens = self.itens
+            return itens[0]['item'] if itens else None
         
         def _get_parcelas(self):
             if self._parcelas_cache is None:
@@ -1959,7 +2067,6 @@ def listar_financiamentos(status=None, item_id=None):
                 
                 fin = Financiamento(
                     record.get('ID'),
-                    record.get('Item ID'),
                     valor_total_conv,
                     valor_entrada_conv,
                     record.get('Numero Parcelas', 0),

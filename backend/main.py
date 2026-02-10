@@ -412,8 +412,13 @@ class ParcelaUpdate(BaseModel):
     valor_original: Optional[float] = None
     data_vencimento: Optional[date] = None
 
+class ItemValor(BaseModel):
+    id: int
+    valor: float
+
 class FinanciamentoCreate(BaseModel):
-    item_id: int
+    itens_valores: List[ItemValor]  # NOVO: múltiplos itens
+    item_id: Optional[int] = None  # Compatibilidade reversa (deprecated)
     valor_total: float  # Valor total do bem
     valor_entrada: Optional[float] = 0.0  # Valor de entrada dado
     numero_parcelas: int
@@ -1710,9 +1715,20 @@ def financiamento_to_dict(fin):
     taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 6)  # Mais precisão para taxa
     valor_financiado = round(valor_total - valor_entrada, 2)
     
+    # Busca itens associados ao financiamento
+    itens = []
+    if hasattr(fin, 'itens'):
+        for item_info in fin.itens:
+            itens.append({
+                "id": item_info['id'],
+                "nome": item_info['nome'],
+                "valor": round(float(item_info['valor']), 2)
+            })
+    
     return {
         "id": getattr(fin, 'id', None),
-        "item_id": getattr(fin, 'item_id', None),
+        "itens": itens,  # NOVO: lista de itens com seus valores
+        "item_id": getattr(fin, 'item_id', None),  # Compatibilidade: primeiro item
         "valor_total": valor_total,
         "valor_entrada": valor_entrada,
         "valor_financiado": valor_financiado,
@@ -1746,6 +1762,30 @@ def parcela_to_dict(parcela):
 async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(verify_token)):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     try:
+        # Prepara itens_valores (suporta compatibilidade reversa)
+        if not fin.itens_valores and fin.item_id:
+            # Compatibilidade reversa: se item_id for fornecido, cria itens_valores
+            itens_valores = [{"id": fin.item_id, "valor": fin.valor_total}]
+        elif fin.itens_valores:
+            itens_valores = [{"id": item.id, "valor": item.valor} for item in fin.itens_valores]
+        else:
+            raise HTTPException(status_code=400, detail="É necessário fornecer pelo menos um item (itens_valores)")
+        
+        # Validação: soma dos valores dos itens deve ser igual ao valor total
+        soma_valores_itens = sum(item['valor'] for item in itens_valores)
+        if abs(soma_valores_itens - fin.valor_total) > 0.01:  # Tolerância de 1 centavo
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Soma dos valores dos itens ({soma_valores_itens}) deve ser igual ao valor total ({fin.valor_total})"
+            )
+        
+        # Validação adicional: valor_entrada não pode ser maior que valor_total
+        if fin.valor_entrada and fin.valor_entrada > fin.valor_total:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Valor de entrada ({fin.valor_entrada}) não pode ser maior que valor total ({fin.valor_total})"
+            )
+        
         # Se parcelas customizadas foram fornecidas, usa elas
         if fin.parcelas_customizadas and len(fin.parcelas_customizadas) > 0:
             # Valida que soma das parcelas = valor_financiado (não valor_total)
@@ -1755,7 +1795,7 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
                 raise HTTPException(status_code=400, detail=f"Soma das parcelas ({soma_parcelas}) não confere com valor financiado ({valor_financiado})")
             
             novo_fin = db_module.criar_financiamento(
-                item_id=fin.item_id,
+                itens_valores=itens_valores,
                 valor_total=fin.valor_total,
                 valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=len(fin.parcelas_customizadas),
@@ -1767,7 +1807,7 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
             )
         else:
             novo_fin = db_module.criar_financiamento(
-                item_id=fin.item_id,
+                itens_valores=itens_valores,
                 valor_total=fin.valor_total,
                 valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=fin.numero_parcelas,

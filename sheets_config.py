@@ -373,6 +373,32 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         sheet_categorias_itens = spreadsheet.add_worksheet(title=sheet_categorias_itens_name, rows=1000, cols=3)
         sheet_categorias_itens.append_row(["ID", "Nome", "Data Criacao"])
     
+    # Obtém ou cria aba de Financiamentos_Itens (relacionamento many-to-many)
+    sheet_financiamentos_itens_name = "Financiamentos_Itens"
+    if sheet_financiamentos_itens_name in existing_worksheets:
+        sheet_financiamentos_itens = spreadsheet.worksheet(sheet_financiamentos_itens_name)
+        try:
+            header = sheet_financiamentos_itens.get('A1')
+            if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
+                sheet_financiamentos_itens.insert_row(["ID", "Financiamento ID", "Item ID", "Valor Proporcional"], 1)
+            else:
+                headers = sheet_financiamentos_itens.row_values(1)
+                expected_headers = ["ID", "Financiamento ID", "Item ID", "Valor Proporcional"]
+                for i, expected_header in enumerate(expected_headers):
+                    if i >= len(headers) or headers[i] != expected_header:
+                        col_letter = chr(65 + i)
+                        sheet_financiamentos_itens.update(f'{col_letter}1', [[expected_header]])
+        except Exception:
+            try:
+                all_values = sheet_financiamentos_itens.get_all_values()
+                if not all_values or len(all_values) == 0:
+                    sheet_financiamentos_itens.append_row(["ID", "Financiamento ID", "Item ID", "Valor Proporcional"])
+            except Exception:
+                pass
+    else:
+        sheet_financiamentos_itens = spreadsheet.add_worksheet(title=sheet_financiamentos_itens_name, rows=1000, cols=4)
+        sheet_financiamentos_itens.append_row(["ID", "Financiamento ID", "Item ID", "Valor Proporcional"])
+    
     return {
         'spreadsheet': spreadsheet,
         'sheet_itens': sheet_itens,
@@ -383,6 +409,7 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         'sheet_financiamentos': sheet_financiamentos,
         'sheet_parcelas_financiamento': sheet_parcelas,
         'sheet_categorias_itens': sheet_categorias_itens,
+        'sheet_financiamentos_itens': sheet_financiamentos_itens,
         'spreadsheet_id': spreadsheet.id,
         'spreadsheet_url': spreadsheet.url
     }
