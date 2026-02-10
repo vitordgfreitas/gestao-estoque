@@ -1772,7 +1772,8 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
                 if not taxa_juros or (isinstance(taxa_juros, str) and taxa_juros.strip() == ''):
                     self.taxa_juros = 0.0
                 else:
-                    taxa_str = str(taxa_juros).replace(',', '.')
+                    # Remove símbolo % se presente (ex: "1,32%" → "1,32")
+                    taxa_str = str(taxa_juros).replace('%', '').replace(',', '.').strip()
                     try:
                         taxa_float = float(taxa_str)
                         
@@ -1845,7 +1846,8 @@ def listar_financiamentos(status=None, item_id=None):
             if not taxa_juros or (isinstance(taxa_juros, str) and taxa_juros.strip() == ''):
                 self.taxa_juros = 0.0
             else:
-                taxa_str = str(taxa_juros).replace(',', '.')
+                # Remove símbolo % se presente (ex: "1,32%" → "1,32")
+                taxa_str = str(taxa_juros).replace('%', '').replace(',', '.').strip()
                 try:
                     taxa_float = float(taxa_str)
                     
