@@ -1600,13 +1600,13 @@ def listar_itens_financiamento(financiamento_id):
         return []
 
 
-def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, taxa_juros=None, data_inicio=None, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None, itens_valores=None):
+def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, taxa_juros=None, data_inicio=None, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None, itens_ids=None):
     """
     Cria um novo financiamento e gera as parcelas automaticamente.
     
     Args:
         item_id: ID do item (compatibilidade reversa - uso único item)
-        itens_valores: Lista de dicts com {id: int, valor: float} para múltiplos itens
+        itens_ids: Lista de IDs dos itens para múltiplos itens
         valor_total: Valor total do financiamento
         numero_parcelas: Número de parcelas
         taxa_juros: Taxa de juros mensal (decimal)
@@ -1623,18 +1623,13 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
     sheet_financiamentos = sheets['sheet_financiamentos']
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
     
-    # Compatibilidade reversa: se item_id for fornecido e não houver itens_valores
-    if item_id and not itens_valores:
-        itens_valores = [{'id': item_id, 'valor': valor_total}]
+    # Compatibilidade reversa: se item_id for fornecido e não houver itens_ids
+    if item_id and not itens_ids:
+        itens_ids = [item_id]
     
-    # Validação: deve ter itens_valores
-    if not itens_valores:
-        raise ValueError("É necessário fornecer pelo menos um item (itens_valores)")
-    
-    # Validação: soma dos valores dos itens deve ser igual ao valor total
-    soma_valores_itens = sum(item['valor'] for item in itens_valores)
-    if abs(soma_valores_itens - valor_total) > 0.01:  # Tolerância de 1 centavo
-        raise ValueError(f"Soma dos valores dos itens ({soma_valores_itens}) deve ser igual ao valor total ({valor_total})")
+    # Validação: deve ter itens_ids
+    if not itens_ids:
+        raise ValueError("É necessário fornecer pelo menos um item (itens_ids)")
     
     # Busca próximo ID de financiamento
     try:
@@ -1719,8 +1714,9 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
         sheet_financiamentos.update_cell(row_num, 5, valor_parcela_rounded)  # Valor Parcela (coluna E)
         
         # Cria registros na tabela Financiamentos_Itens (relacionamento many-to-many)
-        for item_data in itens_valores:
-            criar_financiamento_item(next_id, item_data['id'], item_data['valor'])
+        # Como não temos valores individuais, salvamos 0 ou podemos dividir igualmente
+        for item_id in itens_ids:
+            criar_financiamento_item(next_id, item_id, 0.0)  # Valor proporcional não é usado
         
         # Gera parcelas
         data_venc = data_inicio if isinstance(data_inicio, date) else datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
@@ -1829,7 +1825,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
                     raise Exception(f"Erro ao criar parcela {i} de {numero_parcelas}: {str(e)}")
         
         auditoria.registrar_auditoria('CREATE', 'Financiamentos', next_id, valores_novos={
-            'itens': [item['id'] for item in itens_valores],
+            'itens': itens_ids,
             'valor_total': valor_total,
             'numero_parcelas': numero_parcelas
         })

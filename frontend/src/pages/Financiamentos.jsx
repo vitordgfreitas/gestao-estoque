@@ -83,8 +83,7 @@ export default function Financiamentos() {
     
     setSelectedItens([...selectedItens, { 
       id: item.id, 
-      nome: formatItemName(item), 
-      valor: '' 
+      nome: formatItemName(item)
     }])
   }
 
@@ -92,11 +91,7 @@ export default function Financiamentos() {
     setSelectedItens(selectedItens.filter((_, i) => i !== index))
   }
 
-  const updateItemValor = (index, valor) => {
-    const newSelectedItens = [...selectedItens]
-    newSelectedItens[index].valor = formatCurrencyInput(valor)
-    setSelectedItens(newSelectedItens)
-  }
+  // Não precisamos mais de updateItemValor - apenas selecionamos itens
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -138,30 +133,12 @@ export default function Financiamentos() {
         return
       }
       
-      // Prepara itens_valores
-      const itens_valores = selectedItens.map(item => ({
-        id: parseInt(item.id),
-        valor: roundToTwoDecimals(parseDecimalInput(item.valor || '0'))
-      }))
-      
-      // Valida que todos os itens têm valor
-      if (itens_valores.some(item => item.valor <= 0)) {
-        toast.error('Todos os itens devem ter um valor maior que zero')
-        setFormLoading(false)
-        return
-      }
-      
-      // Valida que a soma dos valores dos itens é igual ao valor total
-      const somaItens = itens_valores.reduce((sum, item) => sum + item.valor, 0)
-      if (Math.abs(somaItens - valorTotal) > 0.01) {
-        toast.error(`Soma dos valores dos itens (${formatCurrency(somaItens)}) deve ser igual ao Valor Total (${formatCurrency(valorTotal)})`)
-        setFormLoading(false)
-        return
-      }
+      // Prepara apenas os IDs dos itens (sem valores individuais)
+      const itens_ids = selectedItens.map(item => parseInt(item.id))
       
       const data = {
         ...formData,
-        itens_valores: itens_valores,
+        itens_ids: itens_ids,
         valor_total: valorTotal,
         valor_entrada: valorEntrada,
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
@@ -355,20 +332,14 @@ export default function Financiamentos() {
                 {/* Lista de itens selecionados */}
                 {selectedItens.length > 0 && (
                   <div className="space-y-2 mt-3">
+                    <div className="bg-dark-700/50 p-2 rounded text-sm mb-2">
+                      <p className="text-dark-300">
+                        <span className="font-semibold">{selectedItens.length} {selectedItens.length === 1 ? 'item selecionado' : 'itens selecionados'}</span>
+                      </p>
+                    </div>
                     {selectedItens.map((item, idx) => (
                       <div key={idx} className="flex gap-2 items-center bg-dark-700 p-3 rounded-lg">
                         <span className="flex-1 text-white font-medium">{item.nome}</span>
-                        <div className="flex-1">
-                          <input 
-                            type="text" 
-                            value={item.valor}
-                            onChange={(e) => updateItemValor(idx, e.target.value)}
-                            placeholder="Valor (ex: 8000050)"
-                            className="w-full px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white"
-                            required
-                          />
-                          <p className="text-xs text-dark-400 mt-1">Digite sem vírgula, últimos 2 dígitos = centavos</p>
-                        </div>
                         <button 
                           type="button"
                           onClick={() => removeItem(idx)}
@@ -378,16 +349,6 @@ export default function Financiamentos() {
                         </button>
                       </div>
                     ))}
-                    <div className="bg-dark-700/50 p-2 rounded text-sm">
-                      <p className="text-dark-300">
-                        <span className="font-semibold">Soma dos valores:</span> {formatCurrency(
-                          selectedItens.reduce((sum, item) => sum + (parseDecimalInput(item.valor || '0')), 0)
-                        )}
-                      </p>
-                      <p className="text-xs text-dark-400 mt-1">
-                        A soma deve ser igual ao Valor Total do financiamento
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>
@@ -643,9 +604,8 @@ export default function Financiamentos() {
                     <div className="mb-3 p-2 bg-dark-700/50 rounded">
                       <p className="text-xs text-dark-400 mb-1">Itens Financiados:</p>
                       {fin.itens.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-sm text-dark-300">
+                        <div key={idx} className="text-sm text-dark-300">
                           <span>• {item.nome}</span>
-                          <span className="text-primary-400">{formatCurrency(item.valor)}</span>
                         </div>
                       ))}
                     </div>
@@ -746,13 +706,14 @@ export default function Financiamentos() {
               {/* Itens Financiados */}
               {selectedFinanciamento.itens && selectedFinanciamento.itens.length > 0 && (
                 <div className="bg-dark-700/50 p-4 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-2">Itens Financiados</p>
-                  {selectedFinanciamento.itens.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-2 border-b border-dark-600 last:border-0">
-                      <span className="text-white font-medium">{item.nome}</span>
-                      <span className="text-primary-400 font-semibold">{formatCurrency(item.valor)}</span>
-                    </div>
-                  ))}
+                  <p className="text-sm text-dark-400 mb-2">Itens Financiados ({selectedFinanciamento.itens.length})</p>
+                  <div className="space-y-1">
+                    {selectedFinanciamento.itens.map((item, idx) => (
+                      <div key={idx} className="text-white">
+                        • {item.nome}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               
