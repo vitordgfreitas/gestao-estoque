@@ -1910,15 +1910,25 @@ def listar_financiamentos(status=None, item_id=None):
                 def parse_value(val):
                     """
                     Parse value from Google Sheets.
-                    gspread already converts commas to dots correctly, so we just need to handle strings.
+                    IMPORTANTE: Google Sheets formatado como "Número" remove vírgula e multiplica por 100
+                    Ex: 42421,41 vira 4242141 (sem decimal)
                     """
                     if val is None:
                         return 0.0
                     
                     if isinstance(val, (int, float)):
-                        # gspread already converts commas to dots correctly (136072,88 → 136072.88)
-                        # Just round, don't try to "correct" the value
-                        return round(float(val), 2)
+                        val_float = float(val)
+                        
+                        # Se o número for inteiro ou tiver apenas .0, pode estar faltando decimal
+                        # Ex: 4242141.0 deveria ser 42421.41
+                        if val_float == int(val_float):  # É um número inteiro (ex: 4242141.0)
+                            # Verifica se os últimos 2 dígitos sugerem centavos
+                            val_int = int(val_float)
+                            if val_int >= 100:  # Só faz sentido dividir se >= 100
+                                # SEMPRE divide por 100 para valores formatados como "Número" no Sheets
+                                return round(val_float / 100, 2)
+                        
+                        return round(val_float, 2)
                     
                     if isinstance(val, str):
                         # Clean Brazilian formatting (ex: "80.000,50" → 80000.50)
