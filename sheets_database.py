@@ -1578,6 +1578,14 @@ def criar_financiamento(item_id, valor_total, numero_parcelas, taxa_juros, data_
     valor_entrada = round(float(valor_entrada), 2)
     taxa_juros = round(float(taxa_juros), 6)
     
+    # Garante que taxa está em formato decimal (< 1) antes de salvar
+    # Isso garante consistência independente do formato recebido
+    if taxa_juros >= 100:  # Ex: 1550 → 0.0155 (1.55%)
+        taxa_juros = taxa_juros / 10000
+    elif taxa_juros >= 1:  # Ex: 1.55 → 0.0155 (1.55%)
+        taxa_juros = taxa_juros / 100
+    # Se < 1, já está correto (0.0155)
+    
     # Calcula valor financiado (deduz entrada)
     valor_financiado = round(valor_total - valor_entrada, 2)
     
@@ -1818,7 +1826,17 @@ def listar_financiamentos(status=None, item_id=None):
             self.valor_parcela = round(float(valor_parcela), 2) if valor_parcela else 0.0  # Arredonda para 2 casas decimais
             # Converte vírgula para ponto e normaliza taxa_juros
             taxa_str = str(taxa_juros).replace(',', '.') if taxa_juros else '0'
-            self.taxa_juros = float(taxa_str) if taxa_str else 0.0
+            taxa_float = float(taxa_str) if taxa_str else 0.0
+            
+            # NORMALIZAÇÃO: Garante que taxa está em formato decimal (< 1)
+            # Isso trata múltiplos formatos vindos do Google Sheets
+            if taxa_float >= 100:  # Ex: 1550 → 0.0155 (1.55%)
+                taxa_float = taxa_float / 10000
+            elif taxa_float >= 1:  # Ex: 1.55 → 0.0155 (1.55%)
+                taxa_float = taxa_float / 100
+            # Se < 1, já está correto (0.0155)
+            
+            self.taxa_juros = round(taxa_float, 6)
             if isinstance(data_inicio, str) and data_inicio:
                 try:
                     self.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
@@ -1865,74 +1883,35 @@ def listar_financiamentos(status=None, item_id=None):
                 # Converte valores para float e arredonda
                 # Google Sheets pode retornar como string formatada ou número
                 def parse_value(val):
+                    """
+                    Parse value from Google Sheets.
+                    gspread already converts commas to dots correctly, so we just need to handle strings.
+                    """
                     if val is None:
                         return 0.0
+                    
                     if isinstance(val, (int, float)):
-                        val_float = float(val)
-                        
-                        # CORRECAO DEFINITIVA: Detecta valores com decimal faltando
-                        # Ex: 232633 (deveria ser 2326.33) - vírgula removida pelo gspread
-                        if 1000 <= val_float < 1000000:
-                            # Verifica se os últimos 2 dígitos parecem centavos (não são 00)
-                            cents_part = int(val_float) % 100
-                            if cents_part != 0:  # Tem "centavos"
-                                # Provavelmente falta o ponto decimal - divide por 100
-                                resultado = round(val_float / 100, 2)
-                                print(f"[PARSE] Corrigido: {val_float} -> {resultado}")
-                                return resultado
-                        
-                        # Para valores MUITO grandes (>= 1 milhão)
-                        # Ex: 422968778 (deveria ser 4229.69 ou 42296.88)
-                        if val_float >= 1000000 and val_float < 1000000000:
-                            # Tenta diferentes divisores
-                            for divisor in [100000, 10000, 1000, 100]:
-                                test_val = val_float / divisor
-                                # Só aceita se o resultado for razoável (entre 1 e 100000)
-                                if 1 <= test_val < 100000:
-                                    print(f"[PARSE] Corrigido (>1M): {val_float} -> {round(test_val, 2)} (divisor: {divisor})")
-                                    return round(test_val, 2)
-                        
-                        return round(val_float, 2)
+                        # gspread already converts commas to dots correctly (136072,88 → 136072.88)
+                        # Just round, don't try to "correct" the value
+                        return round(float(val), 2)
+                    
                     if isinstance(val, str):
-                        # Remove espaços e pontos de milhar
+                        # Clean Brazilian formatting (ex: "80.000,50" → 80000.50)
                         val_clean = val.replace(' ', '').strip()
                         
-                        # Se tem vírgula, pode ser formato brasileiro (ex: "422,968778025999")
-                        # ou formato com pontos de milhar (ex: "422.968.778,00")
-                        if ',' in val_clean:
-                            # Se tem vírgula E ponto, vírgula é decimal e ponto é milhar
-                            if '.' in val_clean:
-                                # Formato brasileiro: "422.968.778,00" -> "422968778.00"
-                                val_clean = val_clean.replace('.', '').replace(',', '.')
-                            else:
-                                # Só vírgula: "422,968778025999" -> "422.968778025999"
-                                val_clean = val_clean.replace(',', '.')
-                        # Se só tem pontos, pode ser formato internacional (ex: "422.968.778.00")
-                        elif val_clean.count('.') > 1:
-                            # Remove pontos exceto o último (decimal)
-                            parts = val_clean.split('.')
-                            val_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+                        if ',' in val_clean and '.' in val_clean:
+                            # Format: "80.000,50" → remove dots (thousands), comma becomes dot (decimal)
+                            val_clean = val_clean.replace('.', '').replace(',', '.')
+                        elif ',' in val_clean:
+                            # Format: "80000,50" → comma becomes dot
+                            val_clean = val_clean.replace(',', '.')
                         
                         try:
-                            val_float = float(val_clean)
-                            
-                            # CORRECAO DEFINITIVA: Detecta valores com decimal faltando (1k-999k)
-                            if 1000 <= val_float < 1000000:
-                                cents_part = int(val_float) % 100
-                                if cents_part != 0:
-                                    return round(val_float / 100, 2)
-                            
-                            # Para valores MUITO grandes (>= 1 milhão)
-                            if val_float >= 1000000 and val_float < 1000000000:
-                                for divisor in [100000, 10000, 1000, 100]:
-                                    test_val = val_float / divisor
-                                    if 1 <= test_val < 100000:
-                                        return round(test_val, 2)
-                            
-                            return round(val_float, 2)
+                            return round(float(val_clean), 2)
                         except (ValueError, TypeError):
                             return 0.0
-                    return round(float(val), 2)
+                    
+                    return 0.0
                 
                 valor_total_conv = parse_value(valor_total_raw)
                 valor_parcela_conv = parse_value(valor_parcela_raw)
