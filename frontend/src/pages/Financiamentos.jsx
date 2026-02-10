@@ -737,14 +737,25 @@ export default function Financiamentos() {
             </div>
             
             <div className="space-y-6">
+              {/* Código do Contrato */}
+              {selectedFinanciamento.codigo_contrato && (
+                <div className="bg-dark-700/50 p-4 rounded-lg">
+                  <p className="text-sm text-dark-400 mb-1">Código do Contrato</p>
+                  <p className="text-white font-semibold">{selectedFinanciamento.codigo_contrato}</p>
+                </div>
+              )}
+              
               {/* Itens Financiados */}
               {selectedFinanciamento.itens && selectedFinanciamento.itens.length > 0 && (
                 <div className="bg-dark-700/50 p-4 rounded-lg">
                   <p className="text-sm text-dark-400 mb-2">Itens Financiados ({selectedFinanciamento.itens.length})</p>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {selectedFinanciamento.itens.map((item, idx) => (
-                      <div key={idx} className="text-white">
-                        • {item.nome}
+                      <div key={idx} className="flex items-center gap-2 p-2 bg-dark-700 rounded">
+                        <span className="w-6 h-6 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-white font-medium">{item.nome}</span>
                       </div>
                     ))}
                   </div>
