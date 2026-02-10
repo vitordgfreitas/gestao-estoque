@@ -136,11 +136,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
             <tr className="border-b border-dark-700">
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">#</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Vencimento</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Valor Original</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Juros</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Multa</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Desconto</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Valor Total</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Valor</th>
               <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Valor Pago</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Status</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Link Boleto</th>
@@ -152,11 +148,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
               <tr key={parcela.id} className="border-b border-dark-700">
                 <td className="py-3 px-4 text-white">{parcela.numero_parcela}</td>
                 <td className="py-3 px-4 text-white">{formatDate(parcela.data_vencimento)}</td>
-                <td className="py-3 px-4 text-white text-right">{formatCurrency(parcela.valor_original)}</td>
-                <td className="py-3 px-4 text-white text-right">{formatCurrency(parcela.juros)}</td>
-                <td className="py-3 px-4 text-white text-right">{formatCurrency(parcela.multa)}</td>
-                <td className="py-3 px-4 text-white text-right">{formatCurrency(parcela.desconto)}</td>
-                <td className="py-3 px-4 text-white text-right font-semibold">{formatCurrency(calcularValorTotal(parcela))}</td>
+                <td className="py-3 px-4 text-white text-right font-semibold">{formatCurrency(parcela.valor_original)}</td>
                 <td className="py-3 px-4 text-white text-right">{formatCurrency(parcela.valor_pago)}</td>
                 <td className="py-3 px-4">
                   {editingStatus[parcela.id] ? (
