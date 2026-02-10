@@ -1600,13 +1600,14 @@ def listar_itens_financiamento(financiamento_id):
         return []
 
 
-def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, taxa_juros=None, data_inicio=None, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None, itens_ids=None):
+def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, taxa_juros=None, data_inicio=None, valor_entrada=0.0, instituicao_financeira=None, observacoes=None, parcelas_customizadas=None, itens_ids=None, codigo_contrato=None):
     """
     Cria um novo financiamento e gera as parcelas automaticamente.
     
     Args:
         item_id: ID do item (compatibilidade reversa - uso único item)
         itens_ids: Lista de IDs dos itens para múltiplos itens
+        codigo_contrato: Código do contrato do financiamento
         valor_total: Valor total do financiamento
         numero_parcelas: Número de parcelas
         taxa_juros: Taxa de juros mensal (decimal)
@@ -1694,11 +1695,11 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
         # Usa update ao invés de append_row para garantir formatação correta
-        # Headers: ID | Item ID | Valor Total | Valor Entrada | Numero Parcelas | Valor Parcela | Taxa Juros | Data Inicio | Status | Instituicao Financeira | Observacoes
+        # Headers: ID | Código Contrato | Valor Total | Valor Entrada | Numero Parcelas | Valor Parcela | Taxa Juros | Data Inicio | Status | Instituicao Financeira | Observacoes
         row_num = len(sheet_financiamentos.get_all_values()) + 1
         sheet_financiamentos.append_row([
             next_id,                        # A: ID
-            '',                             # B: Item ID (vazio - agora usa tabela Financiamentos_Itens)
+            codigo_contrato or '',          # B: Código Contrato (ex-Item ID)
             '',                             # C: Valor Total (placeholder)
             '',                             # D: Valor Entrada (placeholder)
             numero_parcelas,                # E: Numero Parcelas
@@ -1835,8 +1836,9 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
         
         # Retorna objeto similar ao modelo Financiamento
         class Financiamento:
-            def __init__(self, id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes, valor_entrada):
+            def __init__(self, id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes, valor_entrada, codigo_contrato):
                 self.id = int(id)
+                self.codigo_contrato = codigo_contrato or ''
                 self.valor_total = round(float(valor_total), 2)
                 self.valor_entrada = round(float(valor_entrada), 2)
                 self.numero_parcelas = int(numero_parcelas)
@@ -1904,7 +1906,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
             def parcelas(self):
                 return self._get_parcelas()
         
-        return Financiamento(next_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio_str, 'Ativo', instituicao_financeira, observacoes, valor_entrada)
+        return Financiamento(next_id, valor_total, numero_parcelas, valor_parcela, taxa_juros, data_inicio_str, 'Ativo', instituicao_financeira, observacoes, valor_entrada, codigo_contrato)
     except gspread.exceptions.APIError as e:
         _handle_api_error(e, "criar_financiamento")
     except Exception as e:
@@ -1925,8 +1927,9 @@ def listar_financiamentos(status=None, item_id=None):
         return []
     
     class Financiamento:
-        def __init__(self, id, valor_total, valor_entrada, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes):
+        def __init__(self, id, valor_total, valor_entrada, numero_parcelas, valor_parcela, taxa_juros, data_inicio, status, instituicao_financeira, observacoes, codigo_contrato):
             self.id = int(id) if id else None
+            self.codigo_contrato = codigo_contrato or ''
             self.valor_total = round(float(valor_total), 2) if valor_total else 0.0
             self.valor_entrada = round(float(valor_entrada), 2) if valor_entrada else 0.0
             self.numero_parcelas = int(numero_parcelas) if numero_parcelas else 0
@@ -2072,7 +2075,8 @@ def listar_financiamentos(status=None, item_id=None):
                     record.get('Data Inicio', ''),
                     record.get('Status', 'Ativo'),
                     record.get('Instituicao Financeira', ''),
-                    record.get('Observacoes', '')
+                    record.get('Observacoes', ''),
+                    record.get('Código Contrato', '') or record.get('Codigo Contrato', '')  # Suporta ambos
                 )
                 
                 # Aplica filtros
@@ -2249,7 +2253,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
         return []
     
     class ParcelaFinanciamento:
-        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto, link_boleto=None):
+        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto, link_boleto=None, link_comprovante=None):
             self.id = int(id) if id else None
             self.financiamento_id = int(financiamento_id) if financiamento_id else None
             self.numero_parcela = int(numero_parcela) if numero_parcela else 0
@@ -2308,6 +2312,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
             self.valor_original = parse_val(valor_original)
             self.valor_pago = parse_val(valor_pago)
             self.link_boleto = link_boleto or ''
+            self.link_comprovante = link_comprovante or ''
             if isinstance(data_vencimento, str) and data_vencimento:
                 try:
                     self.data_vencimento = datetime.strptime(data_vencimento, '%Y-%m-%d').date()
@@ -2372,7 +2377,8 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
                     record.get('Juros', 0),
                     record.get('Multa', 0),
                     record.get('Desconto', 0),
-                    record.get('Link Boleto', '')
+                    record.get('Link Boleto', ''),
+                    record.get('Link Comprovante', '')
                 )
                 
                 # Aplica filtros
@@ -2491,7 +2497,7 @@ def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, jur
     return None
 
 
-def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, valor_original=None, data_vencimento=None):
+def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, link_comprovante=None, valor_original=None, data_vencimento=None):
     """Atualiza uma parcela de financiamento"""
     sheets = get_sheets()
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
@@ -2509,12 +2515,14 @@ def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, v
             
             # Mapeia colunas (baseado nos headers)
             # ID=1, Financiamento ID=2, Numero Parcela=3, Valor Original=4, Valor Pago=5, 
-            # Data Vencimento=6, Data Pagamento=7, Status=8, Juros=9, Multa=10, Desconto=11, Link Boleto=12
+            # Data Vencimento=6, Data Pagamento=7, Status=8, Juros=9, Multa=10, Desconto=11, Link Boleto=12, Link Comprovante=13
             
             if status is not None:
                 sheet_parcelas.update_cell(i, 8, status)  # Status
             if link_boleto is not None:
                 sheet_parcelas.update_cell(i, 12, link_boleto)  # Link Boleto
+            if link_comprovante is not None:
+                sheet_parcelas.update_cell(i, 13, link_comprovante)  # Link Comprovante
             if valor_original is not None:
                 sheet_parcelas.update_cell(i, 4, float(valor_original))  # Valor Original
             if data_vencimento is not None:

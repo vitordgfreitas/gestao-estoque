@@ -17,6 +17,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
   const [editData, setEditData] = useState({
     status: '',
     link_boleto: '',
+    link_comprovante: '',
     valor_original: '',
     data_vencimento: ''
   })
@@ -106,6 +107,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
     setEditData({
       status: parcela.status,
       link_boleto: parcela.link_boleto || '',
+      link_comprovante: parcela.link_comprovante || '',
       valor_original: parcela.valor_original.toString(),
       data_vencimento: parcela.data_vencimento.split('T')[0] || new Date(parcela.data_vencimento).toISOString().split('T')[0]
     })
@@ -140,6 +142,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
               <th className="text-right py-3 px-4 text-sm font-medium text-dark-400">Valor Pago</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Status</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Link Boleto</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Link Comprovante</th>
               <th className="text-left py-3 px-4 text-sm font-medium text-dark-400">Ações</th>
             </tr>
           </thead>
@@ -185,6 +188,21 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
                     >
                       <ExternalLink size={14} />
                       Ver Boleto
+                    </a>
+                  ) : (
+                    <span className="text-dark-500 text-sm">-</span>
+                  )}
+                </td>
+                <td className="py-3 px-4">
+                  {parcela.link_comprovante ? (
+                    <a
+                      href={parcela.link_comprovante}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-green-400 hover:text-green-300 text-sm"
+                    >
+                      <ExternalLink size={14} />
+                      Ver Comprovante
                     </a>
                   ) : (
                     <span className="text-dark-500 text-sm">-</span>
@@ -324,6 +342,16 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
                   type="url"
                   value={editData.link_boleto}
                   onChange={(e) => setEditData({ ...editData, link_boleto: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Link do Comprovante</label>
+                <input
+                  type="url"
+                  value={editData.link_comprovante}
+                  onChange={(e) => setEditData({ ...editData, link_comprovante: e.target.value })}
                   placeholder="https://..."
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 />

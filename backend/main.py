@@ -409,12 +409,14 @@ class ParcelaCustomizada(BaseModel):
 class ParcelaUpdate(BaseModel):
     status: Optional[str] = None
     link_boleto: Optional[str] = None
+    link_comprovante: Optional[str] = None
     valor_original: Optional[float] = None
     data_vencimento: Optional[date] = None
 
 class FinanciamentoCreate(BaseModel):
     itens_ids: Optional[List[int]] = None  # NOVO: múltiplos itens (apenas IDs)
     item_id: Optional[int] = None  # Compatibilidade reversa (deprecated)
+    codigo_contrato: Optional[str] = None  # Código do contrato
     valor_total: float  # Valor total do bem
     valor_entrada: Optional[float] = 0.0  # Valor de entrada dado
     numero_parcelas: int
@@ -1702,9 +1704,12 @@ def financiamento_to_dict(fin):
             fin['valor_parcela'] = round(float(fin['valor_parcela']), 2)
         if 'taxa_juros' in fin:
             fin['taxa_juros'] = round(float(fin['taxa_juros']), 6)
+        if 'codigo_contrato' not in fin:
+            fin['codigo_contrato'] = ''
         return fin
     
     # Calcula valores com precisão de 2 casas decimais
+    codigo_contrato = getattr(fin, 'codigo_contrato', None) or ''
     valor_total = round(float(getattr(fin, 'valor_total', 0.0)), 2)
     valor_entrada = round(float(getattr(fin, 'valor_entrada', 0.0)), 2)
     valor_parcela = round(float(getattr(fin, 'valor_parcela', 0.0)), 2)
@@ -1723,6 +1728,7 @@ def financiamento_to_dict(fin):
     
     return {
         "id": getattr(fin, 'id', None),
+        "codigo_contrato": codigo_contrato,  # NOVO: Código do contrato
         "itens": itens,  # NOVO: lista de itens com seus valores
         "item_id": getattr(fin, 'item_id', None),  # Compatibilidade: primeiro item
         "valor_total": valor_total,
@@ -1751,7 +1757,8 @@ def parcela_to_dict(parcela):
         "juros": round(float(parcela.juros), 2),
         "multa": round(float(parcela.multa), 2),
         "desconto": round(float(parcela.desconto), 2),
-        "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None
+        "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
+        "link_comprovante": parcela.link_comprovante if hasattr(parcela, 'link_comprovante') else None
     }
 
 @app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -1784,6 +1791,7 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
             
             novo_fin = db_module.criar_financiamento(
                 itens_ids=itens_ids,
+                codigo_contrato=fin.codigo_contrato,
                 valor_total=fin.valor_total,
                 valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=len(fin.parcelas_customizadas),
@@ -1796,6 +1804,7 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
         else:
             novo_fin = db_module.criar_financiamento(
                 itens_ids=itens_ids,
+                codigo_contrato=fin.codigo_contrato,
                 valor_total=fin.valor_total,
                 valor_entrada=fin.valor_entrada or 0.0,
                 numero_parcelas=fin.numero_parcelas,
@@ -1919,6 +1928,7 @@ async def atualizar_parcela_financiamento(
             parcela_id=parcela_id,
             status=parcela_update.status,
             link_boleto=parcela_update.link_boleto,
+            link_comprovante=parcela_update.link_comprovante,
             valor_original=parcela_update.valor_original,
             data_vencimento=parcela_update.data_vencimento
         )

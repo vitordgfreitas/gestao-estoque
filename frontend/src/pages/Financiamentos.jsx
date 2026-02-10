@@ -24,6 +24,7 @@ export default function Financiamentos() {
   const [selectedItens, setSelectedItens] = useState([])  // Array de {id, nome, valor}
   const [formData, setFormData] = useState({
     item_id: '',
+    codigo_contrato: '',
     valor_total: '',
     valor_entrada: '',
     numero_parcelas: '',
@@ -222,6 +223,7 @@ export default function Financiamentos() {
     
     setFormData({
       item_id: fin.item_id,
+      codigo_contrato: fin.codigo_contrato || '',
       // Converte ponto para vírgula para exibição, sempre com 2 casas decimais
       valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
       valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
@@ -253,6 +255,7 @@ export default function Financiamentos() {
             setParcelasCustomizadas([])
             setFormData({
               item_id: '',
+              codigo_contrato: '',
               valor_total: '',
               valor_entrada: '',
               numero_parcelas: '',
@@ -352,6 +355,18 @@ export default function Financiamentos() {
                     ))}
                   </div>
                 )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Código do Contrato</label>
+                <input
+                  type="text"
+                  value={formData.codigo_contrato}
+                  onChange={(e) => setFormData({ ...formData, codigo_contrato: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: CTR-2024-001"
+                />
+                <p className="text-xs text-dark-400 mt-1">Código único do contrato (opcional)</p>
               </div>
               
               <div>
@@ -579,7 +594,7 @@ export default function Financiamentos() {
                   <div className="flex items-center gap-3 mb-2">
                     <div className="flex-1">
                       <h3 className="text-xl font-bold text-white mb-1">
-                        Financiamento #{fin.id}
+                        {fin.codigo_contrato || `Financiamento #${fin.id}`}
                       </h3>
                       {fin.itens && fin.itens.length > 0 && (
                         <div className="text-sm text-dark-300">
@@ -694,7 +709,14 @@ export default function Financiamentos() {
             className="bg-dark-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-dark-700"
           >
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold text-white">Detalhes do Financiamento</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-white">
+                  {selectedFinanciamento.codigo_contrato || `Financiamento #${selectedFinanciamento.id}`}
+                </h2>
+                {selectedFinanciamento.codigo_contrato && (
+                  <p className="text-sm text-dark-400 mt-1">ID: #{selectedFinanciamento.id}</p>
+                )}
+              </div>
               <button
                 onClick={() => setSelectedFinanciamento(null)}
                 className="text-dark-400 hover:text-white"
