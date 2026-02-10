@@ -217,6 +217,17 @@ export default function Financiamentos() {
     setSelectedFinanciamento(fin)
     const item = itens.find(i => i.id === fin.item_id)
     setSelectedItem(item || null)
+    
+    // Popula a lista de itens selecionados a partir do financiamento
+    if (fin.itens && fin.itens.length > 0) {
+      setSelectedItens(fin.itens.map(item => ({
+        id: item.id,
+        nome: item.nome
+      })))
+    } else {
+      setSelectedItens([])
+    }
+    
     // Garante que valores sempre tenham 2 casas decimais com vírgula
     const valorTotalFormatado = formatDecimalInput(fin.valor_total, 2)
     const valorEntradaFormatado = formatDecimalInput(fin.valor_entrada || 0, 2)
