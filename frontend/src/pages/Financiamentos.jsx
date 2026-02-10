@@ -137,13 +137,14 @@ export default function Financiamentos() {
       const itens_ids = selectedItens.map(item => parseInt(item.id))
       
       const data = {
-        ...formData,
         itens_ids: itens_ids,
         valor_total: valorTotal,
         valor_entrada: valorEntrada,
         numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
-        // Taxa já está no formato decimal correto (ex: 0.0275 = 2,75%)
         taxa_juros: taxaJuros,
+        data_inicio: formData.data_inicio,
+        instituicao_financeira: formData.instituicao_financeira || null,
+        observacoes: formData.observacoes || null
       }
       
       // Se parcelas variáveis, adiciona array de parcelas
