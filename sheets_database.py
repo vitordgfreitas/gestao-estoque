@@ -1694,24 +1694,25 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
         # Usa update ao invés de append_row para garantir formatação correta
-        # Primeiro adiciona a linha (SEM item_id - agora é many-to-many)
+        # Headers: ID | Item ID | Valor Total | Valor Entrada | Numero Parcelas | Valor Parcela | Taxa Juros | Data Inicio | Status | Instituicao Financeira | Observacoes
         row_num = len(sheet_financiamentos.get_all_values()) + 1
         sheet_financiamentos.append_row([
-            next_id,
-            '',  # Placeholder para valor_total
-            '',  # Placeholder para valor_entrada
-            numero_parcelas,
-            '',  # Placeholder para valor_parcela
-            float(taxa_juros),
-            data_inicio_str,
-            'Ativo',
-            instituicao_financeira or '',
-            observacoes or ''
+            next_id,                        # A: ID
+            '',                             # B: Item ID (vazio - agora usa tabela Financiamentos_Itens)
+            '',                             # C: Valor Total (placeholder)
+            '',                             # D: Valor Entrada (placeholder)
+            numero_parcelas,                # E: Numero Parcelas
+            '',                             # F: Valor Parcela (placeholder)
+            float(taxa_juros),              # G: Taxa Juros
+            data_inicio_str,                # H: Data Inicio
+            'Ativo',                        # I: Status
+            instituicao_financeira or '',   # J: Instituicao Financeira
+            observacoes or ''               # K: Observacoes
         ])
         # Agora atualiza os valores numéricos com formatação explícita
-        sheet_financiamentos.update_cell(row_num, 2, valor_total)  # Valor Total (coluna B)
-        sheet_financiamentos.update_cell(row_num, 3, valor_entrada_rounded)  # Valor Entrada (coluna C)
-        sheet_financiamentos.update_cell(row_num, 5, valor_parcela_rounded)  # Valor Parcela (coluna E)
+        sheet_financiamentos.update_cell(row_num, 3, valor_total)  # Valor Total (coluna C)
+        sheet_financiamentos.update_cell(row_num, 4, valor_entrada_rounded)  # Valor Entrada (coluna D)
+        sheet_financiamentos.update_cell(row_num, 6, valor_parcela_rounded)  # Valor Parcela (coluna F)
         
         # Cria registros na tabela Financiamentos_Itens (relacionamento many-to-many)
         # Como não temos valores individuais, salvamos 0 ou podemos dividir igualmente
