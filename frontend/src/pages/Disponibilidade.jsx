@@ -273,9 +273,30 @@ export default function Disponibilidade() {
           {/* Resultado de item específico */}
           {resultado.item && (
             <div className="card">
-              <h3 className="text-lg font-semibold text-dark-50 mb-6">
+              <h3 className="text-lg font-semibold text-dark-50 mb-2">
                 Disponibilidade para "{resultado.item.nome}"
               </h3>
+              
+              {/* Mostra campos específicos da categoria */}
+              {resultado.item.dados_categoria && Object.keys(resultado.item.dados_categoria).length > 0 && (
+                <div className="mb-4 p-3 bg-dark-700/50 rounded-lg">
+                  <p className="text-xs text-dark-500 mb-2">Detalhes:</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {Object.entries(resultado.item.dados_categoria).map(([campo, valor]) => {
+                      // Pula campos vazios ou IDs
+                      if (!valor || campo === 'ID' || campo === 'Item ID') {
+                        return null
+                      }
+                      return (
+                        <div key={campo} className="text-sm">
+                          <span className="text-dark-400">{campo}:</span>{' '}
+                          <span className="text-dark-200 font-medium">{valor}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               
               {localizacaoFiltro !== 'Todas as Localizações' && (
                 <div className="mb-4 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
@@ -453,6 +474,24 @@ export default function Disponibilidade() {
                                           ) : (
                                             <p className="font-medium text-dark-50">{item.nome}</p>
                                           )}
+                                          
+                                          {/* Mostra campos específicos da categoria */}
+                                          {Object.keys(dadosCat).length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                              {Object.entries(dadosCat).map(([campo, valor]) => {
+                                                // Pula campos que já estão sendo mostrados como identificador ou campos vazios
+                                                if (campo === identificador || !valor || campo === 'ID' || campo === 'Item ID') {
+                                                  return null
+                                                }
+                                                return (
+                                                  <div key={campo} className="text-xs text-dark-400">
+                                                    <span className="text-dark-500">{campo}:</span> <span className="text-dark-300">{valor}</span>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          )}
+                                          
                                           <div className="flex items-center gap-4 mt-2 text-sm">
                                             <span className={`font-medium ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
                                               {r.quantidade_disponivel > 0 ? '✅ Disponível' : '❌ Indisponível'}
@@ -488,23 +527,45 @@ export default function Disponibilidade() {
                           {categoria === 'Carros' ? '🚗' : '📦'} {categoria}
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {resultados.map((r, idx) => (
-                            <div key={idx} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
-                              <h5 className="font-semibold text-dark-50 mb-3">{r.item.nome}</h5>
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-dark-400">Disponível:</span>
-                                <span className={`font-bold ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                  {r.quantidade_disponivel}
-                                </span>
-                              </div>
-                              {r.quantidade_comprometida > 0 && (
-                                <div className="flex items-center justify-between mt-2">
-                                  <span className="text-sm text-dark-400">Comprometido:</span>
-                                  <span className="font-medium text-yellow-500">{r.quantidade_comprometida}</span>
+                          {resultados.map((r, idx) => {
+                            const dadosCat = r.item.dados_categoria || {}
+                            
+                            return (
+                              <div key={idx} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
+                                <h5 className="font-semibold text-dark-50 mb-2">{r.item.nome}</h5>
+                                
+                                {/* Mostra campos específicos da categoria */}
+                                {Object.keys(dadosCat).length > 0 && (
+                                  <div className="mb-3 space-y-1">
+                                    {Object.entries(dadosCat).map(([campo, valor]) => {
+                                      // Pula campos vazios ou IDs
+                                      if (!valor || campo === 'ID' || campo === 'Item ID') {
+                                        return null
+                                      }
+                                      return (
+                                        <div key={campo} className="text-xs text-dark-400">
+                                          <span className="text-dark-500">{campo}:</span> <span className="text-dark-300">{valor}</span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                                
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-dark-400">Disponível:</span>
+                                  <span className={`font-bold ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {r.quantidade_disponivel}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                                {r.quantidade_comprometida > 0 && (
+                                  <div className="flex items-center justify-between mt-2">
+                                    <span className="text-sm text-dark-400">Comprometido:</span>
+                                    <span className="font-medium text-yellow-500">{r.quantidade_comprometida}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )
