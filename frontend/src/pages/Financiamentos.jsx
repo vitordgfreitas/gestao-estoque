@@ -138,6 +138,7 @@ export default function Financiamentos() {
       const itens_ids = selectedItens.map(item => parseInt(item.id))
       
       const data = {
+        codigo_contrato: formData.codigo_contrato || null,
         itens_ids: itens_ids,
         valor_total: valorTotal,
         valor_entrada: valorEntrada,
@@ -213,40 +214,48 @@ export default function Financiamentos() {
     }
   }
 
-  const handleEdit = (fin) => {
-    setSelectedFinanciamento(fin)
-    const item = itens.find(i => i.id === fin.item_id)
-    setSelectedItem(item || null)
-    
-    // Popula a lista de itens selecionados a partir do financiamento
-    if (fin.itens && fin.itens.length > 0) {
-      setSelectedItens(fin.itens.map(item => ({
-        id: item.id,
-        nome: item.nome
-      })))
-    } else {
-      setSelectedItens([])
+  const handleEdit = async (fin) => {
+    try {
+      // Busca dados completos do financiamento com itens
+      const response = await financiamentosAPI.buscar(fin.id)
+      const finCompleto = response.data
+      
+      setSelectedFinanciamento(finCompleto)
+      const item = itens.find(i => i.id === finCompleto.item_id)
+      setSelectedItem(item || null)
+      
+      // Popula a lista de itens selecionados a partir do financiamento COMPLETO
+      if (finCompleto.itens && finCompleto.itens.length > 0) {
+        setSelectedItens(finCompleto.itens.map(item => ({
+          id: item.id,
+          nome: item.nome
+        })))
+      } else {
+        setSelectedItens([])
+      }
+      
+      // Garante que valores sempre tenham 2 casas decimais com vírgula
+      const valorTotalFormatado = formatDecimalInput(finCompleto.valor_total, 2)
+      const valorEntradaFormatado = formatDecimalInput(finCompleto.valor_entrada || 0, 2)
+      
+      setFormData({
+        item_id: finCompleto.item_id,
+        codigo_contrato: finCompleto.codigo_contrato || '',
+        // Converte ponto para vírgula para exibição, sempre com 2 casas decimais
+        valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
+        valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
+        numero_parcelas: finCompleto.numero_parcelas,
+        // Backend retorna taxa como decimal (0.0275 = 2,75%)
+        // Formata para exibir no input com 4 casas decimais
+        taxa_juros: formatDecimalInput(finCompleto.taxa_juros, 4),
+        data_inicio: finCompleto.data_inicio,
+        instituicao_financeira: finCompleto.instituicao_financeira || '',
+        observacoes: finCompleto.observacoes || ''
+      })
+      setShowForm(true)
+    } catch (error) {
+      toast.error('Erro ao carregar dados do financiamento')
     }
-    
-    // Garante que valores sempre tenham 2 casas decimais com vírgula
-    const valorTotalFormatado = formatDecimalInput(fin.valor_total, 2)
-    const valorEntradaFormatado = formatDecimalInput(fin.valor_entrada || 0, 2)
-    
-    setFormData({
-      item_id: fin.item_id,
-      codigo_contrato: fin.codigo_contrato || '',
-      // Converte ponto para vírgula para exibição, sempre com 2 casas decimais
-      valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
-      valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
-      numero_parcelas: fin.numero_parcelas,
-      // Backend retorna taxa como decimal (0.0275 = 2,75%)
-      // Formata para exibir no input com 4 casas decimais
-      taxa_juros: formatDecimalInput(fin.taxa_juros, 4),
-      data_inicio: fin.data_inicio,
-      instituicao_financeira: fin.instituicao_financeira || '',
-      observacoes: fin.observacoes || ''
-    })
-    setShowForm(true)
   }
 
   return (

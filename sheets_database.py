@@ -1764,10 +1764,8 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
                         data_vencimento.strftime('%Y-%m-%d') if isinstance(data_vencimento, date) else str(data_vencimento),
                         '',  # Data pagamento vazia
                         'Pendente',
-                        0.0,  # Juros
-                        0.0,  # Multa
-                        0.0,  # Desconto
-                        ''  # Link Boleto vazio
+                        '',  # Link Boleto vazio
+                        ''   # Link Comprovante vazio
                     ])
                     # Atualiza valor da parcela com update_cell para garantir que seja salvo como decimal
                     sheet_parcelas.update_cell(row_parcela_custom_num, 4, valor_parcela_custom)
@@ -1816,10 +1814,8 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
                         data_vencimento.strftime('%Y-%m-%d'),
                         '',  # Data pagamento vazia
                         'Pendente',
-                        0.0,  # Juros
-                        0.0,  # Multa
-                        0.0,  # Desconto
-                        ''  # Link Boleto vazio
+                        '',  # Link Boleto vazio
+                        ''   # Link Comprovante vazio
                     ])
                     # Atualiza valor da parcela com update_cell para garantir que seja salvo como decimal
                     sheet_parcelas.update_cell(row_parcela_num, 4, valor_parcela_rounded)
@@ -2254,7 +2250,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
         return []
     
     class ParcelaFinanciamento:
-        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, juros, multa, desconto, link_boleto=None, link_comprovante=None):
+        def __init__(self, id, financiamento_id, numero_parcela, valor_original, valor_pago, data_vencimento, data_pagamento, status, link_boleto=None, link_comprovante=None):
             self.id = int(id) if id else None
             self.financiamento_id = int(financiamento_id) if financiamento_id else None
             self.numero_parcela = int(numero_parcela) if numero_parcela else 0
@@ -2345,13 +2341,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
             else:
                 self.status = status or 'Pendente'
             
-            self.juros = float(juros) if juros else 0.0
-            self.multa = float(multa) if multa else 0.0
-            self.desconto = float(desconto) if desconto else 0.0
             self._financiamento_cache = None
-        
-        def calcular_valor_total(self):
-            return self.valor_original + self.juros + self.multa - self.desconto
         
         def _get_financiamento(self):
             if self._financiamento_cache is None:
@@ -2375,9 +2365,6 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
                     record.get('Data Vencimento', ''),
                     record.get('Data Pagamento', ''),
                     record.get('Status', 'Pendente'),
-                    record.get('Juros', 0),
-                    record.get('Multa', 0),
-                    record.get('Desconto', 0),
                     record.get('Link Boleto', ''),
                     record.get('Link Comprovante', '')
                 )
@@ -2514,16 +2501,16 @@ def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, l
         if record and str(record.get('ID')) == str(parcela_id):
             valores_antigos = record.copy()
             
-            # Mapeia colunas (baseado nos headers)
+            # Mapeia colunas (baseado nos headers SEM Juros, Multa, Desconto)
             # ID=1, Financiamento ID=2, Numero Parcela=3, Valor Original=4, Valor Pago=5, 
-            # Data Vencimento=6, Data Pagamento=7, Status=8, Juros=9, Multa=10, Desconto=11, Link Boleto=12, Link Comprovante=13
+            # Data Vencimento=6, Data Pagamento=7, Status=8, Link Boleto=9, Link Comprovante=10
             
             if status is not None:
                 sheet_parcelas.update_cell(i, 8, status)  # Status
             if link_boleto is not None:
-                sheet_parcelas.update_cell(i, 12, link_boleto)  # Link Boleto
+                sheet_parcelas.update_cell(i, 9, link_boleto)  # Link Boleto
             if link_comprovante is not None:
-                sheet_parcelas.update_cell(i, 13, link_comprovante)  # Link Comprovante
+                sheet_parcelas.update_cell(i, 10, link_comprovante)  # Link Comprovante
             if valor_original is not None:
                 sheet_parcelas.update_cell(i, 4, float(valor_original))  # Valor Original
             if data_vencimento is not None:

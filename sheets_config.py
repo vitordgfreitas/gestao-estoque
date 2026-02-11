@@ -328,10 +328,10 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         try:
             header = sheet_parcelas.get('A1')
             if not header or (isinstance(header, list) and len(header) > 0 and header[0][0] != 'ID'):
-                sheet_parcelas.insert_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto", "Link Comprovante"], 1)
+                sheet_parcelas.insert_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Link Boleto", "Link Comprovante"], 1)
             else:
                 headers = sheet_parcelas.row_values(1)
-                expected_headers = ["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto", "Link Comprovante"]
+                expected_headers = ["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Link Boleto", "Link Comprovante"]
                 for i, expected_header in enumerate(expected_headers):
                     if i >= len(headers) or headers[i] != expected_header:
                         col_letter = chr(65 + i)
@@ -340,12 +340,12 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
             try:
                 all_values = sheet_parcelas.get_all_values()
                 if not all_values or len(all_values) == 0:
-                    sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto", "Link Comprovante"])
+                    sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Link Boleto", "Link Comprovante"])
             except Exception:
                 pass
     else:
-        sheet_parcelas = spreadsheet.add_worksheet(title=sheet_parcelas_financiamento_name, rows=1000, cols=13)
-        sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Juros", "Multa", "Desconto", "Link Boleto", "Link Comprovante"])
+        sheet_parcelas = spreadsheet.add_worksheet(title=sheet_parcelas_financiamento_name, rows=1000, cols=10)
+        sheet_parcelas.append_row(["ID", "Financiamento ID", "Numero Parcela", "Valor Original", "Valor Pago", "Data Vencimento", "Data Pagamento", "Status", "Link Boleto", "Link Comprovante"])
     
     # Obtém ou cria aba de Categorias_Itens
     sheet_categorias_itens_name = "Categorias_Itens"
