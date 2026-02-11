@@ -1589,10 +1589,11 @@ def listar_itens_financiamento(financiamento_id):
         itens = []
         for record in all_records:
             if record and record.get('Financiamento ID') == financiamento_id:
+                # Valor proporcional não é usado, sempre 0.0
                 itens.append({
                     'id': record.get('ID'),
                     'item_id': record.get('Item ID'),
-                    'valor_proporcional': parse_value(record.get('Valor Proporcional', 0))
+                    'valor_proporcional': 0.0
                 })
         return itens
     except Exception as e:
