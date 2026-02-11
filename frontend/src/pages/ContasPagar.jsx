@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { contasPagarAPI, itensAPI } from '../services/api'
 import { Plus, CheckCircle, XCircle, Clock, Filter } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { formatItemName } from '../utils/format'
+import { formatItemName, formatDate } from '../utils/format'
 
 const CATEGORIAS = ['Fornecedor', 'Manutenção', 'Despesa', 'Outro']
 
@@ -303,7 +303,7 @@ export default function ContasPagar() {
                       R$ {parseFloat(conta.valor).toFixed(2).replace('.', ',')}
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-200">
-                      {new Date(conta.data_vencimento).toLocaleDateString('pt-BR')}
+                      {formatDate(conta.data_vencimento)}
                     </td>
                     <td className="px-6 py-4">{getStatusBadge(conta.status)}</td>
                     <td className="px-6 py-4">

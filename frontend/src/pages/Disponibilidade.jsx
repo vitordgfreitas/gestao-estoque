@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { disponibilidadeAPI, itensAPI, categoriasAPI } from '../services/api'
 import { Search, CheckCircle2, XCircle, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { formatItemName } from '../utils/format'
+import { formatItemName, formatDate } from '../utils/format'
 
 export default function Disponibilidade() {
   const [itens, setItens] = useState([])
@@ -312,7 +312,7 @@ export default function Disponibilidade() {
                           <div className="flex-1">
                             <p className="font-medium text-dark-50">Compromisso #{comp.id}</p>
                             <p className="text-sm text-dark-400 mt-1">
-                              {new Date(comp.data_inicio).toLocaleDateString('pt-BR')} a {new Date(comp.data_fim).toLocaleDateString('pt-BR')}
+                              {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}
                             </p>
                             <p className="text-sm text-dark-400">Quantidade: {comp.quantidade}</p>
                             {comp.descricao && (
@@ -341,7 +341,7 @@ export default function Disponibilidade() {
           {resultado.resultados && resultado.resultados.length > 0 && (
             <div className="card">
               <h3 className="text-lg font-semibold text-dark-50 mb-6">
-                Disponibilidade em {new Date(dataConsulta).toLocaleDateString('pt-BR')}
+                Disponibilidade em {formatDate(dataConsulta)}
               </h3>
 
               {categoriaFiltro !== 'Todas as Categorias' && (

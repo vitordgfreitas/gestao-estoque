@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { statsAPI, compromissosAPI, infoAPI, itensAPI } from '../services/api'
-import { formatItemName } from '../utils/format'
+import { formatItemName, formatDate } from '../utils/format'
 import { 
   TrendingUp, 
   Package, 
@@ -302,11 +302,11 @@ export default function Dashboard() {
               {(filtroDataInicio || filtroDataFim) && (
                 <div className="text-sm text-dark-400">
                   {filtroDataInicio && filtroDataFim ? (
-                    <span>Período: {new Date(filtroDataInicio).toLocaleDateString('pt-BR')} até {new Date(filtroDataFim).toLocaleDateString('pt-BR')}</span>
+                    <span>Período: {formatDate(filtroDataInicio)} até {formatDate(filtroDataFim)}</span>
                   ) : filtroDataInicio ? (
-                    <span>A partir de: {new Date(filtroDataInicio).toLocaleDateString('pt-BR')}</span>
+                    <span>A partir de: {formatDate(filtroDataInicio)}</span>
                   ) : (
-                    <span>Até: {new Date(filtroDataFim).toLocaleDateString('pt-BR')}</span>
+                    <span>Até: {formatDate(filtroDataFim)}</span>
                   )}
                 </div>
               )}
@@ -392,7 +392,7 @@ export default function Dashboard() {
             Taxa de Ocupação ao Longo do Tempo
             {filtroDataInicio && filtroDataFim && (
               <span className="text-sm font-normal text-dark-400 ml-2">
-                ({new Date(filtroDataInicio).toLocaleDateString('pt-BR')} - {new Date(filtroDataFim).toLocaleDateString('pt-BR')})
+                ({formatDate(filtroDataInicio)} - {formatDate(filtroDataFim)})
               </span>
             )}
             {!filtroDataInicio && !filtroDataFim && (
@@ -645,7 +645,7 @@ export default function Dashboard() {
                       <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-dark-400">
                         <span className="flex items-center gap-1">
                           <Calendar size={14} />
-                          {new Date(comp.data_inicio).toLocaleDateString('pt-BR')} - {new Date(comp.data_fim).toLocaleDateString('pt-BR')}
+                          {formatDate(comp.data_inicio)} - {formatDate(comp.data_fim)}
                         </span>
                         {comp.contratante && (
                           <span className="flex items-center gap-1">
@@ -733,7 +733,7 @@ export default function Dashboard() {
                         <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-dark-400">
                           <span className="flex items-center gap-1">
                             <Calendar size={14} />
-                            {new Date(comp.data_inicio).toLocaleDateString('pt-BR')} - {new Date(comp.data_fim).toLocaleDateString('pt-BR')}
+                            {formatDate(comp.data_inicio)} - {formatDate(comp.data_fim)}
                           </span>
                           {comp.contratante && (
                             <span className="flex items-center gap-1">

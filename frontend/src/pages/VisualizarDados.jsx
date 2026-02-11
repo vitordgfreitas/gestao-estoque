@@ -7,7 +7,7 @@ import { Search, Edit, Trash2, Eye, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { formatItemName } from '../utils/format'
+import { formatItemName, formatDate } from '../utils/format'
 import { getCidadesPorUF, ESTADOS } from '../utils/municipios'
 
 const UFS = ESTADOS.map(e => e.sigla) // Para compatibilidade
@@ -334,8 +334,8 @@ export default function VisualizarDados() {
                       <td className="font-mono text-xs text-dark-400">{comp.id}</td>
                       <td className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</td>
                       <td>{comp.quantidade}</td>
-                      <td className="text-dark-400">{new Date(comp.data_inicio).toLocaleDateString('pt-BR')}</td>
-                      <td className="text-dark-400">{new Date(comp.data_fim).toLocaleDateString('pt-BR')}</td>
+                      <td className="text-dark-400">{formatDate(comp.data_inicio)}</td>
+                      <td className="text-dark-400">{formatDate(comp.data_fim)}</td>
                       <td className="text-dark-400">{comp.cidade} - {comp.uf}</td>
                       <td>
                         <div className="flex items-center gap-2">
@@ -415,7 +415,7 @@ export default function VisualizarDados() {
                         <td className="text-dark-50">{pecaItem?.nome || 'Peça Deletada'}</td>
                         <td className="text-dark-50">{peca.quantidade}</td>
                         <td className="text-dark-50">
-                          {peca.data_instalacao ? new Date(peca.data_instalacao).toLocaleDateString('pt-BR') : '-'}
+                          {peca.data_instalacao ? formatDate(peca.data_instalacao) : '-'}
                         </td>
                         <td className="text-dark-400 text-sm max-w-xs truncate" title={peca.observacoes}>
                           {peca.observacoes || '-'}
@@ -546,7 +546,7 @@ export default function VisualizarDados() {
             <div>
               <label className="text-sm text-dark-400">Período</label>
               <p className="text-dark-50">
-                {new Date(viewingCompromisso.data_inicio).toLocaleDateString('pt-BR')} a {new Date(viewingCompromisso.data_fim).toLocaleDateString('pt-BR')}
+                {formatDate(viewingCompromisso.data_inicio)} a {formatDate(viewingCompromisso.data_fim)}
               </p>
             </div>
             {viewingCompromisso.descricao && (

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { financeiroAPI, contasReceberAPI, contasPagarAPI } from '../services/api'
 import { DollarSign, TrendingUp, TrendingDown, AlertCircle, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatDate } from '../utils/format'
 
 export default function DashboardFinanceiro() {
   const [dashboard, setDashboard] = useState(null)
@@ -207,7 +208,7 @@ export default function DashboardFinanceiro() {
                       {formatCurrency(conta.valor)}
                     </td>
                     <td className="px-4 py-3 text-sm text-dark-200">
-                      {new Date(conta.data_vencimento).toLocaleDateString('pt-BR')}
+                      {formatDate(conta.data_vencimento)}
                     </td>
                   </tr>
                 ))}

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { contasReceberAPI, compromissosAPI } from '../services/api'
 import { Plus, CheckCircle, XCircle, Clock, Filter } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatDate } from '../utils/format'
 
 export default function ContasReceber() {
   const [contas, setContas] = useState([])
@@ -268,7 +269,7 @@ export default function ContasReceber() {
                       R$ {parseFloat(conta.valor).toFixed(2).replace('.', ',')}
                     </td>
                     <td className="px-6 py-4 text-sm text-dark-200">
-                      {new Date(conta.data_vencimento).toLocaleDateString('pt-BR')}
+                      {formatDate(conta.data_vencimento)}
                     </td>
                     <td className="px-6 py-4">{getStatusBadge(conta.status)}</td>
                     <td className="px-6 py-4">

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { financiamentosAPI } from '../services/api'
 import { CheckCircle, Clock, AlertCircle, Edit, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { formatDate } from '../utils/format'
 
 export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
   const [showPagarModal, setShowPagarModal] = useState(null)
@@ -24,11 +25,6 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-  }
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-'
-    return new Date(dateString).toLocaleDateString('pt-BR')
   }
 
   const getStatusIcon = (status) => {

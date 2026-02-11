@@ -4,7 +4,7 @@ import { compromissosAPI, itensAPI, categoriasAPI } from '../services/api'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
-import { formatItemName } from '../utils/format'
+import { formatItemName, formatDate } from '../utils/format'
 
 export default function Calendario() {
   const [compromissos, setCompromissos] = useState([])
@@ -262,7 +262,7 @@ export default function Calendario() {
             <ChevronLeft className="text-dark-400" size={20} />
           </button>
           <h3 className="text-xl font-semibold text-dark-50">
-            {semanaInicio.toLocaleDateString('pt-BR')} - {semanaFim.toLocaleDateString('pt-BR')}
+            {formatDate(semanaInicio.toISOString().split('T')[0])} - {formatDate(semanaFim.toISOString().split('T')[0])}
           </h3>
           <button
             onClick={() => navegarSemana('proximo')}
@@ -290,7 +290,7 @@ export default function Calendario() {
               >
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-dark-50">
-                    {diasSemana[idx]} - {dia.toLocaleDateString('pt-BR')}
+                    {diasSemana[idx]} - {formatDate(dia.toISOString().split('T')[0])}
                   </h4>
                   {compsDia.length > 0 && (
                     <span className="text-sm text-primary-400">
@@ -344,7 +344,7 @@ export default function Calendario() {
             <ChevronLeft className="text-dark-400" size={20} />
           </button>
           <h3 className={`text-xl font-semibold ${isHoje ? 'text-primary-400' : 'text-dark-50'}`}>
-            {diaSemanaNome} - {diaSelecionado.toLocaleDateString('pt-BR')}
+            {diaSemanaNome} - {formatDate(diaSelecionado.toISOString().split('T')[0])}
             {isHoje && ' (Hoje)'}
           </h3>
           <button
@@ -372,8 +372,8 @@ export default function Calendario() {
                     <div className="space-y-1 text-sm text-dark-400">
                       <p>Quantidade: {comp.quantidade} unidades</p>
                       <p>
-                        Período: {new Date(comp.data_inicio).toLocaleDateString('pt-BR')} a{' '}
-                        {new Date(comp.data_fim).toLocaleDateString('pt-BR')}
+                        Período: {formatDate(comp.data_inicio)} a{' '}
+                        {formatDate(comp.data_fim)}
                       </p>
                       {comp.descricao && <p>Descrição: {comp.descricao}</p>}
                       {comp.contratante && <p>Contratante: {comp.contratante}</p>}
@@ -495,7 +495,7 @@ export default function Calendario() {
         <Modal
           isOpen={!!detalhesDia}
           onClose={() => setDetalhesDia(null)}
-          title={`Compromissos em ${detalhesDia.data.toLocaleDateString('pt-BR')}`}
+          title={`Compromissos em ${formatDate(detalhesDia.data.toISOString().split('T')[0])}`}
         >
           <div className="space-y-4">
             {detalhesDia.compromissos.length > 0 ? (
@@ -512,8 +512,8 @@ export default function Calendario() {
                     <div className="flex justify-between">
                       <span className="text-dark-400">Período:</span>
                       <span className="text-dark-50">
-                        {new Date(comp.data_inicio).toLocaleDateString('pt-BR')} a{' '}
-                        {new Date(comp.data_fim).toLocaleDateString('pt-BR')}
+                        {formatDate(comp.data_inicio)} a{' '}
+                        {formatDate(comp.data_fim)}
                       </span>
                     </div>
                     {comp.descricao && (
