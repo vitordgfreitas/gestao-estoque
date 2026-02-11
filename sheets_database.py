@@ -1386,6 +1386,27 @@ def deletar_item(item_id):
                 'ano': item.carro.ano
             })
         
+        # Deleta da aba da categoria antes de deletar da aba Itens
+        if item.categoria:
+            try:
+                spreadsheet = sheets['spreadsheet']
+                sheet_categoria = spreadsheet.worksheet(item.categoria)
+                categoria_records = sheet_categoria.get_all_records()
+                
+                for idx, cat_record in enumerate(categoria_records, start=2):
+                    if cat_record and str(cat_record.get('Item ID')) == str(item_id):
+                        sheet_categoria.delete_rows(idx)
+                        print(f"✅ Item deletado da aba '{item.categoria}'")
+                        break
+            except gspread.exceptions.WorksheetNotFound:
+                # Aba da categoria não existe, continua
+                print(f"⚠️ Aba '{item.categoria}' não encontrada, pulando...")
+                pass
+            except Exception as e:
+                # Erro ao deletar da categoria, continua mesmo assim
+                print(f"⚠️ Erro ao deletar da aba '{item.categoria}': {str(e)}")
+                pass
+        
         sheet_itens.delete_rows(row_to_delete)
         
         # Registra auditoria
@@ -1407,6 +1428,9 @@ def deletar_item(item_id):
         except (IndexError, KeyError):
             # Se a aba de compromissos estiver vazia, apenas continua
             pass
+        
+        # Limpa cache para forçar atualização na próxima leitura
+        _clear_cache()
         
         return True
     
