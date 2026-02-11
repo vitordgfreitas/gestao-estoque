@@ -1163,22 +1163,15 @@ def listar_compromissos():
 
 
 def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
-    """Verifica a disponibilidade de um item em uma data específica
-    
-    Args:
-        item_id: ID do item
-        data_consulta: Data para verificar disponibilidade
-        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localização
-    """
+    """Verifica a disponibilidade de um item considerando Compromissos e Peças Instaladas"""
     item = buscar_item_por_id(item_id)
     if not item:
         return None
     
+    # 1. Busca compromissos (Reservas/Aluguéis)
     compromissos = listar_compromissos()
-    
-    # Filtra compromissos ativos na data de consulta para este item
-    # Se há filtro de localização, filtra por cidade e UF (formato: "Cidade - UF")
     compromissos_ativos = []
+    
     for c in compromissos:
         if c.item_id == int(item_id) and c.data_inicio <= data_consulta <= c.data_fim:
             if filtro_localizacao:
@@ -1193,9 +1186,19 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
                 compromissos_ativos.append(c)
     
     quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
+
+    # 2. Busca peças instaladas permanentemente em carros (Aba Pecas_Carros)
+    # Filtramos peças instaladas na data de consulta ou antes dela
+    pecas_vinculadas = listar_pecas_carros()
+    quantidade_instalada = sum(
+        p.quantidade for p in pecas_vinculadas 
+        if int(p.peca_id) == int(item_id) 
+        and (not hasattr(p, 'data_instalacao') or p.data_instalacao <= data_consulta)
+    )
     
-    # Se há filtro de localização e o item não está nessa localização,
-    # considera que não há itens disponíveis naquela localização
+    # 3. Cálculo de disponibilidade considerando as duas fontes de saída
+    total_ocupado = quantidade_comprometida + quantidade_instalada
+    
     if filtro_localizacao:
         cidade_uf = filtro_localizacao.split(" - ")
         if len(cidade_uf) == 2:
@@ -1203,26 +1206,26 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
             item_na_localizacao = (hasattr(item, 'cidade') and hasattr(item, 'uf') and 
                                   item.cidade == cidade_filtro and item.uf == uf_filtro.upper())
             if not item_na_localizacao:
-                # Item não está na localização, então disponível = 0 (ou negativo se houver compromissos)
-                quantidade_disponivel = max(0, -quantidade_comprometida) if quantidade_comprometida > 0 else 0
+                quantidade_disponivel = 0
             else:
-                quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+                quantidade_disponivel = item.quantidade_total - total_ocupado
         else:
-            quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+            quantidade_disponivel = item.quantidade_total - total_ocupado
     else:
-        quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+        quantidade_disponivel = item.quantidade_total - total_ocupado
     
     return {
         'item': item,
         'quantidade_total': item.quantidade_total,
         'quantidade_comprometida': quantidade_comprometida,
-        'quantidade_disponivel': quantidade_disponivel,
+        'quantidade_instalada': quantidade_instalada, # Campo novo
+        'quantidade_disponivel': max(0, quantidade_disponivel),
         'compromissos_ativos': compromissos_ativos
     }
 
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None):
-    """Verifica se há disponibilidade suficiente em todo o período para um novo compromisso"""
+    """Verifica se há estoque para um novo período, somando aluguéis + peças em carros"""
     from datetime import timedelta
     
     item = buscar_item_por_id(item_id)
@@ -1230,8 +1233,12 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         return None
     
     compromissos = listar_compromissos()
+    pecas_vinculadas = listar_pecas_carros()
     
-    # Filtra compromissos que se sobrepõem com o período
+    # Quantidade que já saiu para carros (fixa)
+    quantidade_instalada = sum(p.quantidade for p in pecas_vinculadas if int(p.peca_id) == int(item_id))
+    
+    # Filtra compromissos que batem com o período solicitado
     compromissos_sobrepostos = [
         c for c in compromissos
         if c.item_id == int(item_id) 
@@ -1240,7 +1247,6 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         and (excluir_compromisso_id is None or c.id != excluir_compromisso_id)
     ]
     
-    # Encontra o dia com maior comprometimento no período
     max_comprometido = 0
     data_atual = data_inicio
     
@@ -1249,7 +1255,8 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
             c for c in compromissos_sobrepostos
             if c.data_inicio <= data_atual <= c.data_fim
         ]
-        comprometido_no_dia = sum(c.quantidade for c in compromissos_no_dia)
+        # O comprometimento total do dia é: Peças alugadas no dia + Peças fixas nos carros
+        comprometido_no_dia = sum(c.quantidade for c in compromissos_no_dia) + quantidade_instalada
         max_comprometido = max(max_comprometido, comprometido_no_dia)
         
         if data_atual >= data_fim:
@@ -1260,64 +1267,47 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         'item': item,
         'quantidade_total': item.quantidade_total,
         'max_comprometido': max_comprometido,
-        'disponivel_minimo': item.quantidade_total - max_comprometido
+        'disponivel_minimo': max(0, item.quantidade_total - max_comprometido)
     }
 
-
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
-    """Verifica a disponibilidade de todos os itens em uma data específica
-    
-    Args:
-        data_consulta: Data para verificar disponibilidade
-        filtro_localizacao: Se fornecido, considera apenas compromissos com esta localização
-    """
+    """Gera o status de estoque de todos os itens considerando aluguéis e instalações"""
     itens = listar_itens()
     compromissos = listar_compromissos()
+    pecas_vinculadas = listar_pecas_carros()
     
     resultados = []
     
     for item in itens:
-        # Filtra compromissos ativos na data de consulta para este item
-        # Se há filtro de localização, filtra por cidade e UF (formato: "Cidade - UF")
-        compromissos_ativos = []
-        for c in compromissos:
-            if c.item_id == item.id and c.data_inicio <= data_consulta <= c.data_fim:
-                if filtro_localizacao:
-                    cidade_uf = filtro_localizacao.split(" - ")
-                    if len(cidade_uf) == 2:
-                        cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                        if hasattr(c, 'cidade') and hasattr(c, 'uf') and c.cidade == cidade_filtro and c.uf == uf_filtro.upper():
-                            compromissos_ativos.append(c)
-                    else:
-                        compromissos_ativos.append(c)
-                else:
-                    compromissos_ativos.append(c)
+        # Soma compromissos temporários
+        compromissos_ativos = [
+            c for c in compromissos 
+            if c.item_id == item.id and c.data_inicio <= data_consulta <= c.data_fim
+        ]
+        # Soma peças instaladas fixas
+        qtd_instalada = sum(p.quantidade for p in pecas_vinculadas if int(p.peca_id) == item.id)
+        qtd_alugada = sum(c.quantidade for c in compromissos_ativos)
         
-        quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
+        total_indisponivel = qtd_alugada + qtd_instalada
         
-        # Se há filtro de localização e o item não está nessa localização,
-        # considera que não há itens disponíveis naquela localização
+        # Lógica de Localização
         if filtro_localizacao:
             cidade_uf = filtro_localizacao.split(" - ")
             if len(cidade_uf) == 2:
-                cidade_filtro, uf_filtro = cidade_uf[0], cidade_uf[1]
-                item_na_localizacao = (hasattr(item, 'cidade') and hasattr(item, 'uf') and 
-                                      item.cidade == cidade_filtro and item.uf == uf_filtro.upper())
-                if not item_na_localizacao:
-                    # Item não está na localização, então disponível = 0 (ou negativo se houver compromissos)
-                    quantidade_disponivel = max(0, -quantidade_comprometida) if quantidade_comprometida > 0 else 0
-                else:
-                    quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+                cidade_f, uf_f = cidade_uf[0], cidade_uf[1]
+                item_na_loc = (hasattr(item, 'cidade') and hasattr(item, 'uf') and 
+                              item.cidade == cidade_f and item.uf == uf_f.upper())
+                qtd_disponivel = (item.quantidade_total - total_indisponivel) if item_na_loc else 0
             else:
-                quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+                qtd_disponivel = item.quantidade_total - total_indisponivel
         else:
-            quantidade_disponivel = item.quantidade_total - quantidade_comprometida
+            qtd_disponivel = item.quantidade_total - total_indisponivel
         
         resultados.append({
             'item': item,
             'quantidade_total': item.quantidade_total,
-            'quantidade_comprometida': quantidade_comprometida,
-            'quantidade_disponivel': quantidade_disponivel
+            'quantidade_comprometida': total_indisponivel, # Aqui unificamos o que está "fora"
+            'quantidade_disponivel': max(0, qtd_disponivel)
         })
     
     return resultados
