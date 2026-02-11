@@ -2194,10 +2194,11 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
 
 
 def deletar_financiamento(financiamento_id):
-    """Deleta um financiamento e suas parcelas"""
+    """Deleta um financiamento, suas parcelas e relacionamentos com itens"""
     sheets = get_sheets()
     sheet_financiamentos = sheets['sheet_financiamentos']
     sheet_parcelas = sheets['sheet_parcelas_financiamento']
+    sheet_fin_itens = sheets['sheet_financiamentos_itens']
     
     try:
         records = _retry_with_backoff(lambda: sheet_financiamentos.get_all_records())
@@ -2210,7 +2211,21 @@ def deletar_financiamento(financiamento_id):
         if record and str(record.get('ID')) == str(financiamento_id):
             valores_antigos = record.copy()
             
-            # Deleta parcelas primeiro
+            # 1. Deleta relacionamentos Financiamento-Itens
+            try:
+                fin_itens_records = sheet_fin_itens.get_all_records()
+                fin_itens_para_deletar = []
+                for j, fin_item_record in enumerate(fin_itens_records, start=2):
+                    if fin_item_record and str(fin_item_record.get('Financiamento ID')) == str(financiamento_id):
+                        fin_itens_para_deletar.append(j)
+                
+                # Deleta de trás para frente para não afetar índices
+                for idx in reversed(fin_itens_para_deletar):
+                    sheet_fin_itens.delete_rows(idx)
+            except Exception:
+                pass  # Continua mesmo se não conseguir deletar relacionamentos
+            
+            # 2. Deleta parcelas
             try:
                 parcelas_records = sheet_parcelas.get_all_records()
                 parcelas_para_deletar = []
@@ -2224,7 +2239,7 @@ def deletar_financiamento(financiamento_id):
             except Exception:
                 pass  # Continua mesmo se não conseguir deletar parcelas
             
-            # Deleta financiamento
+            # 3. Deleta financiamento
             try:
                 sheet_financiamentos.delete_rows(i)
                 auditoria.registrar_auditoria('DELETE', 'Financiamentos', financiamento_id, valores_antigos=valores_antigos)
