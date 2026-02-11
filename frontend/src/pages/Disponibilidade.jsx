@@ -392,6 +392,10 @@ export default function Disponibilidade() {
                       const totalItens = grupoResultados.length
                       const grupoId = `${categoria}-${chaveGrupo}`
                       const isExpanded = expandedGroups[grupoId]
+                      
+                      // Usa o nome do primeiro item como título principal
+                      const primeiroItemGrupo = grupoResultados[0].item
+                      const tituloGrupo = primeiroItemGrupo.nome
 
                       return (
                         <div key={grupoId} className="mb-4 border border-dark-700 rounded-lg overflow-hidden">
@@ -402,7 +406,10 @@ export default function Disponibilidade() {
                             <div className="flex items-center gap-3">
                               <span className="text-xl">{categoria === 'Carros' ? '🚗' : '📦'}</span>
                               <div className="text-left">
-                                <p className="font-semibold text-dark-50">{chaveGrupo}</p>
+                                <p className="font-semibold text-dark-50">{tituloGrupo}</p>
+                                {chaveGrupo !== tituloGrupo && (
+                                  <p className="text-xs text-dark-500 mb-1">{chaveGrupo}</p>
+                                )}
                                 <p className="text-sm text-dark-400">
                                   {totalDisponivel} disponível(is) de {totalItens} total
                                 </p>
