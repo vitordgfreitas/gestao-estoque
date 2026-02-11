@@ -319,8 +319,8 @@ def init_sheets(spreadsheet_id=None, spreadsheet_name="Gestão de Estoque"):
         # NÃO VERIFICA/CORRIGE HEADERS - deixa como está para evitar problemas
         # Headers devem ser corrigidos manualmente se necessário
     else:
-        sheet_financiamentos = spreadsheet.add_worksheet(title=sheet_financiamentos_name, rows=1000, cols=11)
-        sheet_financiamentos.append_row(["ID", "Código Contrato", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes"])
+        sheet_financiamentos = spreadsheet.add_worksheet(title=sheet_financiamentos_name, rows=1000, cols=12)
+        sheet_financiamentos.append_row(["ID", "Código Contrato", "Valor Total", "Valor Entrada", "Numero Parcelas", "Valor Parcela", "Taxa Juros", "Data Inicio", "Status", "Instituicao Financeira", "Observacoes", "Valor Presente"])
     
     # Obtém ou cria aba de Parcelas Financiamento
     if sheet_parcelas_financiamento_name in existing_worksheets:

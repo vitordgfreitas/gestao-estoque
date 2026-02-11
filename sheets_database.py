@@ -1695,7 +1695,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
             valor_parcela_rounded = float(f"{valor_parcela_rounded:.2f}")
         
         # Usa update ao invés de append_row para garantir formatação correta
-        # Headers: ID | Código Contrato | Valor Total | Valor Entrada | Numero Parcelas | Valor Parcela | Taxa Juros | Data Inicio | Status | Instituicao Financeira | Observacoes
+        # Headers: ID | Código Contrato | Valor Total | Valor Entrada | Numero Parcelas | Valor Parcela | Taxa Juros | Data Inicio | Status | Instituicao Financeira | Observacoes | Valor Presente
         row_num = len(sheet_financiamentos.get_all_values()) + 1
         sheet_financiamentos.append_row([
             next_id,                        # A: ID
@@ -1708,7 +1708,8 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
             data_inicio_str,                # H: Data Inicio
             'Ativo',                        # I: Status
             instituicao_financeira or '',   # J: Instituicao Financeira
-            observacoes or ''               # K: Observacoes
+            observacoes or '',              # K: Observacoes
+            0.0                             # L: Valor Presente (usuário preencherá no Sheets)
         ])
         # Agora atualiza os valores numéricos com formatação explícita
         sheet_financiamentos.update_cell(row_num, 3, valor_total)  # Valor Total (coluna C)

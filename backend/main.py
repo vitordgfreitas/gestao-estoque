@@ -1740,7 +1740,8 @@ def financiamento_to_dict(fin):
         "data_inicio": fin.data_inicio.isoformat() if hasattr(fin, 'data_inicio') and isinstance(fin.data_inicio, date) else (str(fin.data_inicio) if hasattr(fin, 'data_inicio') else None),
         "status": getattr(fin, 'status', 'Ativo'),
         "instituicao_financeira": getattr(fin, 'instituicao_financeira', None),
-        "observacoes": getattr(fin, 'observacoes', None)
+        "observacoes": getattr(fin, 'observacoes', None),
+        "valor_presente": round(float(getattr(fin, 'valor_presente', 0.0)), 2)  # NOVO: Valor presente do Sheets
     }
 
 def parcela_to_dict(parcela):

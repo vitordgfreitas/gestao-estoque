@@ -676,7 +676,7 @@ export default function Financiamentos() {
                     </div>
                   )}
                   
-                  <ValorPresenteCard financiamentoId={fin.id} compact />
+                  <ValorPresenteCard valorPresente={fin.valor_presente} compact />
                 </div>
                 
                 <div className="flex gap-2">
