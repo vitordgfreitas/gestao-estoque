@@ -1755,9 +1755,6 @@ def parcela_to_dict(parcela):
         "data_vencimento": parcela.data_vencimento.isoformat() if isinstance(parcela.data_vencimento, date) else str(parcela.data_vencimento),
         "data_pagamento": parcela.data_pagamento.isoformat() if parcela.data_pagamento and isinstance(parcela.data_pagamento, date) else None,
         "status": parcela.status,
-        "juros": round(float(parcela.juros), 2),
-        "multa": round(float(parcela.multa), 2),
-        "desconto": round(float(parcela.desconto), 2),
         "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
         "link_comprovante": parcela.link_comprovante if hasattr(parcela, 'link_comprovante') else None
     }
