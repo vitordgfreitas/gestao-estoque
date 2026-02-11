@@ -1,6 +1,16 @@
 # 🔥 INSTRUÇÕES CRÍTICAS - LEIA E EXECUTE NA ORDEM
 
-## ❌ PROBLEMAS IDENTIFICADOS
+## ❌ PROBLEMAS IDENTIFICADOS E CORRIGIDOS
+
+### ✅ CORREÇÕES RECENTES (11/02/2026):
+
+1. **✅ CORRIGIDO**: Edição de itens não mostrava campos da categoria (Placa, Marca, Modelo, etc.)
+   - Agora o modal de edição exibe e permite editar os campos específicos da categoria
+   
+2. **✅ CORRIGIDO**: Deletar item não deletava da aba da categoria
+   - Agora ao deletar um item, ele é removido tanto da aba "Itens" quanto da aba da categoria
+
+### ⚠️ PROBLEMAS ANTERIORES (já corrigidos):
 
 1. **Google Sheets ainda tem colunas antigas** (Juros, Multa, Desconto)
 2. **Render pode não ter feito redeploy do backend**
@@ -40,6 +50,28 @@
 3. Clique em **"Manual Deploy"** → **"Deploy latest commit"**
 4. **AGUARDE** o deploy terminar (pode levar 2-3 minutos)
 5. Verifique os logs do deploy - **NÃO CONTINUE** se houver erros
+
+---
+
+### PASSO 2.1: TESTAR AS NOVAS FUNCIONALIDADES (OPCIONAL)
+
+#### Teste 1: Editar Campos da Categoria
+
+1. Vá em **"Visualizar Dados"** > Aba **"Itens"**
+2. Clique em **"Editar"** (ícone de lápis) em um item
+3. ✅ Você deve ver:
+   - Campos padrão (Nome, Categoria, Quantidade, Descrição, UF, Cidade, Endereço)
+   - **Campos específicos da categoria** (ex: para Carros → Placa, Marca, Modelo, Ano)
+4. Edite um campo da categoria (ex: Placa)
+5. Salve
+6. Verifique se a alteração foi salva na aba da categoria no Google Sheets
+
+#### Teste 2: Deletar Item com Cascade
+
+1. Crie um item de teste em uma categoria (ex: Carros)
+2. Verifique que o item aparece tanto na aba "Itens" quanto na aba "Carros" no Google Sheets
+3. Delete o item no app
+4. ✅ Verifique que o item foi removido de **AMBAS** as abas ("Itens" e "Carros")
 
 ---
 
