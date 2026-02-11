@@ -309,6 +309,7 @@ class DisponibilidadeResponse(BaseModel):
     item: ItemResponse
     quantidade_total: int
     quantidade_comprometida: int
+    quantidade_instalada: int
     quantidade_disponivel: int
     compromissos_ativos: List[CompromissoResponse] = []
 
@@ -1080,7 +1081,7 @@ async def verificar_disponibilidade(request: DisponibilidadeRequest):
     """Verifica disponibilidade de itens"""
     try:
         if request.item_id:
-            # Verifica disponibilidade de um item específico
+            # Chama a função que alterámos no sheets_database.py
             disponibilidade = db_module.verificar_disponibilidade(
                 request.item_id,
                 request.data_consulta,
@@ -1093,6 +1094,7 @@ async def verificar_disponibilidade(request: DisponibilidadeRequest):
                 "item": item_to_dict(disponibilidade['item']),
                 "quantidade_total": disponibilidade['quantidade_total'],
                 "quantidade_comprometida": disponibilidade['quantidade_comprometida'],
+                "quantidade_instalada": disponibilidade['quantidade_instalada'], # <--- ADICIONA ISTO
                 "quantidade_disponivel": disponibilidade['quantidade_disponivel'],
                 "compromissos_ativos": [compromisso_to_dict(c) for c in disponibilidade.get('compromissos_ativos', [])]
             }

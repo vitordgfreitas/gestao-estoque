@@ -316,6 +316,10 @@ export default function Disponibilidade() {
                   <p className="text-2xl font-bold text-yellow-500">{resultado.quantidade_comprometida}</p>
                 </div>
                 <div className="p-4 bg-dark-700/50 rounded-lg">
+                  <p className="text-sm text-dark-400 mb-1">Instalado em Carros</p>
+                  <p className="text-2xl font-bold text-blue-500">{resultado.quantidade_instalada || 0}</p>
+                </div>
+                <div className="p-4 bg-dark-700/50 rounded-lg">
                   <p className="text-sm text-dark-400 mb-1">Disponível</p>
                   <p className={`text-2xl font-bold ${resultado.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {resultado.quantidade_disponivel}
