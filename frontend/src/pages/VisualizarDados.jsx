@@ -822,6 +822,21 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
           </div>
         )}
 
+        {/* Campos específicos da categoria */}
+        {camposCategoria.length > 0 && (
+          <div className="space-y-4 pt-4 border-t border-dark-700">
+            <h4 className="text-md font-semibold text-dark-50">
+              Detalhes de {formData.categoria}
+            </h4>
+            {camposCategoria.map(campo => (
+              <div key={campo}>
+                <label className="label">{campo} *</label>
+                {renderCampoDinamico(campo)}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div>
           <label className="label">Descrição</label>
           <textarea
