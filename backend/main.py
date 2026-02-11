@@ -1844,19 +1844,27 @@ async def listar_financiamentos(
 async def buscar_financiamento(financiamento_id: int, token: str = Depends(verify_token)):
     """Busca um financiamento por ID com suas parcelas"""
     try:
+        print(f"[DEBUG] Buscando financiamento ID {financiamento_id}")
         fin = db_module.buscar_financiamento_por_id(financiamento_id)
         if not fin:
             raise HTTPException(status_code=404, detail="Financiamento não encontrado")
         
+        print(f"[DEBUG] Financiamento encontrado, convertendo para dict")
         resultado = financiamento_to_dict(fin)
+        
+        print(f"[DEBUG] Buscando parcelas do financiamento {financiamento_id}")
         # Adiciona parcelas
         parcelas = db_module.listar_parcelas_financiamento(financiamento_id=financiamento_id)
         resultado['parcelas'] = [parcela_to_dict(p) for p in parcelas]
         
+        print(f"[DEBUG] Retornando financiamento com {len(parcelas)} parcelas")
         return resultado
     except HTTPException:
         raise
     except Exception as e:
+        print(f"[ERROR] Erro ao buscar financiamento {financiamento_id}: {type(e).__name__} - {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/financiamentos/{financiamento_id}", response_model=dict)
