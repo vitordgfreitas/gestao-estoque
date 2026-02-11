@@ -2222,8 +2222,11 @@ def deletar_financiamento(financiamento_id):
                 # Deleta de trás para frente para não afetar índices
                 for idx in reversed(fin_itens_para_deletar):
                     sheet_fin_itens.delete_rows(idx)
-            except Exception:
-                pass  # Continua mesmo se não conseguir deletar relacionamentos
+                
+                print(f"✅ Deletados {len(fin_itens_para_deletar)} relacionamentos Financiamento-Itens")
+            except Exception as e:
+                print(f"❌ Erro ao deletar Financiamento-Itens: {str(e)}")
+                # Continua mesmo se não conseguir deletar relacionamentos
             
             # 2. Deleta parcelas
             try:
@@ -2236,8 +2239,11 @@ def deletar_financiamento(financiamento_id):
                 # Deleta de trás para frente para não afetar índices
                 for idx in reversed(parcelas_para_deletar):
                     sheet_parcelas.delete_rows(idx)
-            except Exception:
-                pass  # Continua mesmo se não conseguir deletar parcelas
+                
+                print(f"✅ Deletadas {len(parcelas_para_deletar)} parcelas")
+            except Exception as e:
+                print(f"❌ Erro ao deletar parcelas: {str(e)}")
+                # Continua mesmo se não conseguir deletar parcelas
             
             # 3. Deleta financiamento
             try:
