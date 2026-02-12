@@ -398,7 +398,14 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     return buscar_item_por_id(item_id)
 
 def deletar_item(item_id):
+    """Remove o item da tabela itens e também da tabela da categoria (carros, container ou slug)."""
     sb = get_supabase()
+    item = buscar_item_por_id(item_id)
+    if item:
+        # 1) Remover explicitamente da tabela da categoria
+        categoria = item.categoria or ''
+        _remover_item_da_tabela_categoria(sb, item_id, categoria)
+    # 2) Remover da tabela itens (CASCADE no DB também remove nas categorias; remoção explícita acima garante tabelas dinâmicas)
     r = sb.table('itens').delete().eq('id', int(item_id)).execute()
     return r.data is not None and len(r.data) > 0
 
