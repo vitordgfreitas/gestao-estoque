@@ -114,6 +114,7 @@ export default function TabelaParcelas({ parcelas, financiamentoId, onPagar }) {
       await financiamentosAPI.atualizarParcela(financiamentoId, showEditModal, {
         status: editData.status,
         link_boleto: editData.link_boleto,
+        link_comprovante: editData.link_comprovante,
         valor_original: parseFloat(editData.valor_original),
         data_vencimento: editData.data_vencimento
       })

@@ -267,23 +267,23 @@ export default function Layout({ children }) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 bg-dark-800/80 backdrop-blur-lg border-b border-dark-700 px-6 py-4">
-          <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-30 bg-dark-800/80 backdrop-blur-lg border-b border-dark-700 px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-dark-700 rounded-lg transition-colors flex-shrink-0"
               type="button"
             >
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h2 className="text-xl font-semibold text-dark-50">
+            <h2 className="text-base sm:text-xl font-semibold text-dark-50 truncate">
               {menuGroups.flatMap(g => g.items).find(item => item.path === location.pathname)?.label || 'Dashboard'}
             </h2>
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -259,9 +259,9 @@ export default function Financiamentos() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Financiamentos</h1>
           <p className="text-dark-400 mt-1">Gerencie os financiamentos dos seus itens</p>
@@ -293,7 +293,7 @@ export default function Financiamentos() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
         <select
           value={filtroStatus}
           onChange={(e) => setFiltroStatus(e.target.value)}
@@ -577,7 +577,7 @@ export default function Financiamentos() {
               <button
                 type="submit"
                 disabled={formLoading}
-                className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                className="w-full sm:w-auto px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
               >
                 {formLoading ? 'Salvando...' : 'Salvar'}
               </button>
@@ -587,7 +587,7 @@ export default function Financiamentos() {
                   setShowForm(false)
                   setSelectedFinanciamento(null)
                 }}
-                className="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                className="w-full sm:w-auto px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
               >
                 Cancelar
               </button>
