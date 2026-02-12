@@ -233,64 +233,68 @@ def listar_compromissos():
 
 def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None):
     """
-    Atualiza um contrato master e sincroniza sua lista de itens.
+    Atualiza um contrato master e sincroniza itens.
+    Blindada contra erros de 'dict object has no attribute'.
     """
     sb = get_supabase()
+    cid = int(compromisso_id)
     
-    # 1. Validação de Estoque (se a lista de itens ou as datas mudaram)
-    # Se lista_itens for None, mantemos os itens atuais, mas validamos as novas datas
+    # 1. Buscar dados atuais para garantir que a validação tenha datas
+    r_atual = sb.table('compromissos').select('data_inicio, data_fim').eq('id', cid).single().execute()
+    if not r_atual.data:
+        return None
+    
+    # Resolvemos as datas: usa a nova se enviada, senão usa a que já está no banco
+    d_inicio = dados_header.get('data_inicio') or r_atual.data['data_inicio']
+    d_fim = dados_header.get('data_fim') or r_atual.data['data_fim']
+
+    # 2. Validação de Estoque
+    # Se a lista de itens mudou OU as datas mudaram, precisamos revalidar tudo
     itens_para_validar = lista_itens
-    d_inicio = dados_header.get('data_inicio')
-    d_fim = dados_header.get('data_fim')
-
     if itens_para_validar is None:
-        # Busca itens atuais para validar contra as novas datas
-        r_atual = sb.table('compromisso_itens').select('item_id, quantidade').eq('compromisso_id', compromisso_id).execute()
-        itens_para_validar = r_atual.data
+        # Se não enviou novos itens, validamos os que já estão no contrato contra as (possíveis) novas datas
+        r_itens = sb.table('compromisso_itens').select('item_id, quantidade').eq('compromisso_id', cid).execute()
+        itens_para_validar = r_itens.data or []
 
-    # Busca datas atuais se não foram enviadas no update
-    if not d_inicio or not d_fim:
-        comp_info = sb.table('compromissos').select('data_inicio, data_fim').eq('id', compromisso_id).single().execute()
-        d_inicio = d_inicio or comp_info.data['data_inicio']
-        d_fim = d_fim or comp_info.data['data_fim']
-
-    # Valida cada item ignorando a reserva deste próprio contrato
     for item in itens_para_validar:
         disp = verificar_disponibilidade_periodo(
             item_id=item['item_id'],
             data_inicio=d_inicio,
             data_fim=d_fim,
-            excluir_compromisso_id=compromisso_id
+            excluir_compromisso_id=cid # Importante para não dar falso positivo de falta de estoque
         )
-        if disp['disponivel_minimo'] < item['quantidade']:
-            nome = disp['item'].nome if disp['item'] else f"ID {item['item_id']}"
-            raise Exception(f"Estoque insuficiente para '{nome}' no novo período/quantidade.")
-
-    # 2. Atualizar Cabeçalho
-    # Converter datas para ISO string se necessário
-    for f in ['data_inicio', 'data_fim']:
-        if f in dados_header and hasattr(dados_header[f], 'isoformat'):
-            dados_header[f] = dados_header[f].isoformat()
-
-    sb.table('compromissos').update(dados_header).eq('id', int(compromisso_id)).execute()
-
-    # 3. Sincronizar Itens (Pattern: Delete & Insert)
-    if lista_itens is not None:
-        # Remove associações antigas
-        sb.table('compromisso_itens').delete().eq('compromisso_id', compromisso_id).execute()
         
-        # Insere a nova lista
+        if disp['disponivel_minimo'] < item['quantidade']:
+            nome = disp['item'].nome if hasattr(disp['item'], 'nome') else f"ID {item['item_id']}"
+            raise Exception(f"Conflito de estoque: {nome} não disponível no período.")
+
+    # 3. Atualizar o Cabeçalho (Compromisso)
+    payload_h = dados_header.copy()
+    for f in ['data_inicio', 'data_fim']:
+        if f in payload_h and payload_h[f]:
+            val = payload_h[f]
+            payload_h[f] = val.isoformat() if hasattr(val, 'isoformat') else str(val)
+
+    if payload_h:
+        sb.table('compromissos').update(payload_h).eq('id', cid).execute()
+
+    # 4. Sincronizar a lista de itens (Delete & Insert)
+    if lista_itens is not None:
+        # Remove os antigos vínculos
+        sb.table('compromisso_itens').delete().eq('compromisso_id', cid).execute()
+        
+        # Insere a nova configuração do contrato
         if lista_itens:
-            payload = [
+            payload_i = [
                 {
-                    "compromisso_id": compromisso_id,
+                    "compromisso_id": cid,
                     "item_id": i['item_id'],
                     "quantidade": i['quantidade']
                 } for i in lista_itens
             ]
-            sb.table('compromisso_itens').insert(payload).execute()
+            sb.table('compromisso_itens').insert(payload_i).execute()
 
-    return buscar_compromisso_por_id(compromisso_id)
+    return buscar_compromisso_por_id(cid)
 
 def buscar_compromisso_por_id(cid):
     sb = get_supabase()
@@ -359,40 +363,48 @@ def atualizar_compromisso(compromisso_id, data_header, lista_itens=None):
     return buscar_compromisso_por_id(compromisso_id)
 def criar_compromisso_master(dados_header, lista_itens):
     """
-    Cria um contrato de aluguel master com múltiplos itens.
-    Realiza validação de estoque para todos os itens antes de inserir.
+    Cria um contrato de aluguel master. 
+    Corrigido para acessar dados_header como dicionário.
     """
     sb = get_supabase()
     
-    # 1. Validação Prévia de Estoque
-    # Não queremos criar o contrato se um dos 10 itens estiver sem estoque
+    # 1. Validação de Estoque
     for item in lista_itens:
+        # ACESSO CORRIGIDO: Usando ['key'] em vez de .key
         disp = verificar_disponibilidade_periodo(
             item_id=item['item_id'],
-            data_inicio=dados_header['data_inicio'],
+            data_inicio=dados_header['data_inicio'], 
             data_fim=dados_header['data_fim']
         )
         
         if disp['disponivel_minimo'] < item['quantidade']:
-            nome_item = disp['item'].nome if disp['item'] else f"ID {item['item_id']}"
+            nome_item = disp['item'].nome if hasattr(disp['item'], 'nome') else "Item"
             raise Exception(
                 f"Estoque insuficiente para '{nome_item}'. "
                 f"Solicitado: {item['quantidade']}, Disponível: {disp['disponivel_minimo']}"
             )
 
-    # 2. Inserir o Cabeçalho do Compromisso
-    # Convertemos as datas para string ISO
+    # 2. Preparar Cabeçalho (Conversão de Datas)
+    # Criamos uma cópia para não alterar o original durante o loop
+    payload_header = dados_header.copy()
+    
     for field in ['data_inicio', 'data_fim']:
-        if hasattr(dados_header[field], 'isoformat'):
-            dados_header[field] = dados_header[field].isoformat()
+        if field in payload_header:
+            val = payload_header[field]
+            # Se for um objeto date/datetime, converte para string
+            if hasattr(val, 'isoformat'):
+                payload_header[field] = val.isoformat()
+            else:
+                payload_header[field] = str(val)
 
-    res_h = sb.table('compromissos').insert(dados_header).execute()
+    # 3. Inserir no Banco
+    res_h = sb.table('compromissos').insert(payload_header).execute()
     if not res_h.data:
         raise Exception("Erro ao criar cabeçalho do contrato")
     
     compromisso_id = res_h.data[0]['id']
 
-    # 3. Inserir os Itens do Contrato
+    # 4. Inserir Itens
     payload_itens = [
         {
             "compromisso_id": compromisso_id,
@@ -403,11 +415,9 @@ def criar_compromisso_master(dados_header, lista_itens):
     
     res_i = sb.table('compromisso_itens').insert(payload_itens).execute()
     if not res_i.data:
-        # Se falhar aqui, o ideal seria deletar o cabeçalho (rollback manual)
         sb.table('compromissos').delete().eq('id', compromisso_id).execute()
         raise Exception("Erro ao vincular itens ao contrato")
 
-    # Retorna o contrato completo (usando uma função de busca que pegue os itens)
     return buscar_compromisso_por_id(compromisso_id)
 
 def deletar_compromisso(cid):

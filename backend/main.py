@@ -1034,53 +1034,54 @@ async def buscar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/compromissos", status_code=status.HTTP_201_CREATED)
-async def criar_compromisso(compromisso: CompromissoCreate, db_module = Depends(get_db)):
-    try:
-        # Passamos os dados do cabeçalho e a lista de itens separadamente
-        dados_header = compromisso.dict(exclude={'itens'})
-        lista_itens = [i.dict() for i in compromisso.itens]
-        
-        novo_contrato = db_module.criar_compromisso_master(dados_header, lista_itens)
-        return compromisso_to_dict(novo_contrato)
-    except Exception as e:
-        print(f"❌ ERRO AO CRIAR CONTRATO: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/compromissos/{compromisso_id}")
-async def atualizar_compromisso(
-    compromisso_id: int, 
-    compromisso: CompromissoUpdateMaster, 
+async def criar_compromisso(
+    compromisso_in: CompromissoCreate, 
     db_module = Depends(get_db)
 ):
     try:
-        # 1. Extraímos os itens se eles existirem no payload
-        lista_itens = None
-        if compromisso.itens is not None:
-            lista_itens = [item.dict() for item in compromisso.itens]
+        # 1. Transformamos o modelo Pydantic em um dicionário puro
+        # Usamos o .dict() para que a função do banco receba chaves e não atributos
+        dados_completos = compromisso_in.dict()
         
-        # 2. Extraímos os dados do cabeçalho (apenas os campos que foram enviados)
-        # exclude_unset=True garante que não vamos sobrescrever com None o que não foi enviado
-        dados_header = compromisso.dict(exclude={'itens'}, exclude_unset=True)
+        # 2. Separamos os itens do cabeçalho
+        # Removemos 'itens' do dicionário principal para passar como argumento separado
+        lista_itens = dados_completos.pop('itens', [])
+        dados_header = dados_completos
         
-        # 3. Chamamos a lógica master no banco de dados
-        contrato_atualizado = db_module.atualizar_compromisso_master(
-            compromisso_id=compromisso_id,
-            dados_header=dados_header,
-            lista_itens=lista_itens
-        )
+        # 3. Chamamos a função master do banco
+        # Ela agora vai receber: 
+        # dados_header -> {'nome_contrato': '...', 'data_inicio': '...', etc}
+        # lista_itens  -> [{'item_id': 1, 'quantidade': 10}, ...]
+        novo_contrato = db_module.criar_compromisso_master(dados_header, lista_itens)
         
-        if not contrato_atualizado:
-            raise HTTPException(status_code=404, detail="Contrato não encontrado")
+        if not novo_contrato:
+            raise HTTPException(status_code=400, detail="Erro ao criar contrato")
             
-        # 4. Retornamos o contrato formatado (o compromisso_to_dict deve lidar com o novo JOIN)
-        return compromisso_to_dict(contrato_atualizado)
+        # 4. Retornamos usando o tradutor blindado que já ajustamos
+        return compromisso_to_dict(novo_contrato)
 
     except Exception as e:
-        print(f"❌ ERRO UPDATE CONTRATO: {str(e)}")
-        # Se for um erro de estoque (lançado pela nossa função no DB), retornamos 400
-        if "Estoque insuficiente" in str(e):
+        print(f"❌ ERRO NA ROTA CRIAR COMPROMISSO: {str(e)}")
+        # Tratamento amigável para erro de estoque
+        if "Estoque insuficiente" in str(e) or "Conflito" in str(e):
             raise HTTPException(status_code=400, detail=str(e))
-        raise HTTPException(status_code=500, detail="Erro interno ao atualizar contrato")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/compromissos/{compromisso_id}")
+async def atualizar_compromisso(compromisso_id: int, comp_in: CompromissoUpdateMaster, db_module = Depends(get_db)):
+    try:
+        # Extrai a lista de itens se ela foi enviada
+        lista_itens = None
+        if comp_in.itens is not None:
+            lista_itens = [i.dict() for i in comp_in.itens]
+            
+        # Extrai o cabeçalho excluindo os itens e campos não enviados (unset)
+        dados_header = comp_in.dict(exclude={'itens'}, exclude_unset=True)
+        
+        atualizado = db_module.atualizar_compromisso_master(compromisso_id, dados_header, lista_itens)
+        return compromisso_to_dict(atualizado)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.delete("/api/compromissos/{compromisso_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deletar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
