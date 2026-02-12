@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { disponibilidadeAPI, itensAPI, categoriasAPI } from '../services/api'
-import { Search, CheckCircle2, XCircle, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
+import { Search, CheckCircle2, XCircle, ChevronDown, ChevronUp, MapPin, Package, Car, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatItemName, formatDate } from '../utils/format'
 
@@ -16,93 +16,42 @@ export default function Disponibilidade() {
   const [itemSelecionado, setItemSelecionado] = useState('')
   const [resultado, setResultado] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [expandedGroups, setExpandedGroups] = useState({})
 
+  // --- CARREGAMENTO DE DADOS INICIAIS ---
   useEffect(() => {
-    loadItens()
-    loadCategorias()
+    async function fetchData() {
+      try {
+        const [resItens, resCats] = await Promise.all([
+          itensAPI.listar(),
+          categoriasAPI.listar()
+        ])
+        setItens(resItens.data || [])
+        setCategorias(resCats.data || [])
+        
+        // Extração de bases logísticas únicas
+        const locs = new Set()
+        resItens.data.forEach(i => {
+          if (i.cidade && i.uf) locs.add(`${i.cidade} - ${i.uf}`)
+        })
+        setLocalizacoes(Array.from(locs).sort())
+      } catch (error) {
+        toast.error('Erro ao carregar inventário')
+      }
+    }
+    fetchData()
   }, [])
 
-  useEffect(() => {
-    if (itens.length > 0) {
-      const locs = new Set()
-      itens.forEach(item => {
-        if (item.cidade && item.uf) {
-          locs.add(`${item.cidade} - ${item.uf}`)
-        }
-      })
-      setLocalizacoes(Array.from(locs).sort())
+  // --- LÓGICA DE FILTRO DO SELECT ---
+  const itensParaSelecao = itens.filter(i => {
+    if (categoriaFiltro !== 'Todas as Categorias' && i.categoria !== categoriaFiltro) return false
+    if (localizacaoFiltro !== 'Todas as Localizações') {
+      const locStr = `${i.cidade} - ${i.uf}`
+      if (locStr !== localizacaoFiltro) return false
     }
-  }, [itens])
+    return true
+  })
 
-  const loadItens = async () => {
-    try {
-      const response = await itensAPI.listar()
-      setItens(response.data)
-    } catch (error) {
-      console.error('Erro ao carregar itens:', error)
-    }
-  }
-
-  const loadCategorias = async () => {
-    try {
-      const response = await categoriasAPI.listar()
-      setCategorias(response.data || [])
-    } catch (error) {
-      console.error('Erro ao carregar categorias:', error)
-    }
-  }
-
-  const construirNomeItem = (item) => {
-    let nome = item.nome
-    const dadosCat = item.dados_categoria || {}
-    const camposPrioridade = ['Marca', 'Modelo', 'Placa', 'Serial', 'Código']
-    const camposChave = []
-    
-    for (const campo of camposPrioridade) {
-      if (dadosCat[campo]) {
-        camposChave.push(String(dadosCat[campo]))
-      }
-    }
-    
-    if (camposChave.length > 0) {
-      nome = `${item.nome} - ${camposChave.join(' ')}`
-    }
-    
-    if (item.categoria === 'Carros' && item.carro) {
-      nome = `${item.carro.marca || ''} ${item.carro.modelo || ''} - ${item.carro.placa || ''}`.trim()
-    }
-    
-    return nome
-  }
-
-  const obterCamposAgrupamento = (categoria, dadosCategoria) => {
-    if (!dadosCategoria || !categoria) return null
-    
-    if (categoria === 'Carros') {
-      return ['Marca', 'Modelo']
-    }
-    
-    const camposPossiveis = ['Marca', 'Modelo', 'Tipo', 'Categoria', 'Fabricante']
-    return Object.keys(dadosCategoria).filter(campo => camposPossiveis.includes(campo))
-  }
-
-  const obterValorAgrupamento = (item, camposAgrupamento) => {
-    if (!camposAgrupamento || camposAgrupamento.length === 0) return null
-    
-    const dadosCat = item.dados_categoria || {}
-    const valores = []
-    
-    camposAgrupamento.forEach(campo => {
-      const valor = dadosCat[campo]
-      if (valor) {
-        valores.push(String(valor))
-      }
-    })
-    
-    return valores.length > 0 ? valores.join(' ') : item.nome
-  }
-
+  // --- SUBMISSÃO DA CONSULTA ---
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -118,473 +67,239 @@ export default function Disponibilidade() {
       
       const response = await disponibilidadeAPI.verificar(payload)
       setResultado(response.data)
+      
+      if (response.data.resultados?.length === 0) {
+        toast('Nenhum item encontrado nos filtros selecionados', { icon: '⚠️' })
+      }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Erro ao verificar disponibilidade')
+      console.error(error)
+      toast.error('Erro ao processar consulta no servidor')
     } finally {
       setLoading(false)
     }
   }
 
-  const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId]
-    }))
-  }
-
-  const itensFiltrados = itens.filter(item => {
-    if (categoriaFiltro !== 'Todas as Categorias' && item.categoria !== categoriaFiltro) {
-      return false
-    }
-    if (localizacaoFiltro !== 'Todas as Localizações') {
-      const [cidade, uf] = localizacaoFiltro.split(' - ')
-      if (item.cidade !== cidade || item.uf !== uf) {
-        return false
-      }
-    }
-    return true
-  })
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-dark-50 mb-2">Verificar Disponibilidade</h1>
-        <p className="text-dark-400">Consulte a disponibilidade de itens em datas específicas</p>
-      </div>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-dark-50">Consulta de Disponibilidade</h1>
+          <p className="text-dark-400">Verifique o estoque livre para locações futuras</p>
+        </div>
+        <div className="px-4 py-2 bg-primary-600/10 border border-primary-500/20 rounded-lg">
+          <span className="text-sm text-primary-400 font-medium">Hoje: {formatDate(new Date())}</span>
+        </div>
+      </header>
 
-      <motion.form
-        initial={{ opacity: 0, y: 20 }}
+      {/* PAINEL DE FILTROS */}
+      <motion.form 
+        initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }}
-        onSubmit={handleSubmit}
+        onSubmit={handleSubmit} 
         className="card space-y-6"
       >
-        <div>
-          <label className="label">Data de Consulta *</label>
-          <input
-            type="date"
-            value={dataConsulta}
-            onChange={(e) => setDataConsulta(e.target.value)}
-            required
-            className="input"
-          />
-        </div>
-
-        {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="label">Filtrar por Categoria</label>
-            <select
-              value={categoriaFiltro}
-              onChange={(e) => setCategoriaFiltro(e.target.value)}
-              className="input"
-            >
-              <option value="Todas as Categorias">Todas as Categorias</option>
-              {categorias.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-dark-300 uppercase tracking-wider">Data do Aluguel</label>
+            <input 
+              type="date" 
+              className="input border-primary-500/30 focus:border-primary-500" 
+              value={dataConsulta} 
+              onChange={e => setDataConsulta(e.target.value)} 
+              required 
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-dark-300 uppercase tracking-wider">Categoria</label>
+            <select className="input" value={categoriaFiltro} onChange={e => setCategoriaFiltro(e.target.value)}>
+              <option>Todas as Categorias</option>
+              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-
-          <div>
-            <label className="label">Filtrar por Localização</label>
-            <select
-              value={localizacaoFiltro}
-              onChange={(e) => setLocalizacaoFiltro(e.target.value)}
-              className="input"
-            >
-              <option value="Todas as Localizações">Todas as Localizações</option>
-              {localizacoes.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-dark-300 uppercase tracking-wider">Filtrar por Base</label>
+            <select className="input" value={localizacaoFiltro} onChange={e => setLocalizacaoFiltro(e.target.value)}>
+              <option>Todas as Localizações</option>
+              {localizacoes.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
         </div>
 
-        <div>
-          <label className="label mb-2 block">Tipo de Consulta</label>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                value="todos"
-                checked={modoConsulta === 'todos'}
-                onChange={(e) => setModoConsulta(e.target.value)}
-                className="w-4 h-4 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-dark-300">Todos os Itens</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                value="especifico"
-                checked={modoConsulta === 'especifico'}
-                onChange={(e) => setModoConsulta(e.target.value)}
-                className="w-4 h-4 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-dark-300">Item Específico</span>
-            </label>
-          </div>
+        <div className="flex flex-wrap gap-6 p-4 bg-dark-700/30 rounded-xl border border-dark-600">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input 
+              type="radio" 
+              checked={modoConsulta === 'todos'} 
+              onChange={() => setModoConsulta('todos')} 
+              className="w-5 h-5 text-primary-500 bg-dark-800 border-dark-500 focus:ring-primary-500" 
+            />
+            <span className="text-sm font-bold text-dark-200 group-hover:text-primary-400 transition-colors">Ver Todo o Inventário</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input 
+              type="radio" 
+              checked={modoConsulta === 'especifico'} 
+              onChange={() => setModoConsulta('especifico')} 
+              className="w-5 h-5 text-primary-500 bg-dark-800 border-dark-500 focus:ring-primary-500" 
+            />
+            <span className="text-sm font-bold text-dark-200 group-hover:text-primary-400 transition-colors">Consultar Item Específico</span>
+          </label>
         </div>
 
         {modoConsulta === 'especifico' && (
-          <div>
-            <label className="label">Selecione o Item *</label>
-            <select
-              value={itemSelecionado}
-              onChange={(e) => setItemSelecionado(e.target.value)}
-              required
-              className="input"
-            >
-              <option value="">Selecione um item</option>
-              {itensFiltrados.map(item => (
-                <option key={item.id} value={item.id}>
-                  {formatItemName(item)}
-                </option>
-              ))}
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-2">
+            <label className="label">Qual ativo deseja verificar?</label>
+            <select className="input" value={itemSelecionado} onChange={e => setItemSelecionado(e.target.value)} required>
+              <option value="">Selecione na lista...</option>
+              {itensParaSelecao.map(i => <option key={i.id} value={i.id}>{formatItemName(i)}</option>)}
             </select>
-          </div>
+          </motion.div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="btn btn-primary w-full flex items-center justify-center gap-2"
-        >
+        <button type="submit" disabled={loading} className="btn btn-primary w-full py-4 text-lg font-bold shadow-lg shadow-primary-500/20 flex justify-center gap-3">
           {loading ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-              Verificando...
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-white"></div>
+              <span>Processando...</span>
             </>
           ) : (
             <>
-              <Search size={20} />
-              Verificar Disponibilidade
+              <Search size={24}/>
+              <span>Verificar Disponibilidade</span>
             </>
           )}
         </button>
-      </motion.form>
+      </form>
 
-      {resultado && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {/* Resultado de item específico */}
-          {resultado.item && (
-            <div className="card">
-              <h3 className="text-lg font-semibold text-dark-50 mb-2">
-                Disponibilidade para "{resultado.item.nome}"
-              </h3>
-              
-              {/* Mostra campos específicos da categoria */}
-              {resultado.item.dados_categoria && Object.keys(resultado.item.dados_categoria).length > 0 && (
-                <div className="mb-4 p-3 bg-dark-700/50 rounded-lg">
-                  <p className="text-xs text-dark-500 mb-2">Detalhes:</p>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {Object.entries(resultado.item.dados_categoria).map(([campo, valor]) => {
-                      // Pula campos vazios ou IDs
-                      if (!valor || campo === 'ID' || campo === 'Item ID') {
-                        return null
-                      }
-                      return (
-                        <div key={campo} className="text-sm">
-                          <span className="text-dark-400">{campo}:</span>{' '}
-                          <span className="text-dark-200 font-medium">{valor}</span>
-                        </div>
-                      )
-                    })}
+      {/* EXIBIÇÃO DOS RESULTADOS */}
+      <AnimatePresence>
+        {resultado && (
+          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+            
+            {/* TIPO 1: RESULTADO DE ITEM ÚNICO */}
+            {resultado.item && (
+              <div className="card border-l-8 border-primary-500">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                  <div>
+                    <h3 className="text-2xl font-black text-dark-50">{resultado.item.nome}</h3>
+                    <div className="flex gap-2 mt-1">
+                      <span className="px-2 py-0.5 bg-dark-700 text-dark-400 text-[10px] font-bold rounded uppercase tracking-tighter">
+                        {resultado.item.categoria}
+                      </span>
+                      <span className="px-2 py-0.5 bg-dark-700 text-dark-400 text-[10px] font-bold rounded">
+                        ID: {resultado.item.id}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm border-2 ${
+                    resultado.quantidade_disponivel > 0 
+                    ? 'bg-green-500/10 text-green-400 border-green-500/30' 
+                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+                  }`}>
+                    {resultado.quantidade_disponivel > 0 ? <CheckCircle2 size={20}/> : <XCircle size={20}/>}
+                    {resultado.quantidade_disponivel > 0 ? 'DISPONÍVEL PARA LOCAÇÃO' : 'ESTOQUE ESGOTADO'}
                   </div>
                 </div>
-              )}
-              
-              {localizacaoFiltro !== 'Todas as Localizações' && (
-                <div className="mb-4 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
-                  <p className="text-sm text-primary-400">
-                    📍 Filtro aplicado: Localização '{localizacaoFiltro}'
-                  </p>
-                </div>
-              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="p-4 bg-dark-700/50 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-1">Total</p>
-                  <p className="text-2xl font-bold text-dark-50">{resultado.quantidade_total}</p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard label="Estoque Total" value={resultado.quantidade_total} color="text-dark-50" icon={<Package className="text-dark-500"/>} />
+                  <StatCard label="Alugado (Saída)" value={resultado.quantidade_comprometida} color="text-yellow-500" icon={<Calendar className="text-yellow-500/50"/>} />
+                  <StatCard label="Uso Interno (Peças)" value={resultado.quantidade_instalada} color="text-blue-500" icon={<Car className="text-blue-500/50"/>} />
+                  <StatCard label="Livre Agora" value={resultado.quantidade_disponivel} color="text-green-500" bold icon={<CheckCircle2 className="text-green-500/50"/>} />
                 </div>
-                <div className="p-4 bg-dark-700/50 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-1">Total ocupado</p>
-                  <p className="text-2xl font-bold text-yellow-500">
-                    {(resultado.quantidade_comprometida || 0) + (resultado.quantidade_instalada || 0)}
-                  </p>
-                  <p className="text-xs text-dark-500 mt-1">
-                    comprometido + instalado
-                  </p>
-                </div>
-                <div className="p-4 bg-dark-700/50 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-1">Instalado em Carros</p>
-                  <p className="text-2xl font-bold text-blue-500">{resultado.quantidade_instalada || 0}</p>
-                </div>
-                <div className="p-4 bg-dark-700/50 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-1">Disponível</p>
-                  <p className={`text-2xl font-bold ${resultado.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {resultado.quantidade_disponivel}
-                  </p>
-                </div>
+
+                {resultado.compromissos_ativos?.length > 0 && (
+                  <div className="mt-8">
+                    <h4 className="flex items-center gap-2 text-sm font-black text-dark-300 uppercase tracking-widest mb-4">
+                      <Info size={16}/> Cronograma para esta data
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {resultado.compromissos_ativos.map(c => (
+                        <div key={c.id} className="p-4 bg-dark-700/40 border border-dark-600 rounded-xl flex flex-col justify-between">
+                          <p className="font-bold text-dark-50">{c.contratante || 'Cliente Final'}</p>
+                          <p className="text-xs text-dark-400 mt-1">
+                            {c.quantidade} unidade(s) até {formatDate(c.data_fim)}
+                          </p>
+                          <div className="flex items-center gap-1 mt-3 text-[10px] text-primary-400 font-bold">
+                            <MapPin size={10}/> {c.cidade} - {c.uf}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
 
-              {resultado.compromissos_ativos && resultado.compromissos_ativos.length > 0 && (
-                <div className="mt-6">
-                  <h4 className="text-md font-semibold text-dark-50 mb-4">Compromissos Ativos nesta Data</h4>
-                  <div className="space-y-3">
-                    {resultado.compromissos_ativos.map(comp => (
-                      <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-dark-50">Compromisso #{comp.id}</p>
-                            <p className="text-sm text-dark-400 mt-1">
-                              {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}
-                            </p>
-                            <p className="text-sm text-dark-400">Quantidade: {comp.quantidade}</p>
-                            {comp.descricao && (
-                              <p className="text-sm text-dark-400 mt-2">{comp.descricao}</p>
-                            )}
-                            {comp.contratante && (
-                              <p className="text-sm text-dark-400 mt-1">Contratante: {comp.contratante}</p>
-                            )}
-                            {comp.cidade && comp.uf && (
-                              <div className="flex items-center gap-1 mt-2 text-sm text-dark-400">
-                                <MapPin size={14} />
-                                <span>{comp.cidade} - {comp.uf}</span>
-                              </div>
-                            )}
+            {/* TIPO 2: LISTAGEM COMPLETA DE RESULTADOS */}
+            {resultado.resultados && (
+              <div className="grid grid-cols-1 gap-3">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <span className="text-xs font-bold text-dark-500 uppercase tracking-widest">Ativo / Localização</span>
+                  <span className="text-xs font-bold text-dark-500 uppercase tracking-widest">Status de Estoque</span>
+                </div>
+                {resultado.resultados.map((r, idx) => (
+                  <motion.div 
+                    key={idx} 
+                    initial={{ opacity: 0, x: -10 }} 
+                    animate={{ opacity: 1, x: 0 }} 
+                    transition={{ delay: idx * 0.03 }}
+                    className="card hover:border-primary-500/50 transition-all cursor-default py-4"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-xl ${r.item.categoria === 'Carros' ? 'bg-blue-500/10' : 'bg-primary-500/10'}`}>
+                          {r.item.categoria === 'Carros' ? <Car size={22} className="text-blue-400"/> : <Package size={22} className="text-primary-400"/>}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-dark-50 leading-tight">{formatItemName(r.item)}</h4>
+                          <div className="flex items-center gap-1 text-[10px] text-dark-400 font-bold uppercase mt-1">
+                            <MapPin size={10}/> {r.item.cidade || 'Base Central'} / {r.item.uf || 'DF'}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Resultado de todos os itens com agrupamento */}
-          {resultado.resultados && resultado.resultados.length > 0 && (
-            <div className="card">
-              <h3 className="text-lg font-semibold text-dark-50 mb-6">
-                Disponibilidade em {formatDate(dataConsulta)}
-              </h3>
-
-              {categoriaFiltro !== 'Todas as Categorias' && (
-                <div className="mb-4 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
-                  <p className="text-sm text-primary-400">
-                    📦 Filtro aplicado: Categoria '{categoriaFiltro}'
-                  </p>
-                </div>
-              )}
-
-              {localizacaoFiltro !== 'Todas as Localizações' && (
-                <div className="mb-4 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
-                  <p className="text-sm text-primary-400">
-                    📍 Filtro aplicado: Localização '{localizacaoFiltro}'
-                  </p>
-                </div>
-              )}
-
-              {/* Agrupa resultados por categoria */}
-              {(() => {
-                const porCategoria = {}
-                resultado.resultados.forEach(r => {
-                  const cat = r.item.categoria || 'Sem Categoria'
-                  if (!porCategoria[cat]) {
-                    porCategoria[cat] = []
-                  }
-                  porCategoria[cat].push(r)
-                })
-
-                return Object.entries(porCategoria).map(([categoria, resultados]) => {
-                  // Agrupa por campos de agrupamento se existirem
-                  const primeiroItem = resultados[0].item
-                  const camposAgrupamento = obterCamposAgrupamento(categoria, primeiroItem.dados_categoria)
-                  
-                  if (camposAgrupamento && camposAgrupamento.length > 0) {
-                    const grupos = {}
-                    resultados.forEach(r => {
-                      const chave = obterValorAgrupamento(r.item, camposAgrupamento) || r.item.nome
-                      if (!grupos[chave]) {
-                        grupos[chave] = []
-                      }
-                      grupos[chave].push(r)
-                    })
-
-                    return Object.entries(grupos).map(([chaveGrupo, grupoResultados]) => {
-                      const totalDisponivel = grupoResultados.reduce((sum, r) => sum + r.quantidade_disponivel, 0)
-                      const totalOcupado = grupoResultados.reduce((sum, r) => sum + (r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0), 0)
-                      const totalItens = grupoResultados.length
-                      const grupoId = `${categoria}-${chaveGrupo}`
-                      const isExpanded = expandedGroups[grupoId]
                       
-                      // Usa o nome do primeiro item como título principal
-                      const primeiroItemGrupo = grupoResultados[0].item
-                      const tituloGrupo = primeiroItemGrupo.nome
-
-                      return (
-                        <div key={grupoId} className="mb-4 border border-dark-700 rounded-lg overflow-hidden">
-                          <button
-                            onClick={() => toggleGroup(grupoId)}
-                            className="w-full p-4 bg-dark-700/50 hover:bg-dark-700 transition-colors flex items-center justify-between"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-xl">{categoria === 'Carros' ? '🚗' : '📦'}</span>
-                              <div className="text-left">
-                                <p className="font-semibold text-dark-50">{tituloGrupo}</p>
-                                {chaveGrupo !== tituloGrupo && (
-                                  <p className="text-xs text-dark-500 mb-1">{chaveGrupo}</p>
-                                )}
-                                <p className="text-sm text-dark-400">
-                                  {totalDisponivel} disponível(is) de {totalItens} total
-                                </p>
-                              </div>
-                            </div>
-                            {isExpanded ? <ChevronUp className="text-dark-400" /> : <ChevronDown className="text-dark-400" />}
-                          </button>
-
-                          {isExpanded && (
-                              <div className="p-4 space-y-4">
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                  <p className="text-sm text-dark-400">Total de Itens</p>
-                                  <p className="text-xl font-bold text-dark-50">{totalItens}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-dark-400">Ocupados</p>
-                                  <p className="text-xl font-bold text-yellow-500">{totalOcupado}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-dark-400">Disponíveis</p>
-                                  <p className="text-xl font-bold text-green-500">{totalDisponivel}</p>
-                                </div>
-                              </div>
-
-                              <div className="border-t border-dark-700 pt-4 space-y-3">
-                                {grupoResultados.map((r, idx) => {
-                                  const item = r.item
-                                  const dadosCat = item.dados_categoria || {}
-                                  const camposId = ['Placa', 'Serial', 'Código', 'Código Único']
-                                  const identificador = camposId.find(c => dadosCat[c]) || null
-
-                                  return (
-                                    <div key={idx} className="p-3 bg-dark-800 rounded-lg">
-                                      <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                          {identificador ? (
-                                            <p className="font-medium text-dark-50">
-                                              {identificador}: {dadosCat[identificador]}
-                                            </p>
-                                          ) : (
-                                            <p className="font-medium text-dark-50">{item.nome}</p>
-                                          )}
-                                          
-                                          {/* Mostra campos específicos da categoria */}
-                                          {Object.keys(dadosCat).length > 0 && (
-                                            <div className="mt-2 space-y-1">
-                                              {Object.entries(dadosCat).map(([campo, valor]) => {
-                                                // Pula campos que já estão sendo mostrados como identificador ou campos vazios
-                                                if (campo === identificador || !valor || campo === 'ID' || campo === 'Item ID') {
-                                                  return null
-                                                }
-                                                return (
-                                                  <div key={campo} className="text-xs text-dark-400">
-                                                    <span className="text-dark-500">{campo}:</span> <span className="text-dark-300">{valor}</span>
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                          )}
-                                          
-                                          <div className="flex items-center gap-4 mt-2 text-sm">
-                                            <span className={`font-medium ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                              {r.quantidade_disponivel > 0 ? '✅ Disponível' : '❌ Indisponível'}
-                                            </span>
-                                            {((r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)) > 0 && (
-                                              <span className="text-dark-400">
-                                                Ocupado: {(r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)}
-                                              </span>
-                                            )}
-                                          </div>
-                                          {item.cidade && item.uf && (
-                                            <div className="flex items-center gap-1 mt-2 text-sm text-dark-400">
-                                              <MapPin size={12} />
-                                              <span>{item.cidade} - {item.uf}</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
+                      <div className="flex items-center gap-4 md:gap-8 justify-between md:justify-end">
+                        <div className="text-center px-4">
+                          <p className="text-[10px] text-dark-500 uppercase font-black">Total</p>
+                          <p className="text-lg font-bold text-dark-100">{r.quantidade_total}</p>
                         </div>
-                      )
-                    })
-                  } else {
-                    // Sem agrupamento, mostra lista simples
-                    return (
-                      <div key={categoria} className="mb-6">
-                        <h4 className="text-md font-semibold text-dark-50 mb-4">
-                          {categoria === 'Carros' ? '🚗' : '📦'} {categoria}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {resultados.map((r, idx) => {
-                            const dadosCat = r.item.dados_categoria || {}
-                            
-                            return (
-                              <div key={idx} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
-                                <h5 className="font-semibold text-dark-50 mb-2">{r.item.nome}</h5>
-                                
-                                {/* Mostra campos específicos da categoria */}
-                                {Object.keys(dadosCat).length > 0 && (
-                                  <div className="mb-3 space-y-1">
-                                    {Object.entries(dadosCat).map(([campo, valor]) => {
-                                      // Pula campos vazios ou IDs
-                                      if (!valor || campo === 'ID' || campo === 'Item ID') {
-                                        return null
-                                      }
-                                      return (
-                                        <div key={campo} className="text-xs text-dark-400">
-                                          <span className="text-dark-500">{campo}:</span> <span className="text-dark-300">{valor}</span>
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                )}
-                                
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-dark-400">Disponível:</span>
-                                  <span className={`font-bold ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                    {r.quantidade_disponivel}
-                                  </span>
-                                </div>
-                                {((r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)) > 0 && (
-                                  <div className="flex items-center justify-between mt-2">
-                                    <span className="text-sm text-dark-400">Ocupado:</span>
-                                    <span className="font-medium text-yellow-500">{(r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
+                        <div className="text-center px-4 border-l border-dark-700">
+                          <p className="text-[10px] text-dark-500 uppercase font-black">Ocupado</p>
+                          <p className="text-lg font-bold text-yellow-500">{(r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)}</p>
+                        </div>
+                        <div className={`text-center min-w-[100px] px-4 py-2 rounded-xl border ${
+                          r.quantidade_disponivel > 0 
+                          ? 'bg-green-500/5 border-green-500/20' 
+                          : 'bg-red-500/5 border-red-500/20'
+                        }`}>
+                          <p className="text-[10px] text-dark-500 uppercase font-black">Livre</p>
+                          <p className={`text-xl font-black ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {r.quantidade_disponivel}
+                          </p>
                         </div>
                       </div>
-                    )
-                  }
-                })
-              })()}
-            </div>
-          )}
-        </motion.div>
-      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// --- SUB-COMPONENTE DE CARTÃO DE MÉTRICA ---
+function StatCard({ label, value, color, bold, icon }) {
+  return (
+    <div className="p-4 bg-dark-700/40 rounded-2xl border border-dark-600 relative overflow-hidden group">
+      <div className="absolute right-2 top-2 opacity-20 group-hover:opacity-40 transition-opacity">
+        {icon}
+      </div>
+      <p className="text-[10px] text-dark-400 uppercase font-black tracking-widest mb-1">{label}</p>
+      <p className={`text-3xl ${bold ? 'font-black' : 'font-bold'} ${color}`}>{value}</p>
     </div>
   )
 }
