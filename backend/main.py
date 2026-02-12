@@ -1094,42 +1094,73 @@ async def excluir_compromisso(compromisso_id: int, db_module = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 # ============= DISPONIBILIDADE =============
 
+from typing import Optional # Adicione no topo se não tiver
+
 @app.get("/api/disponibilidade")
 async def verificar_disponibilidade(
-    item_id: int, 
-    data_inicio: str, 
-    data_fim: str, 
+    item_id: Optional[int] = None, 
+    data_consulta: Optional[str] = None, 
+    data_inicio: Optional[str] = None, 
+    data_fim: Optional[str] = None,
+    filtro_categoria: Optional[str] = None, 
+    filtro_localizacao: Optional[str] = None,
     db_module = Depends(get_db)
 ):
-    """
-    Verifica disponibilidade de um item em um intervalo de datas.
-    Compatível com o modelo de Contrato Master (1:N).
-    """
     try:
-        # Chamamos a função MASTER que criamos no supabase_database.py
-        # Ela já resolve o problema da coluna deletada (item_id)
-        resultado = db_module.verificar_disponibilidade_periodo(
-            item_id=item_id,
-            data_inicio=data_inicio,
-            data_fim=data_fim
-        )
-        
-        if not resultado:
-            raise HTTPException(status_code=404, detail="Item não encontrado")
-        
-        # O tradutor item_to_dict precisa do objeto, resultado['item'] já é objeto
-        # graças ao buscar_item_por_id que você tem.
-        return {
-            "item": item_to_dict(resultado['item']),
-            "quantidade_total": resultado['quantidade_total'],
-            "max_comprometido": resultado['max_comprometido'],
-            "disponivel_minimo": resultado['disponivel_minimo'], # Chave que o Front espera
-            # Se você precisar dos compromissos detalhados para o modal de info:
-            "compromissos_ativos": [compromisso_to_dict(c) for c in resultado.get('compromissos_atuais', [])]
-        }
+        # Mapeamento de Datas: 
+        # Se vier data_consulta (Dashboard), usamos ela como início e fim.
+        # Se vierem data_inicio/fim (Registro), usamos elas.
+        inicio = data_inicio or data_consulta
+        fim = data_fim or data_consulta
+
+        if not inicio:
+            raise HTTPException(status_code=400, detail="Data não informada")
+
+        # 1. CASO: CONSULTA DE ITEM ESPECÍFICO (Seja no Dashboard ou no Registro)
+        if item_id:
+            resultado = db_module.verificar_disponibilidade_periodo(
+                item_id=item_id,
+                data_inicio=inicio,
+                data_fim=fim
+            )
             
+            if not resultado:
+                raise HTTPException(status_code=404, detail="Item não encontrado")
+            
+            return {
+                "item": item_to_dict(resultado['item']),
+                "quantidade_total": resultado['quantidade_total'],
+                "max_comprometido": resultado['max_comprometido'],
+                "quantidade_disponivel": resultado['disponivel_minimo'], # Chave para o Front
+                "compromissos_ativos": [compromisso_to_dict(c) for c in resultado.get('compromissos_atuais', [])]
+            }
+            
+        # 2. CASO: DASHBOARD "VER TUDO" (item_id é None)
+        else:
+            resultados = db_module.verificar_disponibilidade_todos_itens(
+                inicio, # Usando a data tratada
+                filtro_localizacao
+            )
+            
+            if filtro_categoria and filtro_categoria != 'Todas as Categorias':
+                resultados = [
+                    r for r in resultados
+                    if getattr(r['item'], 'categoria', '') == filtro_categoria
+                ]
+            
+            return {
+                "resultados": [
+                    {
+                        "item": item_to_dict(r['item']),
+                        "quantidade_total": r['quantidade_total'],
+                        "quantidade_comprometida": r['quantidade_comprometida'],
+                        "quantidade_disponivel": r['quantidade_disponivel']
+                    } for r in resultados
+                ]
+            }
+
     except Exception as e:
-        print(f"❌ ERRO DISPONIBILIDADE: {str(e)}")
+        print(f"❌ ERRO 422/500 DISPONIBILIDADE: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============= CATEGORIAS E CAMPOS =============

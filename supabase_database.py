@@ -646,8 +646,37 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         'max_comprometido': max_occ, 
         'disponivel_minimo': max(0, item.quantidade_total - max_occ)
     }
-def verificar_disponibilidade_todos_itens(data_consulta, filtro_loc=None):
-    return [verificar_disponibilidade(i.id, data_consulta, filtro_loc) for i in listar_itens()]
+def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
+    """Varre todos os itens calculando disponibilidade na data via Master Contract"""
+    sb = get_supabase()
+    
+    # 1. Busca todos os itens (Ativos)
+    query = sb.table('itens').select('*')
+    if filtro_localizacao and filtro_localizacao != 'Todas as Localizações':
+        cidade, uf = filtro_localizacao.split(' - ')
+        query = query.eq('cidade', cidade).eq('uf', uf)
+    
+    res_itens = query.execute()
+    lista_itens = res_itens.data or []
+    
+    resultados = []
+    for item in lista_itens:
+        # Reutilizamos a lógica MASTER que já está corrigida
+        # Ela olha para compromisso_itens e não para a coluna deletada
+        status = verificar_disponibilidade_periodo(
+            item_id=item['id'],
+            data_inicio=data_consulta,
+            data_fim=data_consulta
+        )
+        
+        resultados.append({
+            'item': SimpleNamespace(**item), # Objeto para o tradutor
+            'quantidade_total': status['quantidade_total'],
+            'quantidade_comprometida': status['max_comprometido'],
+            'quantidade_disponivel': status['disponivel_minimo']
+        })
+        
+    return resultados
 
 
 # ---------- Financiamentos ----------
