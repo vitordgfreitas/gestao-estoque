@@ -169,7 +169,7 @@ export default function Disponibilidade() {
             </>
           )}
         </button>
-      </form>
+      </motion.form>
 
       {/* EXIBIÇÃO DOS RESULTADOS */}
       <AnimatePresence>
