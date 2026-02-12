@@ -310,27 +310,39 @@ class ItemResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class CompromissoCreate(BaseModel):
+class ItemAluguel(BaseModel):
     item_id: int
     quantidade: int
+
+class CompromissoCreate(BaseModel):
+    nome_contrato: str  # Nome identificador do contrato
+    contratante: str
     data_inicio: date
     data_fim: date
     descricao: Optional[str] = None
     cidade: str
     uf: str
     endereco: Optional[str] = None
-    contratante: Optional[str] = None
+    valor_total_contrato: float = 0.0
+    # A LISTA DE ITENS AGORA VEM AQUI:
+    itens: List[ItemAluguel]
+
+class ItemAluguelUpdate(BaseModel):
+    item_id: int
+    quantidade: int
 
 class CompromissoUpdate(BaseModel):
-    item_id: Optional[int] = None
-    quantidade: Optional[int] = None
+    nome_contrato: Optional[str] = None
+    contratante: Optional[str] = None
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    descricao: Optional[str] = None
+    valor_total_contrato: Optional[float] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
     endereco: Optional[str] = None
-    contratante: Optional[str] = None
+    descricao: Optional[str] = None
+    # Lista opcional: se vier, substituímos os itens antigos pelos novos
+    itens: Optional[List[ItemAluguelUpdate]] = None
 
 class CompromissoResponse(BaseModel):
     id: int
@@ -343,10 +355,10 @@ class CompromissoResponse(BaseModel):
     uf: str
     endereco: Optional[str]
     contratante: Optional[str]
-    item: Optional[ItemResponse] = None
+    itens: List[dict] = []
     
-    class Config:
-        from_attributes = True
+class Config:
+    from_attributes = True
 
 class DisponibilidadeRequest(BaseModel):
     item_id: Optional[int] = None
@@ -1021,41 +1033,18 @@ async def buscar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/compromissos", response_model=dict, status_code=status.HTTP_201_CREATED)
+@app.post("/api/compromissos", status_code=status.HTTP_201_CREATED)
 async def criar_compromisso(compromisso: CompromissoCreate, db_module = Depends(get_db)):
-    """Cria um novo compromisso"""
     try:
-        # Verifica disponibilidade antes de criar
-        disponibilidade = db_module.verificar_disponibilidade_periodo(
-            compromisso.item_id,
-            compromisso.data_inicio,
-            compromisso.data_fim
-        )
+        # Passamos os dados do cabeçalho e a lista de itens separadamente
+        dados_header = compromisso.dict(exclude={'itens'})
+        lista_itens = [i.dict() for i in compromisso.itens]
         
-        if disponibilidade['disponivel_minimo'] < compromisso.quantidade:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Quantidade insuficiente! Disponível: {disponibilidade['disponivel_minimo']}, Solicitado: {compromisso.quantidade}"
-            )
-        
-        novo_compromisso = db_module.criar_compromisso(
-            item_id=compromisso.item_id,
-            quantidade=compromisso.quantidade,
-            data_inicio=compromisso.data_inicio,
-            data_fim=compromisso.data_fim,
-            descricao=compromisso.descricao,
-            cidade=compromisso.cidade,
-            uf=compromisso.uf,
-            endereco=compromisso.endereco,
-            contratante=compromisso.contratante
-        )
-        return compromisso_to_dict(novo_compromisso)
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        novo_contrato = db_module.criar_compromisso_master(dados_header, lista_itens)
+        return compromisso_to_dict(novo_contrato)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ ERRO AO CRIAR CONTRATO: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/api/compromissos/{compromisso_id}", response_model=dict)
 async def atualizar_compromisso(compromisso_id: int, compromisso: CompromissoUpdate, db_module = Depends(get_db)):

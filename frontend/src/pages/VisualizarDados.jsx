@@ -196,22 +196,35 @@ export default function VisualizarDados() {
           {activeTab === 'compromissos' && (
             <table className="table">
               <thead>
-                <tr><th>ID</th><th>Item</th><th>Contratante</th><th>Início</th><th>Fim</th><th>Ações</th></tr>
+                <tr>
+                  <th>Contrato / Cliente</th>
+                  <th>Itens Envolvidos</th>
+                  <th>Período</th>
+                  <th>Ações</th>
+                </tr>
               </thead>
               <tbody>
-                {filteredCompromissos.map(comp => (
-                  <tr key={comp.id}>
-                    <td className="font-mono text-xs text-dark-400">{comp.id}</td>
-                    <td>{comp.item?.nome || 'N/A'}</td>
-                    <td>{comp.contratante}</td>
-                    <td>{formatDate(comp.data_inicio)}</td>
-                    <td>{formatDate(comp.data_fim)}</td>
+                {compromissos.map(c => (
+                  <tr key={c.id} className="hover:bg-dark-700/20">
                     <td>
-                      <div className="flex gap-2">
-                        <button onClick={() => setViewingCompromisso(comp)} className="p-1 hover:text-white"><Eye size={18}/></button>
-                        <button onClick={() => setEditingCompromisso(comp)} className="p-1 hover:text-primary-400"><Edit size={18}/></button>
-                        <button onClick={() => setDeletingCompromisso(comp)} className="p-1 hover:text-red-400"><Trash2 size={18}/></button>
+                      <div className="font-bold text-primary-400">{c.nome_contrato}</div>
+                      <div className="text-xs text-dark-400">{c.contratante}</div>
+                    </td>
+                    <td className="max-w-xs">
+                      <div className="flex flex-wrap gap-1">
+                        {c.compromisso_itens?.map((ci, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-dark-700 rounded text-[10px]">
+                            {ci.itens?.nome} ({ci.quantidade})
+                          </span>
+                        ))}
                       </div>
+                    </td>
+                    <td className="text-sm">
+                      {formatDate(c.data_inicio)} a {formatDate(c.data_fim)}
+                    </td>
+                    <td>
+                      <button onClick={() => setEditingCompromisso(c)} className="p-2 text-primary-400"><Edit size={16}/></button>
+                      {/* ... outros botões ... */}
                     </td>
                   </tr>
                 ))}

@@ -35,6 +35,24 @@ export default function Compromissos() {
   const [loading, setLoading] = useState(false)
   const [loadingItens, setLoadingItens] = useState(true)
 
+  const [itensContrato, setItensContrato] = useState([]); // [{item_id, quantidade, nome}]
+  const [itemAtual, setItemAtual] = useState({ id: '', qtd: 1 });
+
+  const adicionarItem = () => {
+      if (!itemAtual.id) return toast.error("Selecione um item");
+      const itemInfo = itens.find(i => i.id === parseInt(itemAtual.id));
+      
+      setItensContrato([...itensContrato, { 
+          item_id: itemInfo.id, 
+          quantidade: parseInt(itemAtual.qtd),
+          nome: itemInfo.nome 
+      }]);
+      setItemAtual({ id: '', qtd: 1 }); // Limpa o seletor
+  };
+
+  const removerItem = (index) => {
+      setItensContrato(itensContrato.filter((_, i) => i !== index));
+  };
   useEffect(() => {
     loadCategorias()
     loadItens()
@@ -119,7 +137,10 @@ export default function Compromissos() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-
+    const payload = {
+        ...formData,
+        itens: itensContrato.map(({item_id, quantidade}) => ({ item_id, quantidade }))
+    };
     try {
       if (formData.tipo_compromisso === 'pecas_carro') {
         // Associar múltiplas peças ao carro
