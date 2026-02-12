@@ -357,30 +357,43 @@ def deletar_peca_carro(associacao_id):
 def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
     item = buscar_item_por_id(item_id)
     if not item: return None
-    dt = _date_parse(data_consulta); sb = get_supabase()
+    dt = _date_parse(data_consulta)
+    sb = get_supabase()
     
     # 1. Alugado na data
-    r_c = sb.table('compromissos').select('quantidade, cidade, uf').eq('item_id', item_id).lte('data_inicio', dt.isoformat()).gte('data_fim', dt.isoformat()).execute()
-    comps = r_c.data or []
+    # Mudança crucial: selecionamos '*' para ter todos os campos necessários para o objeto
+    r_c = sb.table('compromissos').select('*').eq('item_id', item_id).lte('data_inicio', dt.isoformat()).gte('data_fim', dt.isoformat()).execute()
+    
+    # CONVERSÃO AQUI: Transformamos a lista de dicts em lista de Objetos Compromisso
+    comps_raw = r_c.data or []
+    comps_objetos = [_row_to_compromisso(row) for row in comps_raw]
+
+    # Aplicamos o filtro de localização nos objetos (usando .cidade e .uf em vez de chaves)
     if filtro_loc:
         p = filtro_loc.split(" - ")
-        if len(p)==2: comps = [c for c in comps if c['cidade']==p[0] and c['uf']==p[1].upper()]
-    qtd_alugada = sum(c['quantidade'] for c in comps)
+        if len(p) == 2:
+            comps_objetos = [c for c in comps_objetos if c.cidade == p[0] and c.uf == p[1].upper()]
+    
+    qtd_alugada = sum(c.quantidade for c in comps_objetos)
 
-    # 2. Instalado em carros (Compromisso Interno)
+    # 2. Instalado em carros
     r_i = sb.table('pecas_carros').select('quantidade').eq('peca_id', item_id).lte('data_instalacao', dt.isoformat()).execute()
     qtd_inst = sum(p['quantidade'] for p in (r_i.data or []))
     
     disponivel = item.quantidade_total - qtd_alugada - qtd_inst
+    
     return {
-        'item': item, 'quantidade_total': item.quantidade_total,
-        'quantidade_comprometida': qtd_alugada, 'quantidade_instalada': qtd_inst,
-        'quantidade_disponivel': max(0, disponivel), 'compromissos_ativos': comps
+        'item': item, 
+        'quantidade_total': item.quantidade_total,
+        'quantidade_comprometida': qtd_alugada, 
+        'quantidade_instalada': qtd_inst,
+        'quantidade_disponivel': max(0, disponivel), 
+        # Agora retornamos objetos, o main.py vai ficar feliz!
+        'compromissos_ativos': comps_objetos 
     }
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None, **kwargs):
-    # Aceitamos excluir_compromisso_id para bater com o main.py
-    # E usamos o **kwargs para ignorar qualquer outro nome que venha errado
+    """Verifica disponibilidade em um intervalo de datas, convertendo dados em objetos para evitar erros de atributo"""
     item = buscar_item_por_id(item_id)
     if not item: return None
     
@@ -388,24 +401,42 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
     d_fim = _date_parse(data_fim)
     sb = get_supabase()
     
+    # 1. Busca todos os compromissos do item
     r = sb.table('compromissos').select('*').eq('item_id', item_id).execute()
+    dados_brutos = r.data or []
     
-    # Filtra excluindo o compromisso que estamos editando agora
+    # CONVERSÃO PARA OBJETOS: Garante que tenhamos .data_inicio, .data_fim e .quantidade
+    # Isso evita o erro "'dict' object has no attribute"
+    todos_comps = [_row_to_compromisso(row) for row in dados_brutos]
+    
+    # Filtra apenas os que batem com o período, excluindo o compromisso atual (se houver ID de exclusão)
     comps = [
-        c for c in (_row_to_compromisso(x) for x in r.data) 
+        c for c in todos_comps 
         if c.data_inicio <= d_fim and c.data_fim >= d_ini
     ]
     
     if excluir_compromisso_id:
         comps = [c for c in comps if c.id != int(excluir_compromisso_id)]
     
+    # 2. Busca peças instaladas
     pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', item_id).execute()
+    pecas_data = pecas_r.data or []
     
     max_occ = 0
     curr = d_ini
+    
+    # 3. Loop de verificação dia a dia (O motor do estoque)
     while curr <= d_fim:
+        # Soma o que está alugado para terceiros (.quantidade é atributo do objeto)
         dia_alugado = sum(c.quantidade for c in comps if c.data_inicio <= curr <= c.data_fim)
-        dia_instalado = sum(p['quantidade'] for p in (pecas_r.data or []) if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr)
+        
+        # Soma o que está instalado em carros (uso interno)
+        dia_instalado = sum(
+            p['quantidade'] for p in pecas_data 
+            if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr
+        )
+        
+        # Ocupação total do dia
         max_occ = max(max_occ, dia_alugado + dia_instalado)
         curr += timedelta(days=1)
     
