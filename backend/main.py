@@ -2122,8 +2122,8 @@ async def listar_parcelas(
             if fin_id is not None:
                 if fin_id not in fins_cache:
                     try:
-                        fin = db_module.buscar_financiamento(fin_id)
-                        fins_cache[fin_id] = getattr(fin, "codigo_contrato", None) or ""
+                        fin = db_module.buscar_financiamento_por_id(fin_id)
+                        fins_cache[fin_id] = (getattr(fin, "codigo_contrato", None) or "").strip() if fin else ""
                     except Exception:
                         fins_cache[fin_id] = ""
                 d["codigo_contrato"] = fins_cache[fin_id] or f"Financiamento #{fin_id}"

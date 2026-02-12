@@ -601,53 +601,54 @@ export default function Calendario() {
               {detalhesDia.loadingParcelas ? (
                 <p className="text-dark-400 text-center py-4">Carregando parcelas...</p>
               ) : detalhesDia.parcelas?.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto -mx-1">
+                  <table className="w-full text-base min-w-[720px]">
                     <thead>
-                      <tr className="border-b border-dark-600">
-                        <th className="text-left py-2 text-dark-400 font-medium">Contrato</th>
-                        <th className="text-left py-2 text-dark-400 font-medium">Parcela</th>
-                        <th className="text-left py-2 text-dark-400 font-medium">Vencimento</th>
-                        <th className="text-right py-2 text-dark-400 font-medium">Valor</th>
-                        <th className="text-right py-2 text-dark-400 font-medium">Pago</th>
-                        <th className="text-left py-2 text-dark-400 font-medium">Status</th>
-                        <th className="text-left py-2 text-dark-400 font-medium">Boleto</th>
-                        <th className="text-left py-2 text-dark-400 font-medium">Comprovante</th>
+                      <tr className="border-b-2 border-dark-600">
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Contrato</th>
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Parc.</th>
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Vencimento</th>
+                        <th className="text-right py-3 px-3 text-dark-300 font-semibold">Valor</th>
+                        <th className="text-right py-3 px-3 text-dark-300 font-semibold">Pago</th>
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Status</th>
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Boleto</th>
+                        <th className="text-left py-3 px-3 text-dark-300 font-semibold">Comprov.</th>
                       </tr>
                     </thead>
                     <tbody>
                       {detalhesDia.parcelas.map((p) => {
                         const StatusIcon = p.status === 'Paga' ? CheckCircle : p.status === 'Atrasada' ? AlertCircle : Clock
                         const statusColor = p.status === 'Paga' ? 'text-green-400' : p.status === 'Atrasada' ? 'text-red-400' : 'text-yellow-400'
+                        const codigo = (p.codigo_contrato && String(p.codigo_contrato).trim()) || `Financiamento #${p.financiamento_id}`
                         return (
-                          <tr key={p.id} className="border-b border-dark-700/50">
-                            <td className="py-2 text-dark-50 font-medium">{p.codigo_contrato || `Financiamento #${p.financiamento_id}`}</td>
-                            <td className="py-2 text-dark-50">{p.numero_parcela}</td>
-                            <td className="py-2 text-dark-400">{formatDate(p.data_vencimento)}</td>
-                            <td className="py-2 text-right text-dark-50 font-medium">{formatCurrency(p.valor_original)}</td>
-                            <td className="py-2 text-right text-dark-400">{formatCurrency(p.valor_pago)}</td>
-                            <td className="py-2">
-                              <span className={`flex items-center gap-1 ${statusColor}`}>
-                                <StatusIcon size={14} />
+                          <tr key={p.id} className="border-b border-dark-700/50 hover:bg-dark-700/30">
+                            <td className="py-3 px-3 text-dark-50 font-medium break-words min-w-[100px]" title={codigo}>{codigo}</td>
+                            <td className="py-3 px-3 text-dark-50">{p.numero_parcela}</td>
+                            <td className="py-3 px-3 text-dark-400 whitespace-nowrap">{formatDate(p.data_vencimento)}</td>
+                            <td className="py-3 px-3 text-right text-dark-50 font-medium whitespace-nowrap">{formatCurrency(p.valor_original)}</td>
+                            <td className="py-3 px-3 text-right text-dark-400 whitespace-nowrap">{formatCurrency(p.valor_pago)}</td>
+                            <td className="py-3 px-3">
+                              <span className={`inline-flex items-center gap-1.5 ${statusColor}`}>
+                                <StatusIcon size={16} />
                                 {p.status}
                               </span>
                             </td>
-                            <td className="py-2">
+                            <td className="py-3 px-3">
                               {p.link_boleto ? (
                                 <a href={p.link_boleto} target="_blank" rel="noreferrer" className="text-primary-400 hover:text-primary-300 inline-flex items-center gap-1">
-                                  <ExternalLink size={14} /> Boleto
+                                  <ExternalLink size={16} /> Boleto
                                 </a>
                               ) : (
-                                <span className="text-dark-500">-</span>
+                                <span className="text-dark-500">—</span>
                               )}
                             </td>
-                            <td className="py-2">
+                            <td className="py-3 px-3">
                               {p.link_comprovante ? (
                                 <a href={p.link_comprovante} target="_blank" rel="noreferrer" className="text-green-400 hover:text-green-300 inline-flex items-center gap-1">
-                                  <ExternalLink size={14} /> Comprovante
+                                  <ExternalLink size={16} /> Comprov.
                                 </a>
                               ) : (
-                                <span className="text-dark-500">-</span>
+                                <span className="text-dark-500">—</span>
                               )}
                             </td>
                           </tr>
