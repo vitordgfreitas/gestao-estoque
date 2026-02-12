@@ -55,7 +55,7 @@ export const itensAPI = {
 
 // Compromissos
 export const compromissosAPI = {
-  listar: () => api.get('/api/compromissos'),
+  listar: () => api.get('/api/compromissos?select=*,compromisso_itens(quantidade,itens(nome))'),
   buscar: (id) => api.get(`/api/compromissos/${id}`),
   criar: (data) => api.post('/api/compromissos', data),
   atualizar: (id, data) => api.put(`/api/compromissos/${id}`, data),
