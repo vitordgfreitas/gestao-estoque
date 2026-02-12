@@ -286,6 +286,11 @@ class ItemUpdate(BaseModel):
     endereco: Optional[str] = None
     valor_compra: Optional[float] = None
     data_aquisicao: Optional[date] = None
+    # CAMPOS ESSENCIAIS PARA CARROS:
+    placa: Optional[str] = None
+    marca: Optional[str] = None
+    modelo: Optional[str] = None
+    ano: Optional[int] = None
     campos_categoria: Optional[dict] = None
 
 class ItemResponse(BaseModel):
@@ -859,47 +864,23 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
         print(f"ERRO CRITICAL: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/itens/{item_id}", response_model=dict)
+@app.put("/api/itens/{item_id}")
 async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
-    """Atualiza um item existente com suporte a campos financeiros e dinâmicos"""
     try:
-        # SOLUÇÃO PARA O VALOR 0:
-        # Se no seu modelo ItemUpdate o campo estiver como Optional[float] = 0.0,
-        # o Pydantic vai mandar 0.0 sempre que o campo não vier do front.
-        # Fazemos essa trava para só atualizar se o valor for realmente enviado.
-        v_compra = item.valor_compra if item.valor_compra is not None else None
-
+        # Usamos o .dict() para passar os campos com segurança para o db_module
+        item_data = item.dict(exclude_unset=True)
+        
         item_atualizado = db_module.atualizar_item(
             item_id=item_id,
-            nome=item.nome,
-            quantidade_total=item.quantidade_total,
-            categoria=item.categoria,
-            descricao=item.descricao,
-            cidade=item.cidade,
-            uf=item.uf,
-            endereco=item.endereco,
-            valor_compra=v_compra,  # Passa None se não foi enviado, mantendo o valor atual no banco
-            data_aquisicao=item.data_aquisicao,
-            placa=item.placa,
-            marca=item.marca,
-            modelo=item.modelo,
-            ano=item.ano,
-            campos_categoria=item.campos_categoria
+            **item_data # Isso passa placa, marca, etc., se existirem no objeto
         )
         
         if not item_atualizado:
             raise HTTPException(status_code=404, detail="Item não encontrado")
-        
-        # O PONTO CHAVE: Usar o item_to_dict que criamos para converter 
-        # as datas do Supabase em texto antes de mandar para o navegador.
+            
         return item_to_dict(item_atualizado)
-        
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Erro no Update: {str(e)}")
+        print(f"❌ ERRO UPDATE: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/itens/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
