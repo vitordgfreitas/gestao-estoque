@@ -106,12 +106,12 @@ def obter_campos_categoria(categoria):
 
 # --- CRUD DE ITENS (ESTOQUE) ---
 
-def criar_item(nome, quantidade_total, categoria=None, valor_compra=0, data_aquisicao=None, **kwargs):
+def criar_item(nome, quantidade_total, categoria=None, valor_compra=0.0, data_aquisicao=None, **kwargs):
     sb = get_supabase(); cat = categoria or 'Estrutura de Evento'
     campos_extra = kwargs.get('campos_categoria', {})
     payload = {
         'nome': nome, 'quantidade_total': int(quantidade_total), 'categoria': cat,
-        'valor_compra': float(valor_compra or 0), 'data_aquisicao': data_aquisicao or date.today().isoformat(),
+        'valor_compra': float(valor_compra or 0.0), 'data_aquisicao': data_aquisicao or date.today().isoformat(),
         'descricao': kwargs.get('descricao', ''), 'cidade': kwargs.get('cidade', ''),
         'uf': (kwargs.get('uf', ''))[:2].upper(), 'endereco': kwargs.get('endereco', ''),
         'dados_categoria': campos_extra
