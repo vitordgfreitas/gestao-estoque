@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 import calendar
 import validacoes
 import auditoria
+from types import SimpleNamespace
 
 _supabase_client = None
 
@@ -299,7 +300,10 @@ def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None)
             ]
             sb.table('compromisso_itens').insert(payload_i).execute()
 
-    return buscar_compromisso_por_id(cid)
+    res_final = buscar_compromisso_por_id(cid)
+    
+    # Transforma em objeto antes de enviar para o tradutor no main.py
+    return SimpleNamespace(**res_final)
 
 def buscar_compromisso_por_id(cid):
     sb = get_supabase()
@@ -420,7 +424,10 @@ def criar_compromisso_master(dados_header, lista_itens):
     
     sb.table('compromisso_itens').insert(payload_itens).execute()
     
-    return buscar_compromisso_por_id(contrato_id)
+    res_final = buscar_compromisso_por_id(cid)
+    
+    # Transforma em objeto antes de enviar para o tradutor no main.py
+    return SimpleNamespace(**res_final)
 
 def deletar_compromisso(cid):
     sb = get_supabase(); r = sb.table('compromissos').delete().eq('id', int(cid)).execute()
