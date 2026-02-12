@@ -2219,7 +2219,6 @@ def peca_carro_to_dict(pc):
     return result
 @app.post("/api/pecas-carros", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
-    """Associa uma peça a um carro"""
     try:
         nova_associacao = db_module.criar_peca_carro(
             peca_id=peca_carro.peca_id,
@@ -2228,10 +2227,10 @@ async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(ver
             data_instalacao=peca_carro.data_instalacao,
             observacoes=peca_carro.observacoes
         )
-        return peca_carro_to_dict(nova_associacao)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Retorno blindado
+        return JSONResponse(content=jsonable_encoder(peca_carro_to_dict(nova_associacao)))
     except Exception as e:
+        print(f"❌ ERRO PEÇAS-CARROS: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/pecas-carros", response_model=List[dict])
