@@ -312,8 +312,13 @@ export default function Disponibilidade() {
                   <p className="text-2xl font-bold text-dark-50">{resultado.quantidade_total}</p>
                 </div>
                 <div className="p-4 bg-dark-700/50 rounded-lg">
-                  <p className="text-sm text-dark-400 mb-1">Comprometido</p>
-                  <p className="text-2xl font-bold text-yellow-500">{resultado.quantidade_comprometida}</p>
+                  <p className="text-sm text-dark-400 mb-1">Total ocupado</p>
+                  <p className="text-2xl font-bold text-yellow-500">
+                    {(resultado.quantidade_comprometida || 0) + (resultado.quantidade_instalada || 0)}
+                  </p>
+                  <p className="text-xs text-dark-500 mt-1">
+                    comprometido + instalado
+                  </p>
                 </div>
                 <div className="p-4 bg-dark-700/50 rounded-lg">
                   <p className="text-sm text-dark-400 mb-1">Instalado em Carros</p>
@@ -413,7 +418,7 @@ export default function Disponibilidade() {
 
                     return Object.entries(grupos).map(([chaveGrupo, grupoResultados]) => {
                       const totalDisponivel = grupoResultados.reduce((sum, r) => sum + r.quantidade_disponivel, 0)
-                      const totalComprometido = grupoResultados.reduce((sum, r) => sum + r.quantidade_comprometida, 0)
+                      const totalOcupado = grupoResultados.reduce((sum, r) => sum + (r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0), 0)
                       const totalItens = grupoResultados.length
                       const grupoId = `${categoria}-${chaveGrupo}`
                       const isExpanded = expandedGroups[grupoId]
@@ -451,8 +456,8 @@ export default function Disponibilidade() {
                                   <p className="text-xl font-bold text-dark-50">{totalItens}</p>
                                 </div>
                                 <div>
-                                  <p className="text-sm text-dark-400">Comprometidos</p>
-                                  <p className="text-xl font-bold text-yellow-500">{totalComprometido}</p>
+                                  <p className="text-sm text-dark-400">Ocupados</p>
+                                  <p className="text-xl font-bold text-yellow-500">{totalOcupado}</p>
                                 </div>
                                 <div>
                                   <p className="text-sm text-dark-400">Disponíveis</p>
@@ -500,9 +505,9 @@ export default function Disponibilidade() {
                                             <span className={`font-medium ${r.quantidade_disponivel > 0 ? 'text-green-500' : 'text-red-500'}`}>
                                               {r.quantidade_disponivel > 0 ? '✅ Disponível' : '❌ Indisponível'}
                                             </span>
-                                            {r.quantidade_comprometida > 0 && (
+                                            {((r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)) > 0 && (
                                               <span className="text-dark-400">
-                                                Comprometido: {r.quantidade_comprometida}
+                                                Ocupado: {(r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)}
                                               </span>
                                             )}
                                           </div>
@@ -561,10 +566,10 @@ export default function Disponibilidade() {
                                     {r.quantidade_disponivel}
                                   </span>
                                 </div>
-                                {r.quantidade_comprometida > 0 && (
+                                {((r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)) > 0 && (
                                   <div className="flex items-center justify-between mt-2">
-                                    <span className="text-sm text-dark-400">Comprometido:</span>
-                                    <span className="font-medium text-yellow-500">{r.quantidade_comprometida}</span>
+                                    <span className="text-sm text-dark-400">Ocupado:</span>
+                                    <span className="font-medium text-yellow-500">{(r.quantidade_comprometida || 0) + (r.quantidade_instalada || 0)}</span>
                                   </div>
                                 )}
                               </div>
