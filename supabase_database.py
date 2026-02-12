@@ -788,6 +788,21 @@ def listar_contas_receber(status=None, data_inicio=None, data_fim=None, compromi
         out.append(c)
     return out
 
+def _row_to_conta_receber(row):
+    class ContaReceber:
+        pass
+    c = ContaReceber()
+    c.id = row.get('id')
+    c.compromisso_id = row.get('compromisso_id')
+    c.descricao = row.get('descricao') or ''
+    c.valor = float(row.get('valor') or 0)
+    c.data_vencimento = _date_parse(row.get('data_vencimento'))
+    c.data_pagamento = _date_parse(row.get('data_pagamento'))
+    c.status = row.get('status') or 'Pendente'
+    c.forma_pagamento = row.get('forma_pagamento') or ''
+    c.observacoes = row.get('observacoes') or ''
+    return c
+
 def atualizar_conta_receber(conta_id, descricao=None, valor=None, data_vencimento=None, data_pagamento=None, status=None, forma_pagamento=None, observacoes=None):
     sb = get_supabase()
     payload = {}
@@ -807,7 +822,10 @@ def atualizar_conta_receber(conta_id, descricao=None, valor=None, data_venciment
         payload['observacoes'] = observacoes
     if payload:
         sb.table('contas_receber').update(payload).eq('id', int(conta_id)).execute()
-    return True
+    r = sb.table('contas_receber').select('*').eq('id', int(conta_id)).execute()
+    if not r.data or len(r.data) == 0:
+        return None
+    return _row_to_conta_receber(r.data[0])
 
 def deletar_conta_receber(conta_id):
     sb = get_supabase()
@@ -827,20 +845,7 @@ def marcar_conta_receber_paga(conta_id, data_pagamento=None, forma_pagamento=Non
     r = sb.table('contas_receber').select('*').eq('id', int(conta_id)).execute()
     if not r.data or len(r.data) == 0:
         return None
-    row = r.data[0]
-    class ContaReceber:
-        pass
-    c = ContaReceber()
-    c.id = row.get('id')
-    c.compromisso_id = row.get('compromisso_id')
-    c.descricao = row.get('descricao') or ''
-    c.valor = float(row.get('valor') or 0)
-    c.data_vencimento = _date_parse(row.get('data_vencimento'))
-    c.data_pagamento = _date_parse(row.get('data_pagamento'))
-    c.status = row.get('status') or 'Pago'
-    c.forma_pagamento = row.get('forma_pagamento') or ''
-    c.observacoes = row.get('observacoes') or ''
-    return c
+    return _row_to_conta_receber(r.data[0])
 
 
 # ---------- Contas a pagar ----------
@@ -863,7 +868,24 @@ def criar_conta_pagar(descricao, categoria, valor, data_vencimento, fornecedor=N
     ins = sb.table('contas_pagar').insert(payload).execute()
     if not ins.data or len(ins.data) == 0:
         raise Exception("Erro ao criar conta a pagar")
-    return ins.data[0]
+    return _row_to_conta_pagar(ins.data[0])
+
+def _row_to_conta_pagar(row):
+    class ContaPagar:
+        pass
+    c = ContaPagar()
+    c.id = row.get('id')
+    c.descricao = row.get('descricao') or ''
+    c.categoria = row.get('categoria') or ''
+    c.valor = float(row.get('valor') or 0)
+    c.data_vencimento = _date_parse(row.get('data_vencimento'))
+    c.data_pagamento = _date_parse(row.get('data_pagamento'))
+    c.status = row.get('status') or 'Pendente'
+    c.fornecedor = row.get('fornecedor')
+    c.item_id = row.get('item_id')
+    c.forma_pagamento = row.get('forma_pagamento') or ''
+    c.observacoes = row.get('observacoes') or ''
+    return c
 
 def listar_contas_pagar(status=None, data_inicio=None, data_fim=None, categoria=None):
     sb = get_supabase()
@@ -917,7 +939,10 @@ def atualizar_conta_pagar(conta_id, descricao=None, categoria=None, valor=None, 
         payload['item_id'] = int(item_id)
     if payload:
         sb.table('contas_pagar').update(payload).eq('id', int(conta_id)).execute()
-    return True
+    r = sb.table('contas_pagar').select('*').eq('id', int(conta_id)).execute()
+    if not r.data or len(r.data) == 0:
+        return None
+    return _row_to_conta_pagar(r.data[0])
 
 def deletar_conta_pagar(conta_id):
     sb = get_supabase()
@@ -963,19 +988,4 @@ def marcar_conta_pagar_paga(conta_id, data_pagamento=None, forma_pagamento=None)
     r = sb.table('contas_pagar').select('*').eq('id', int(conta_id)).execute()
     if not r.data or len(r.data) == 0:
         return None
-    row = r.data[0]
-    class ContaPagar:
-        pass
-    c = ContaPagar()
-    c.id = row.get('id')
-    c.descricao = row.get('descricao') or ''
-    c.categoria = row.get('categoria') or ''
-    c.valor = float(row.get('valor') or 0)
-    c.data_vencimento = _date_parse(row.get('data_vencimento'))
-    c.data_pagamento = _date_parse(row.get('data_pagamento'))
-    c.status = row.get('status') or 'Pago'
-    c.fornecedor = row.get('fornecedor')
-    c.item_id = row.get('item_id')
-    c.forma_pagamento = row.get('forma_pagamento') or ''
-    c.observacoes = row.get('observacoes') or ''
-    return c
+    return _row_to_conta_pagar(r.data[0])
