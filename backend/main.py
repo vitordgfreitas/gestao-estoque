@@ -2262,12 +2262,11 @@ async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_toke
 
 @app.put("/api/pecas-carros/{associacao_id}", response_model=dict)
 async def atualizar_peca_carro(
-    associacao_id: int,
-    peca_carro: PecaCarroUpdate,
-    token: str = Depends(verify_token),
+    associacao_id: int, 
+    peca_carro: PecaCarroUpdate, 
+    token: str = Depends(verify_token), 
     db_module = Depends(get_db)
 ):
-    """Atualiza uma associação peça-carro"""
     try:
         associacao_atualizada = db_module.atualizar_peca_carro(
             associacao_id=associacao_id,
@@ -2275,14 +2274,15 @@ async def atualizar_peca_carro(
             data_instalacao=peca_carro.data_instalacao,
             observacoes=peca_carro.observacoes
         )
+        
         if not associacao_atualizada:
             raise HTTPException(status_code=404, detail="Associação não encontrada")
-        return peca_carro_to_dict(associacao_atualizada)
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        
+        # Retorno blindado contra erros de JSON
+        return JSONResponse(content=jsonable_encoder(peca_carro_to_dict(associacao_atualizada)))
+        
     except Exception as e:
+        print(f"❌ ERRO UPDATE PEÇAS-CARROS: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/pecas-carros/{associacao_id}", status_code=status.HTTP_204_NO_CONTENT)

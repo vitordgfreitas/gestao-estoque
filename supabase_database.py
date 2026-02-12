@@ -198,7 +198,7 @@ def buscar_item_por_id(item_id):
             if r_s.data: d_spec = {_labelify_column(k): v for k, v in r_s.data[0].items() if k not in ['id', 'item_id']}
         except: pass
     return _row_to_item(row, dados_categoria={**row.get('dados_categoria', {}), **d_spec})
-    
+
 def deletar_item(item_id):
     sb = get_supabase(); item = buscar_item_por_id(item_id)
     if item:
@@ -250,16 +250,31 @@ def deletar_compromisso(cid):
 # --- CRUD DE PEÇAS EM CARROS (ASSOCIAÇÕES) ---
 
 def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, observacoes=None):
-    sb = get_supabase(); peca = buscar_item_por_id(peca_id)
+    sb = get_supabase()
+    peca = buscar_item_por_id(peca_id)
     custo = peca.valor_compra if peca else 0
+    
+    # --- FIX DATA SERIALIZATION ---
+    dt_fix = data_instalacao
+    if hasattr(dt_fix, 'isoformat'):
+        dt_fix = dt_fix.isoformat()
+    elif not dt_fix:
+        dt_fix = date.today().isoformat()
+
     payload = {
-        'peca_id': int(peca_id), 'carro_id': int(carro_id), 'quantidade': int(quantidade),
-        'custo_na_data': custo, 'data_instalacao': data_instalacao or date.today().isoformat(),
+        'peca_id': int(peca_id), 
+        'carro_id': int(carro_id), 
+        'quantidade': int(quantidade),
+        'custo_na_data': float(custo), 
+        'data_instalacao': dt_fix,
         'observacoes': observacoes or ''
     }
+    
     ins = sb.table('pecas_carros').insert(payload).execute()
+    if not ins.data: raise Exception("Erro ao inserir associação de peça")
+    
     registrar_movimentacao(peca_id, -quantidade, 'INSTALACAO', ref_id=carro_id)
-    return ins.data[0]
+    return ins.data[0] # Retorna o dicionário criado
 
 def listar_pecas_carros(carro_id=None, peca_id=None):
     sb = get_supabase(); q = sb.table('pecas_carros').select('*')
@@ -287,18 +302,30 @@ def buscar_peca_carro_por_id(associacao_id):
 
 def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, observacoes=None):
     sb = get_supabase()
-    # Busca associação antiga para calcular diferença no log
-    r_antiga = sb.table('pecas_carros').select('*').eq('id', associacao_id).single().execute()
+    
+    # 1. Busca a associação antiga para o log de movimentação
+    r_antiga = sb.table('pecas_carros').select('*').eq('id', int(associacao_id)).execute()
+    if not r_antiga.data: return None
+    dados_antigos = r_antiga.data[0]
+
     payload = {}
     if quantidade is not None: payload['quantidade'] = int(quantidade)
-    if data_instalacao: payload['data_instalacao'] = _date_parse(data_instalacao).isoformat()
     if observacoes is not None: payload['observacoes'] = observacoes
     
-    if quantidade is not None and r_antiga.data:
-        diff = r_antiga.data['quantidade'] - int(quantidade)
-        registrar_movimentacao(r_antiga.data['peca_id'], diff, 'AJUSTE_INSTALACAO', ref_id=r_antiga.data['carro_id'])
+    # --- BLINDAGEM DE DATA ---
+    if data_instalacao:
+        dt_fix = data_instalacao
+        payload['data_installation'] = dt_fix.isoformat() if hasattr(dt_fix, 'isoformat') else str(dt_fix)
     
+    # 2. Registra a diferença no estoque se a quantidade mudou
+    if quantidade is not None:
+        diff = dados_antigos['quantidade'] - int(quantidade)
+        if diff != 0:
+            registrar_movimentacao(dados_antigos['peca_id'], diff, 'AJUSTE_INSTALACAO', ref_id=dados_antigos['carro_id'])
+    
+    # 3. Executa o Update
     r = sb.table('pecas_carros').update(payload).eq('id', int(associacao_id)).execute()
+    
     return r.data[0] if r.data else None
 
 def deletar_peca_carro(associacao_id):
