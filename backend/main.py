@@ -62,7 +62,21 @@ except ImportError:
 # Por padrão, tenta usar Google Sheets (mesmo comportamento do Streamlit)
 USE_GOOGLE_SHEETS = os.getenv('USE_GOOGLE_SHEETS', 'true').lower() == 'true'
 
-# Inicializa o módulo de banco de dados apropriado
+# Supabase: carregado opcionalmente; o frontend pode alternar via header X-Use-Database: supabase
+db_module_supabase = None
+SUPABASE_AVAILABLE = False
+if os.getenv('SUPABASE_URL') and (os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')):
+    try:
+        import supabase_database as db_module_supabase
+        SUPABASE_AVAILABLE = True
+        if DEBUG_MODE:
+            print("✅ Supabase disponível (use header X-Use-Database: supabase para alternar)")
+    except Exception as e:
+        if DEBUG_MODE:
+            print(f"⚠️ Supabase não carregado: {e}")
+        db_module_supabase = None
+
+# Inicializa o módulo de banco de dados apropriado (padrão: Sheets ou SQLite)
 db_module = None
 sheets_info = None
 
@@ -146,10 +160,10 @@ async def startup_event():
         except Exception as e:
             print(f"[STARTUP] Erro ao limpar cache: {e}")
 
-# Middleware adicional para garantir CORS em TODAS as respostas
+# Middleware adicional para garantir CORS e seleção de banco (Supabase vs Sheets)
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
-    """Adiciona headers CORS em todas as respostas"""
+    """Adiciona headers CORS e define db_module por request (toggle Supabase)."""
     # Se for OPTIONS (preflight), retorna imediatamente com headers CORS
     if request.method == "OPTIONS":
         return JSONResponse(
@@ -161,7 +175,12 @@ async def add_cors_headers(request: Request, call_next):
                 "Access-Control-Max-Age": "3600",
             }
         )
-    
+    # Define qual banco usar neste request (header X-Use-Database: supabase | sheets)
+    use_db = request.headers.get("X-Use-Database", "").strip().lower()
+    if use_db == "supabase" and db_module_supabase is not None:
+        request.state.db_module = db_module_supabase
+    else:
+        request.state.db_module = db_module
     # Processa request normal
     response = await call_next(request)
     
@@ -216,6 +235,10 @@ app.add_middleware(
 
 # Security
 security = HTTPBearer()
+
+# Dependência para obter o db_module do request (permite toggle Supabase via header X-Use-Database)
+def get_db(request: Request):
+    return getattr(request.state, "db_module", db_module)
 
 # ============= MODELS PYDANTIC =============
 
@@ -641,7 +664,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(
 # ============= ROTAS =============
 
 @app.get("/")
-async def root():
+async def root(db_module = Depends(get_db)):
     """Informações sobre a API e status da conexão"""
     db_type = "Google Sheets" if USE_GOOGLE_SHEETS else "SQLite"
     info = {
@@ -655,12 +678,12 @@ async def root():
     return info
 
 @app.get("/api/health")
-async def health():
+async def health(db_module = Depends(get_db)):
     """Health check da API"""
     return {"status": "ok"}
 
 @app.get("/api/debug")
-async def debug():
+async def debug(db_module = Depends(get_db)):
     """Endpoint de debug para verificar conexão e dados"""
     try:
         db_type = "Google Sheets" if USE_GOOGLE_SHEETS else "SQLite"
@@ -691,7 +714,7 @@ async def debug():
 # ============= ITENS =============
 
 @app.get("/api/itens", response_model=List[dict])
-async def listar_itens():
+async def listar_itens(db_module = Depends(get_db)):
     """Lista todos os itens"""
     try:
         if db_module is None:
@@ -712,7 +735,8 @@ async def buscar_itens(
     ordenar_por: Optional[str] = "nome",
     ordem: Optional[str] = "asc",
     pagina: Optional[int] = 1,
-    por_pagina: Optional[int] = 50
+    por_pagina: Optional[int] = 50,
+    db_module = Depends(get_db)
 ):
     """Busca avançada de itens com filtros e paginação"""
     try:
@@ -768,7 +792,7 @@ async def buscar_itens(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/itens/{item_id}", response_model=dict)
-async def buscar_item(item_id: int):
+async def buscar_item(item_id: int, db_module = Depends(get_db)):
     """Busca um item por ID"""
     try:
         item = db_module.buscar_item_por_id(item_id)
@@ -781,7 +805,7 @@ async def buscar_item(item_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/itens", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_item(item: ItemCreate):
+async def criar_item(item: ItemCreate, db_module = Depends(get_db)):
     """Cria um novo item"""
     try:
         novo_item = db_module.criar_item(
@@ -805,7 +829,7 @@ async def criar_item(item: ItemCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/itens/{item_id}", response_model=dict)
-async def atualizar_item(item_id: int, item: ItemUpdate):
+async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
     """Atualiza um item existente"""
     try:
         item_atualizado = db_module.atualizar_item(
@@ -834,7 +858,7 @@ async def atualizar_item(item_id: int, item: ItemUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/itens/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_item(item_id: int):
+async def deletar_item(item_id: int, db_module = Depends(get_db)):
     """Deleta um item"""
     try:
         sucesso = db_module.deletar_item(item_id)
@@ -849,7 +873,7 @@ async def deletar_item(item_id: int):
 # ============= COMPROMISSOS =============
 
 @app.get("/api/compromissos", response_model=List[dict])
-async def listar_compromissos():
+async def listar_compromissos(db_module = Depends(get_db)):
     """Lista todos os compromissos"""
     try:
         if db_module is None:
@@ -875,7 +899,8 @@ async def buscar_compromissos(
     ordenar_por: Optional[str] = "data_inicio",
     ordem: Optional[str] = "asc",
     pagina: Optional[int] = 1,
-    por_pagina: Optional[int] = 50
+    por_pagina: Optional[int] = 50,
+    db_module = Depends(get_db)
 ):
     """Busca avançada de compromissos com filtros e paginação"""
     try:
@@ -957,7 +982,7 @@ async def buscar_compromissos(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/compromissos/{compromisso_id}", response_model=dict)
-async def buscar_compromisso(compromisso_id: int):
+async def buscar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
     """Busca um compromisso por ID"""
     try:
         compromissos = db_module.listar_compromissos()
@@ -971,7 +996,7 @@ async def buscar_compromisso(compromisso_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/compromissos", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_compromisso(compromisso: CompromissoCreate):
+async def criar_compromisso(compromisso: CompromissoCreate, db_module = Depends(get_db)):
     """Cria um novo compromisso"""
     try:
         # Verifica disponibilidade antes de criar
@@ -1007,7 +1032,7 @@ async def criar_compromisso(compromisso: CompromissoCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/compromissos/{compromisso_id}", response_model=dict)
-async def atualizar_compromisso(compromisso_id: int, compromisso: CompromissoUpdate):
+async def atualizar_compromisso(compromisso_id: int, compromisso: CompromissoUpdate, db_module = Depends(get_db)):
     """Atualiza um compromisso existente"""
     try:
         # Busca compromisso atual
@@ -1062,7 +1087,7 @@ async def atualizar_compromisso(compromisso_id: int, compromisso: CompromissoUpd
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/compromissos/{compromisso_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_compromisso(compromisso_id: int):
+async def deletar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
     """Deleta um compromisso"""
     try:
         sucesso = db_module.deletar_compromisso(compromisso_id)
@@ -1077,7 +1102,7 @@ async def deletar_compromisso(compromisso_id: int):
 # ============= DISPONIBILIDADE =============
 
 @app.post("/api/disponibilidade", response_model=dict)
-async def verificar_disponibilidade(request: DisponibilidadeRequest):
+async def verificar_disponibilidade(request: DisponibilidadeRequest, db_module = Depends(get_db)):
     """Verifica disponibilidade de itens"""
     try:
         if request.item_id:
@@ -1131,7 +1156,7 @@ async def verificar_disponibilidade(request: DisponibilidadeRequest):
 # ============= CATEGORIAS E CAMPOS =============
 
 @app.get("/api/categorias", response_model=List[str])
-async def listar_categorias():
+async def listar_categorias(db_module = Depends(get_db)):
     """Lista todas as categorias disponíveis"""
     try:
         if db_module is None:
@@ -1154,7 +1179,7 @@ async def listar_categorias():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/categorias", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_categoria(nome_categoria: str = Body(..., embed=True), token: str = Depends(verify_token)):
+async def criar_categoria(nome_categoria: str = Body(..., embed=True), token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Cria uma nova categoria e sua aba correspondente no Google Sheets"""
     try:
         if db_module is None:
@@ -1197,7 +1222,7 @@ async def criar_categoria(nome_categoria: str = Body(..., embed=True), token: st
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/categorias/{categoria}/campos", response_model=List[str])
-async def obter_campos_categoria(categoria: str):
+async def obter_campos_categoria(categoria: str, db_module = Depends(get_db)):
     """Obtém os campos específicos de uma categoria"""
     try:
         if db_module is None:
@@ -1217,7 +1242,7 @@ async def obter_campos_categoria(categoria: str):
 # ============= ESTATÍSTICAS =============
 
 @app.get("/api/stats")
-async def obter_estatisticas():
+async def obter_estatisticas(db_module = Depends(get_db)):
     """Retorna estatísticas gerais"""
     try:
         itens = db_module.listar_itens()
@@ -1287,7 +1312,7 @@ async def obter_estatisticas():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/auditoria/{tabela}/{registro_id}", response_model=dict)
-async def obter_historico_auditoria(tabela: str, registro_id: int):
+async def obter_historico_auditoria(tabela: str, registro_id: int, db_module = Depends(get_db)):
     """Obtém histórico de mudanças de um registro"""
     try:
         historico = auditoria.obter_historico(tabela, registro_id)
@@ -1296,7 +1321,7 @@ async def obter_historico_auditoria(tabela: str, registro_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/backup/criar", response_model=dict)
-async def criar_backup():
+async def criar_backup(db_module = Depends(get_db)):
     """Cria backup manual da planilha"""
     try:
         if backup is None:
@@ -1309,7 +1334,7 @@ async def criar_backup():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/backup/listar", response_model=dict)
-async def listar_backups(max_backups: Optional[int] = 50):
+async def listar_backups(max_backups: Optional[int] = 50, db_module = Depends(get_db)):
     """Lista backups disponíveis"""
     try:
         if backup is None:
@@ -1320,7 +1345,7 @@ async def listar_backups(max_backups: Optional[int] = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/backup/restaurar/{backup_id}", response_model=dict)
-async def restaurar_backup_endpoint(backup_id: str):
+async def restaurar_backup_endpoint(backup_id: str, db_module = Depends(get_db)):
     """Restaura um backup específico"""
     try:
         if backup is None:
@@ -1333,7 +1358,7 @@ async def restaurar_backup_endpoint(backup_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/backup/exportar", response_model=dict)
-async def exportar_backup_json():
+async def exportar_backup_json(db_module = Depends(get_db)):
     """Exporta todos os dados em formato JSON"""
     try:
         if backup is None:
@@ -1347,7 +1372,7 @@ async def exportar_backup_json():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/backup/limpar", response_model=dict)
-async def limpar_backups_antigos_endpoint(dias_manter: Optional[int] = 30):
+async def limpar_backups_antigos_endpoint(dias_manter: Optional[int] = 30, db_module = Depends(get_db)):
     """Remove backups mais antigos que o número de dias especificado"""
     try:
         if backup is None:
@@ -1358,7 +1383,7 @@ async def limpar_backups_antigos_endpoint(dias_manter: Optional[int] = 30):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/info")
-async def obter_info():
+async def obter_info(db_module = Depends(get_db)):
     """Retorna informações sobre a API e conexão"""
     try:
         # Debug: mostra TODAS as variáveis de ambiente relacionadas
@@ -1384,12 +1409,13 @@ async def obter_info():
         if USE_GOOGLE_SHEETS and sheets_info:
             info["spreadsheet_url"] = sheets_info.get('spreadsheet_url', None)
             info["spreadsheet_id"] = sheets_info.get('spreadsheet_id', None)
+        info["supabase_available"] = SUPABASE_AVAILABLE
         return info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/cache/clear")
-async def limpar_cache(token: str = Depends(verify_token)):
+async def limpar_cache(token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Limpa o cache de dados do Google Sheets"""
     try:
         if USE_GOOGLE_SHEETS:
@@ -1433,7 +1459,7 @@ def conta_pagar_to_dict(conta):
     }
 
 @app.post("/api/contas-receber", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_conta_receber(conta: ContaReceberCreate, token: str = Depends(verify_token)):
+async def criar_conta_receber(conta: ContaReceberCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Cria uma nova conta a receber"""
     try:
         nova_conta = db_module.criar_conta_receber(
@@ -1456,7 +1482,8 @@ async def listar_contas_receber(
     data_inicio: Optional[date] = None,
     data_fim: Optional[date] = None,
     compromisso_id: Optional[int] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Lista contas a receber com filtros opcionais"""
     try:
@@ -1471,7 +1498,7 @@ async def listar_contas_receber(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/contas-receber/{conta_id}", response_model=dict)
-async def atualizar_conta_receber(conta_id: int, conta: ContaReceberUpdate, token: str = Depends(verify_token)):
+async def atualizar_conta_receber(conta_id: int, conta: ContaReceberUpdate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Atualiza uma conta a receber"""
     try:
         conta_atualizada = db_module.atualizar_conta_receber(
@@ -1497,7 +1524,8 @@ async def marcar_conta_receber_paga(
     conta_id: int,
     data_pagamento: Optional[date] = None,
     forma_pagamento: Optional[str] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Marca uma conta a receber como paga"""
     try:
@@ -1513,7 +1541,7 @@ async def marcar_conta_receber_paga(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/contas-receber/{conta_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_conta_receber(conta_id: int, token: str = Depends(verify_token)):
+async def deletar_conta_receber(conta_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Deleta uma conta a receber"""
     try:
         sucesso = db_module.deletar_conta_receber(conta_id)
@@ -1523,7 +1551,7 @@ async def deletar_conta_receber(conta_id: int, token: str = Depends(verify_token
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/contas-pagar", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_conta_pagar(conta: ContaPagarCreate, token: str = Depends(verify_token)):
+async def criar_conta_pagar(conta: ContaPagarCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Cria uma nova conta a pagar"""
     try:
         nova_conta = db_module.criar_conta_pagar(
@@ -1548,7 +1576,8 @@ async def listar_contas_pagar(
     data_inicio: Optional[date] = None,
     data_fim: Optional[date] = None,
     categoria: Optional[str] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Lista contas a pagar com filtros opcionais"""
     try:
@@ -1563,7 +1592,7 @@ async def listar_contas_pagar(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/contas-pagar/{conta_id}", response_model=dict)
-async def atualizar_conta_pagar(conta_id: int, conta: ContaPagarUpdate, token: str = Depends(verify_token)):
+async def atualizar_conta_pagar(conta_id: int, conta: ContaPagarUpdate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Atualiza uma conta a pagar"""
     try:
         conta_atualizada = db_module.atualizar_conta_pagar(
@@ -1592,7 +1621,8 @@ async def marcar_conta_pagar_paga(
     conta_id: int,
     data_pagamento: Optional[date] = None,
     forma_pagamento: Optional[str] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Marca uma conta a pagar como paga"""
     try:
@@ -1608,7 +1638,7 @@ async def marcar_conta_pagar_paga(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/contas-pagar/{conta_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_conta_pagar(conta_id: int, token: str = Depends(verify_token)):
+async def deletar_conta_pagar(conta_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Deleta uma conta a pagar"""
     try:
         sucesso = db_module.deletar_conta_pagar(conta_id)
@@ -1618,7 +1648,7 @@ async def deletar_conta_pagar(conta_id: int, token: str = Depends(verify_token))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/financeiro/dashboard", response_model=DashboardFinanceiroResponse)
-async def obter_dashboard_financeiro(token: str = Depends(verify_token)):
+async def obter_dashboard_financeiro(token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Obtém dados do dashboard financeiro"""
     try:
         hoje = date.today()
@@ -1677,7 +1707,8 @@ async def obter_dashboard_financeiro(token: str = Depends(verify_token)):
 async def obter_fluxo_caixa(
     data_inicio: Optional[date] = None,
     data_fim: Optional[date] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Obtém fluxo de caixa por período"""
     try:
@@ -1762,7 +1793,7 @@ def parcela_to_dict(parcela):
     }
 
 @app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(verify_token)):
+async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Cria um novo financiamento e gera as parcelas automaticamente"""
     try:
         # Prepara itens_ids (suporta compatibilidade reversa)
@@ -1825,7 +1856,8 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
 async def listar_financiamentos(
     status: Optional[str] = None,
     item_id: Optional[int] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Lista financiamentos com filtros opcionais"""
     try:
@@ -1840,7 +1872,7 @@ async def listar_financiamentos(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/financiamentos/{financiamento_id}", response_model=dict)
-async def buscar_financiamento(financiamento_id: int, token: str = Depends(verify_token)):
+async def buscar_financiamento(financiamento_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Busca um financiamento por ID com suas parcelas"""
     try:
         print(f"[DEBUG] Buscando financiamento ID {financiamento_id}")
@@ -1867,7 +1899,7 @@ async def buscar_financiamento(financiamento_id: int, token: str = Depends(verif
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/financiamentos/{financiamento_id}", response_model=dict)
-async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdate, token: str = Depends(verify_token)):
+async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Atualiza um financiamento"""
     try:
         fin_atualizado = db_module.atualizar_financiamento(
@@ -1887,7 +1919,7 @@ async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdat
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/financiamentos/{financiamento_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_financiamento(financiamento_id: int, token: str = Depends(verify_token)):
+async def deletar_financiamento(financiamento_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Deleta um financiamento"""
     try:
         sucesso = db_module.deletar_financiamento(financiamento_id)
@@ -1903,7 +1935,8 @@ async def pagar_parcela_financiamento(
     financiamento_id: int,
     parcela_id: int,
     pagamento: PagarParcelaRequest,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Registra pagamento de uma parcela"""
     try:
@@ -1928,7 +1961,8 @@ async def atualizar_parcela_financiamento(
     financiamento_id: int,
     parcela_id: int,
     parcela_update: ParcelaUpdate,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Atualiza uma parcela de financiamento"""
     try:
@@ -1952,7 +1986,8 @@ async def atualizar_parcela_financiamento(
 async def calcular_valor_presente_financiamento(
     financiamento_id: int,
     usar_cdi: Optional[bool] = False,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Calcula valor presente (NPV) de um financiamento"""
     try:
@@ -1990,7 +2025,7 @@ async def calcular_valor_presente_financiamento(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/financiamentos/dashboard", response_model=dict)
-async def obter_dashboard_financiamentos(token: str = Depends(verify_token)):
+async def obter_dashboard_financiamentos(token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Obtém dashboard de financiamentos"""
     try:
         financiamentos_ativos = db_module.listar_financiamentos(status='Ativo')
@@ -2066,7 +2101,7 @@ def peca_carro_to_dict(pc):
     return result
 
 @app.post("/api/pecas-carros", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token)):
+async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Associa uma peça a um carro"""
     try:
         nova_associacao = db_module.criar_peca_carro(
@@ -2086,7 +2121,8 @@ async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(ver
 async def listar_pecas_carros(
     carro_id: Optional[int] = None,
     peca_id: Optional[int] = None,
-    token: str = Depends(verify_token)
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Lista associações de peças em carros com filtros opcionais"""
     try:
@@ -2096,7 +2132,7 @@ async def listar_pecas_carros(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/pecas-carros/{associacao_id}", response_model=dict)
-async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_token)):
+async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Busca uma associação peça-carro por ID"""
     try:
         associacao = db_module.buscar_peca_carro_por_id(associacao_id)
@@ -2110,9 +2146,10 @@ async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_toke
 
 @app.put("/api/pecas-carros/{associacao_id}", response_model=dict)
 async def atualizar_peca_carro(
-    associacao_id: int, 
-    peca_carro: PecaCarroUpdate, 
-    token: str = Depends(verify_token)
+    associacao_id: int,
+    peca_carro: PecaCarroUpdate,
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db)
 ):
     """Atualiza uma associação peça-carro"""
     try:
@@ -2133,7 +2170,7 @@ async def atualizar_peca_carro(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/pecas-carros/{associacao_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_peca_carro(associacao_id: int, token: str = Depends(verify_token)):
+async def deletar_peca_carro(associacao_id: int, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Remove uma associação peça-carro"""
     try:
         sucesso = db_module.deletar_peca_carro(associacao_id)

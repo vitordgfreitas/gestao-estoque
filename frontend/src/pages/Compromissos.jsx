@@ -591,23 +591,6 @@ export default function Compromissos() {
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || (formData.tipo_compromisso === 'itens_alugados' && itensFiltrados.length === 0)}
-          className="btn btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {loading ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-              Salvando...
-            </>
-          ) : (
-            <>
-              <Calendar size={20} />
-              {formData.tipo_compromisso === 'pecas_carro' ? 'Associar Peça ao Carro' : 'Registrar Compromisso'}
-            </>
-          )}
-        </button>
           </>
         )}
 

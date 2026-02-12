@@ -10,11 +10,17 @@ const api = axios.create({
   timeout: 30000, // 30 segundos para cold start do Render
 })
 
-// Interceptor para adicionar token se necessário
+// Interceptor para adicionar token e header de banco (Supabase vs Sheets)
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  const useSupabase = localStorage.getItem('useSupabase') === 'true'
+  if (useSupabase) {
+    config.headers['X-Use-Database'] = 'supabase'
+  } else {
+    config.headers['X-Use-Database'] = 'sheets'
   }
   return config
 })
