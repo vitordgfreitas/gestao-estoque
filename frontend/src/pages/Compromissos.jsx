@@ -89,27 +89,43 @@ export default function Compromissos() {
   };
 
   // ADICIONAR ITEM COM TRAVA DE ESTOQUE TOTAL
-  const handleAddItem = () => {
-    if (!selecaoItem.id) return toast.error("Selecione um item");
-    
-    const itemInfo = itens.find(i => i.id === parseInt(selecaoItem.id));
-    const quantidadeDigitada = parseInt(selecaoItem.qtd);
+  const handleAddItem = async () => {
+  if (!selecaoItem.id) return toast.error("Selecione um item");
+  
+  const itemInfo = itens.find(i => i.id === parseInt(selecaoItem.id));
+  const quantidadeDigitada = parseInt(selecaoItem.qtd);
 
-    if (quantidadeDigitada > itemInfo.quantidade_total) {
-      return toast.error(
-        `Estoque insuficiente! Você possui apenas ${itemInfo.quantidade_total} unidades de "${itemInfo.nome}" no total.`
-      );
-    }
+  // 1. Verificação Física Básica (Estoque total que você já tinha)
+  if (quantidadeDigitada > itemInfo.quantidade_total) {
+    return toast.error(`Estoque total insuficiente! Você só possui ${itemInfo.quantidade_total} un.`);
+  }
 
+  // 2. VERIFICAÇÃO DE CALENDÁRIO (A mágica acontece aqui)
+  const loadingToast = toast.loading("Consultando disponibilidade nas datas...");
+  try {
+    // Chamamos sua API de disponibilidade passando as datas do formulário
+    const res = await api.get('/api/disponibilidade', {
+      params: {
+        item_id: selecaoItem.id,
+        data_inicio: formData.data_inicio,
+        data_fim: formData.data_fim
+      }
+    });
+
+    const { disponivel_minimo } = res.data;
+
+    // Verifica se a quantidade no carrinho atual + a nova excede o disponível no período
     const existente = itensContrato.find(i => i.item_id === itemInfo.id);
-    const quantidadeJaNoCarrinho = existente ? existente.quantidade : 0;
+    const qtdNoCarrinho = existente ? existente.quantidade : 0;
 
-    if (quantidadeJaNoCarrinho + quantidadeDigitada > itemInfo.quantidade_total) {
+    if (qtdNoCarrinho + quantidadeDigitada > disponivel_minimo) {
+      toast.dismiss(loadingToast);
       return toast.error(
-        `Limite atingido! Já existem ${quantidadeJaNoCarrinho} unidades na lista e você tem apenas ${itemInfo.quantidade_total} no acervo.`
+        `Conflito de data! Para este período, você só tem ${disponivel_minimo} unidades disponíveis.`
       );
     }
 
+    // Se passou, adiciona no estado
     if (existente) {
       setItensContrato(itensContrato.map(i => i.item_id === itemInfo.id 
         ? { ...i, quantidade: i.quantidade + quantidadeDigitada } : i));
@@ -122,8 +138,13 @@ export default function Compromissos() {
     }
     
     setSelecaoItem({ id: '', qtd: 1 });
-    toast.success("Item validado e adicionado.");
-  };
+    toast.success("Disponibilidade confirmada e item adicionado!");
+  } catch (error) {
+    toast.error("Erro ao validar disponibilidade. Verifique as datas.");
+  } finally {
+    toast.dismiss(loadingToast);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -162,7 +183,7 @@ export default function Compromissos() {
         }
 
         await api.post('/api/compromissos', payload)
-        toast.success('Contrato Master registrado com sucesso!')
+        toast.success('Contrato registrado com sucesso!')
       }
 
       // Resetar formulário

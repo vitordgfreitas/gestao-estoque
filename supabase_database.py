@@ -576,7 +576,6 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
     }
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None, **kwargs):
-    """Verifica disponibilidade olhando agora na tabela de relacionamento (compromisso_itens)"""
     item = buscar_item_por_id(item_id)
     if not item: return None
     
@@ -584,21 +583,29 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
     d_fim = _date_parse(data_fim)
     sb = get_supabase()
     
-    # 1. BUSCA CORRIGIDA: Olha na tabela compromisso_itens e traz os dados do compromisso pai
-    # O select('quantidade, compromissos(*)') faz o JOIN automático do Supabase
-    r = sb.table('compromisso_itens').select('quantidade, compromissos(*)').eq('item_id', item_id).execute()
+    # CORREÇÃO: Forçamos a query a olhar APENAS para a tabela de relação.
+    # Se o erro 500 persistir, verifique se a VIEW 'view_saude_ativo' foi realmente recriada.
+    r = sb.table('compromisso_itens') \
+          .select('quantidade, compromissos(id, data_inicio, data_fim)') \
+          .eq('item_id', item_id) \
+          .execute()
+    
     dados_relacionamento = r.data or []
     
     todos_comps = []
     for rel in dados_relacionamento:
-        dados_compromisso = rel.get('compromissos')
-        if not dados_compromisso: continue
+        raw_comp = rel.get('compromissos')
+        if not raw_comp: continue
         
-        # Transformamos os dados do compromisso em objeto usando sua função original
-        comp_obj = _row_to_compromisso(dados_compromisso)
-        
-        # SOBREPOMOS a quantidade: No modelo Master, a quantidade está na tabela de relação
-        comp_obj.quantidade = rel.get('quantidade', 0)
+        # Criamos um objeto "on-the-fly" para o motor de data funcionar
+        # sem depender de mappers antigos que podem estar buscando colunas deletadas
+        from types import SimpleNamespace
+        comp_obj = SimpleNamespace(
+            id=raw_comp['id'],
+            data_inicio=_date_parse(raw_comp['data_inicio']),
+            data_fim=_date_parse(raw_comp['data_fim']),
+            quantidade=int(rel.get('quantidade', 0))
+        )
         todos_comps.append(comp_obj)
     
     # Filtra apenas os que batem com o período
