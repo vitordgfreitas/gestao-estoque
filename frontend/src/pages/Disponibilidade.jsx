@@ -51,30 +51,33 @@ export default function Disponibilidade() {
   })
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setResultado(null)
+  e.preventDefault();
+  setLoading(true);
+  setResultado(null);
 
-    try {
-      const payload = {
-        item_id: modoConsulta === 'especifico' && itemSelecionado ? parseInt(itemSelecionado) : null,
-        data_consulta: dataConsulta,
-        filtro_categoria: categoriaFiltro !== 'Todas as Categorias' ? categoriaFiltro : null,
-        filtro_localizacao: localizacaoFiltro !== 'Todas as Localizações' ? localizacaoFiltro : null,
-      }
-      
-      const response = await disponibilidadeAPI.verificar(payload)
-      setResultado(response.data)
-      
-      if (response.data.resultados?.length === 0) {
-        toast('Nenhum item encontrado', { icon: '⚠️' })
-      }
-    } catch (error) {
-      toast.error('Erro no servidor ao consultar disponibilidade')
-    } finally {
-      setLoading(false)
+  try {
+    // Montamos os parâmetros exatamente como o Backend espera no @app.get
+    const params = {
+      item_id: modoConsulta === 'especifico' && itemSelecionado ? parseInt(itemSelecionado) : null,
+      data_consulta: dataConsulta,
+      filtro_categoria: categoriaFiltro !== 'Todas as Categorias' ? categoriaFiltro : null,
+      filtro_localizacao: localizacaoFiltro !== 'Todas as Localizações' ? localizacaoFiltro : null,
+    };
+    
+    // Agora o 'params' vai na URL: /api/disponibilidade?item_id=10&data_consulta=...
+    const response = await disponibilidadeAPI.verificar(params);
+    setResultado(response.data);
+    
+    if (response.data.resultados?.length === 0) {
+      toast('Nenhum item encontrado', { icon: '⚠️' });
     }
+  } catch (error) {
+    console.error(error);
+    toast.error('Erro ao consultar disponibilidade. Verifique o console.');
+  } finally {
+    setLoading(false);
   }
+};
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
