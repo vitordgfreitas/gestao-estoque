@@ -12,18 +12,17 @@ const api = axios.create({
 
 // Interceptor para adicionar token e header de banco (Supabase vs Sheets)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  const useSupabase = localStorage.getItem('useSupabase') === 'true'
-  if (useSupabase) {
-    config.headers['X-Use-Database'] = 'supabase'
-  } else {
-    config.headers['X-Use-Database'] = 'sheets'
-  }
-  return config
-})
+
+  // Busca o banco selecionado ou assume sqlite por padrão
+  const selectedDb = localStorage.getItem('selected_db') || 'sqlite';
+  config.headers['X-Use-Database'] = selectedDb;
+
+  return config;
+});
 
 // Interceptor para tratar erros de autenticação e logar 500 com detalhe
 api.interceptors.response.use(
