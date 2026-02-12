@@ -187,28 +187,31 @@ export default function Itens() {
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-
+    e.preventDefault();
+    setLoading(true);
+  
     try {
-      // Validação básica
-      if (!formData.nome.trim() || !formData.cidade.trim() || !formData.uf) {
-        toast.error('Por favor, preencha os campos obrigatórios')
-        setLoading(false)
-        return
-      }
-
-      // Valida campos dinâmicos obrigatórios (Chassi e Renavam são opcionais)
-      const camposOpcionaisCategoria = ['Chassi', 'Renavam']
-      for (const campo of camposCategoria) {
-        if (camposOpcionaisCategoria.includes(campo)) continue
-        const valor = camposDinamicos[campo]
-        if (!valor || (typeof valor === 'string' && !valor.trim())) {
-          toast.error(`Por favor, preencha o campo: ${campo}`)
-          setLoading(false)
-          return
-        }
-      }
+      // Criamos uma cópia dos dados para limpar o valor financeiro
+      const payload = {
+        ...formData,
+        quantidade_total: parseInt(formData.quantidade_total),
+        // Converte "1.250,50" -> 1250.50
+        valor_compra: parseFloat(
+          String(formData.valor_compra)
+            .replace(/\./g, '') // Remove pontos de milhar
+            .replace(',', '.')  // Troca vírgula decimal por ponto
+        ) || 0
+      };
+  
+      await itensAPI.criar(payload);
+      toast.success('Item registrado com sucesso!');
+      // ... reset form
+    } catch (error) {
+      toast.error('Erro ao salvar item. Verifique os valores.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
       // Prepara payload
       const payload = {
