@@ -226,7 +226,7 @@ def criar_item(nome, quantidade_total, categoria=None, valor_compra=0, data_aqui
         except Exception as e:
             print(f"Erro ao inserir em {slug}: {e}")
 
-    return buscar_item_por_id(item_id
+    return buscar_item_por_id(item_id)
 
 def _container_row_to_dados_categoria(record):
     """Converte linha da tabela container em dict de dados_categoria (nomes do frontend)."""
