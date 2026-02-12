@@ -200,8 +200,8 @@ async def options_handler(full_path: str):
 
 # CORS - permite requisições do frontend
 # Em desenvolvimento, permite qualquer origem localhost
-is_dev = not os.getenv('RENDER')
-if is_dev:
+is_production = os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RENDER')
+if not is_production:
     # Desenvolvimento: permite qualquer porta do localhost
     allow_origins = [
         "http://localhost:3000",
@@ -605,7 +605,9 @@ is_production = (
     os.getenv('RENDER') is not None or 
     os.getenv('DYNO') is not None or
     os.getenv('RENDER_SERVICE_NAME') is not None or
-    os.getenv('RENDER_EXTERNAL_URL') is not None
+    os.getenv('RENDER_EXTERNAL_URL') is not None or
+    os.getenv('RAILWAY_ENVIRONMENT') is not None or  # Variável padrão do Railway
+    os.getenv('RAILWAY_STATIC_URL') is not None 
 )
 
 if is_production:
