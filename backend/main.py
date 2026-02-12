@@ -240,6 +240,28 @@ security = HTTPBearer()
 def get_db(request: Request):
     return getattr(request.state, "db_module", db_module)
 
+# Tratador global: retorna a mensagem de erro real no 500 para facilitar debug
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    err_msg = str(exc)
+    err_type = type(exc).__name__
+    tb = traceback.format_exc()
+    if os.getenv('RENDER'):
+        print(f"[500] {err_type}: {err_msg}\n{tb}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": err_msg,
+            "error_type": err_type,
+            "hint": (
+                "Se estiver usando Supabase: verifique SUPABASE_URL e SUPABASE_SERVICE_KEY no Render, "
+                "se rodou o supabase_schema.sql no Supabase e se o pacote 'supabase' está no requirements.txt. "
+                "Se estiver usando Google Sheets: verifique GOOGLE_CREDENTIALS e quota."
+            ),
+        },
+    )
+
 # ============= MODELS PYDANTIC =============
 
 class ItemCreate(BaseModel):

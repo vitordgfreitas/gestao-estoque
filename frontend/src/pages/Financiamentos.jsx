@@ -254,7 +254,7 @@ export default function Financiamentos() {
       })
       setShowForm(true)
     } catch (error) {
-      toast.error('Erro ao carregar dados do financiamento')
+      toast.error(error.response?.data?.detail || 'Erro ao carregar dados do financiamento')
     }
   }
 

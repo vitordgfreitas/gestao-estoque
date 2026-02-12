@@ -3,6 +3,7 @@ Implementação do banco de dados usando Supabase (PostgreSQL).
 Interface compatível com sheets_database e database para o backend FastAPI.
 """
 import os
+import re
 from datetime import date, datetime, timedelta
 import calendar
 import validacoes
@@ -74,7 +75,16 @@ def _row_to_carro(record):
             self.marca = record.get('marca') or ''
             self.modelo = record.get('modelo') or ''
             self.ano = int(record.get('ano') or 0)
+            self.chassi = record.get('chassi') or ''
+            self.renavam = record.get('renavam') or ''
     return Carro()
+
+# Mapeamento Container: nome do campo no frontend -> coluna na tabela container
+_CAMPOS_CONTAINER_FRONT_TO_DB = {
+    'Tara': 'tara', 'Carga Máxima': 'carga_maxima', 'Comprimento': 'comprimento',
+    'Largura': 'largura', 'Altura': 'altura', 'Capacidade': 'capacidade', 'Cor': 'cor', 'Modelo': 'modelo'
+}
+_CAMPOS_CONTAINER_DB_TO_FRONT = {v: k for k, v in _CAMPOS_CONTAINER_FRONT_TO_DB.items()}
 
 # ---------- Categorias ----------
 def obter_categorias():
@@ -83,10 +93,19 @@ def obter_categorias():
     return sorted([row['nome'] for row in (r.data or []) if row.get('nome')])
 
 def obter_campos_categoria(categoria):
-    """Para Supabase: Carros tem Placa, Marca, Modelo, Ano; outras categorias vêm de dados_categoria."""
+    """Retorna os campos obrigatórios/desejados para cada categoria (formulário)."""
     if categoria == 'Carros':
-        return ['Placa', 'Marca', 'Modelo', 'Ano']
+        return ['Placa', 'Marca', 'Modelo', 'Ano', 'Chassi', 'Renavam']
+    if categoria == 'Container':
+        return ['Tara', 'Carga Máxima', 'Comprimento', 'Largura', 'Altura', 'Capacidade', 'Cor', 'Modelo']
     return []
+
+def _slug_categoria(nome_categoria):
+    """Gera nome de tabela válido para PostgreSQL: só letras minúsculas, números e underscore."""
+    s = (nome_categoria or '').strip().lower()
+    s = re.sub(r'[\s\-]+', '_', s)
+    s = re.sub(r'[^a-z0-9_]', '', s)
+    return s or 'categoria'
 
 def criar_categoria(nome_categoria):
     sb = get_supabase()
@@ -98,68 +117,154 @@ def criar_categoria(nome_categoria):
         'data_criacao': date.today().isoformat()
     }).execute()
     if r.data and len(r.data) > 0:
-        return r.data[0].get('id')
+        cat_id = r.data[0].get('id')
+        # Criar tabela no SQL para essa categoria (id, item_id, dados_categoria)
+        slug = _slug_categoria(nome_categoria)
+        if slug:
+            try:
+                sb.rpc('criar_tabela_categoria', {'nome_tabela': slug}).execute()
+            except Exception as e:
+                # Categoria já foi criada; falha só na tabela (ex.: função não existe ainda)
+                import traceback
+                print(f"[Supabase] Aviso: não foi possível criar tabela da categoria '{nome_categoria}' ({slug}): {e}")
+                traceback.print_exc()
+        return cat_id
     return None
 
 # ---------- Itens ----------
+def _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano):
+    """Extrai placa, marca, modelo, ano, chassi, renavam de campos_categoria ou args."""
+    c = campos_categoria or {}
+    return (
+        placa or c.get('Placa') or '',
+        marca or c.get('Marca') or '',
+        modelo or c.get('Modelo') or '',
+        ano if ano is not None else (int(c['Ano']) if c.get('Ano') not in (None, '') else None),
+        (c.get('Chassi') or '').strip(),
+        (c.get('Renavam') or '').strip()
+    )
+
+def _campos_categoria_para_container(campos_categoria):
+    """Converte campos_categoria (frontend) para dict de colunas da tabela container."""
+    c = campos_categoria or {}
+    out = {}
+    for front, col in _CAMPOS_CONTAINER_FRONT_TO_DB.items():
+        v = c.get(front)
+        if v is not None and v != '':
+            try:
+                out[col] = float(v) if isinstance(v, str) and v.replace('.', '').replace(',', '').replace('-', '').isdigit() else v
+            except (ValueError, TypeError):
+                out[col] = v
+    return out
+
 def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
-    if categoria == 'Carros' and campos_categoria:
-        placa = placa or campos_categoria.get('Placa')
-        marca = marca or campos_categoria.get('Marca')
-        modelo = modelo or campos_categoria.get('Modelo')
-        ano = ano or campos_categoria.get('Ano')
+    cat = categoria or 'Estrutura de Evento'
+    if cat == 'Carros' and campos_categoria:
+        placa, marca, modelo, ano, _, _ = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
     valido, msg = validacoes.validar_item_completo(
-        nome=nome, categoria=categoria or '', cidade=cidade or '', uf=uf or '',
+        nome=nome, categoria=cat, cidade=cidade or '', uf=uf or '',
         quantidade_total=quantidade_total, placa=placa, marca=marca, modelo=modelo, ano=ano, campos_categoria=campos_categoria
     )
     if not valido:
         raise ValueError(msg)
     sb = get_supabase()
-    # Duplicata nome+categoria
-    r = sb.table('itens').select('id').eq('nome', nome).eq('categoria', categoria or 'Estrutura de Evento').execute()
+    r = sb.table('itens').select('id').eq('nome', nome).eq('categoria', cat).execute()
     if r.data and len(r.data) > 0:
-        raise ValueError(f"Item '{nome}' já existe na categoria '{categoria}'")
-    if (categoria or '') == 'Carros' and placa:
+        raise ValueError(f"Item '{nome}' já existe na categoria '{cat}'")
+    if cat == 'Carros' and placa:
         r2 = sb.table('carros').select('id').eq('placa', placa.upper().strip()).execute()
         if r2.data and len(r2.data) > 0:
             raise ValueError(f"Placa {placa} já cadastrada")
-    payload = {
+
+    # 1) Sempre inserir na tabela itens (obrigatório)
+    payload_itens = {
         'nome': nome,
         'quantidade_total': int(quantidade_total),
-        'categoria': categoria or 'Estrutura de Evento',
+        'categoria': cat,
         'descricao': descricao or '',
         'cidade': cidade or '',
         'uf': (uf or '')[:2].upper(),
         'endereco': endereco or '',
         'dados_categoria': campos_categoria or {}
     }
-    ins = sb.table('itens').insert(payload).execute()
+    ins = sb.table('itens').insert(payload_itens).execute()
     if not ins.data or len(ins.data) == 0:
         raise Exception("Erro ao criar item")
     item_id = ins.data[0]['id']
-    if (categoria or '') == 'Carros' and placa and marca and modelo and ano:
-        sb.table('carros').insert({
-            'item_id': item_id,
-            'placa': placa.upper().strip(),
-            'marca': (marca or '').strip(),
-            'modelo': (modelo or '').strip(),
-            'ano': int(ano)
-        }).execute()
-    auditoria.registrar_auditoria('CREATE', 'Itens', item_id, valores_novos=payload)
+
+    # 2) Sempre inserir também na tabela da categoria
+    if cat == 'Carros':
+        placa, marca, modelo, ano, chassi, renavam = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
+        if placa and marca and modelo and ano is not None:
+            sb.table('carros').insert({
+                'item_id': item_id,
+                'placa': placa.upper().strip(),
+                'marca': (marca or '').strip(),
+                'modelo': (modelo or '').strip(),
+                'ano': int(ano),
+                'chassi': (chassi or '')[:50] if chassi else None,
+                'renavam': (renavam or '')[:20] if renavam else None
+            }).execute()
+    elif cat == 'Container':
+        row_container = {'item_id': item_id, **_campos_categoria_para_container(campos_categoria)}
+        sb.table('container').insert(row_container).execute()
+    else:
+        slug = _slug_categoria(cat)
+        if slug:
+            try:
+                sb.table(slug).insert({
+                    'item_id': item_id,
+                    'dados_categoria': campos_categoria or {}
+                }).execute()
+            except Exception as e:
+                print(f"[Supabase] Aviso: não foi possível inserir na tabela da categoria '{cat}' ({slug}): {e}")
+
+    auditoria.registrar_auditoria('CREATE', 'Itens', item_id, valores_novos=payload_itens)
     return buscar_item_por_id(item_id)
+
+def _container_row_to_dados_categoria(record):
+    """Converte linha da tabela container em dict de dados_categoria (nomes do frontend)."""
+    if not record:
+        return {}
+    out = {}
+    for col, front in _CAMPOS_CONTAINER_DB_TO_FRONT.items():
+        v = record.get(col)
+        if v is not None:
+            out[front] = v
+    return out
 
 def listar_itens():
     sb = get_supabase()
     r = sb.table('itens').select('*').execute()
     carros_r = sb.table('carros').select('*').execute()
     carros_by_item = {c['item_id']: c for c in (carros_r.data or [])}
+    try:
+        container_r = sb.table('container').select('*').execute()
+        container_by_item = {c['item_id']: c for c in (container_r.data or [])}
+    except Exception:
+        container_by_item = {}
     itens = []
     for row in (r.data or []):
         carro = None
-        dados_cat = row.get('dados_categoria') or {}
-        if row.get('id') in carros_by_item:
-            carro = _row_to_carro(carros_by_item[row['id']])
-            dados_cat = {**carros_by_item[row['id']], **dados_cat}
+        dados_cat = dict(row.get('dados_categoria') or {})
+        iid = row.get('id')
+        if iid in carros_by_item:
+            carro = _row_to_carro(carros_by_item[iid])
+            c = carros_by_item[iid]
+            dados_cat = {'Placa': c.get('placa'), 'Marca': c.get('marca'), 'Modelo': c.get('modelo'), 'Ano': c.get('ano'), 'Chassi': c.get('chassi'), 'Renavam': c.get('renavam'), **dados_cat}
+        elif iid in container_by_item:
+            dados_cat = {**_container_row_to_dados_categoria(container_by_item[iid]), **dados_cat}
+        else:
+            cat = row.get('categoria') or ''
+            slug = _slug_categoria(cat)
+            if slug and slug not in ('carros', 'container'):
+                try:
+                    slug_r = sb.table(slug).select('*').eq('item_id', iid).execute()
+                    if slug_r.data and len(slug_r.data) > 0:
+                        dc = (slug_r.data[0].get('dados_categoria') or {})
+                        dados_cat = {**dc, **dados_cat}
+                except Exception:
+                    pass
         itens.append(_row_to_item(row, carro=carro, dados_categoria=dados_cat))
     return itens
 
@@ -170,12 +275,49 @@ def buscar_item_por_id(item_id):
         return None
     row = r.data[0]
     carro = None
-    dados_cat = row.get('dados_categoria') or {}
-    cr = sb.table('carros').select('*').eq('item_id', int(item_id)).execute()
-    if cr.data and len(cr.data) > 0:
-        carro = _row_to_carro(cr.data[0])
-        dados_cat = {**cr.data[0], **dados_cat}
+    dados_cat = dict(row.get('dados_categoria') or {})
+    cat = row.get('categoria') or ''
+    if cat == 'Carros':
+        cr = sb.table('carros').select('*').eq('item_id', int(item_id)).execute()
+        if cr.data and len(cr.data) > 0:
+            carro = _row_to_carro(cr.data[0])
+            c = cr.data[0]
+            dados_cat = {'Placa': c.get('placa'), 'Marca': c.get('marca'), 'Modelo': c.get('modelo'), 'Ano': c.get('ano'), 'Chassi': c.get('chassi'), 'Renavam': c.get('renavam'), **dados_cat}
+    elif cat == 'Container':
+        try:
+            cont = sb.table('container').select('*').eq('item_id', int(item_id)).execute()
+            if cont.data and len(cont.data) > 0:
+                dados_cat = {**_container_row_to_dados_categoria(cont.data[0]), **dados_cat}
+        except Exception:
+            pass
+    else:
+        slug = _slug_categoria(cat)
+        if slug and slug not in ('carros', 'container'):
+            try:
+                slug_r = sb.table(slug).select('*').eq('item_id', int(item_id)).execute()
+                if slug_r.data and len(slug_r.data) > 0:
+                    dc = slug_r.data[0].get('dados_categoria') or {}
+                    dados_cat = {**dc, **dados_cat}
+            except Exception:
+                pass
     return _row_to_item(row, carro=carro, dados_categoria=dados_cat)
+
+def _remover_item_da_tabela_categoria(sb, item_id, categoria):
+    """Remove o item da tabela da categoria (carros, container ou slug), se existir."""
+    if categoria == 'Carros':
+        sb.table('carros').delete().eq('item_id', int(item_id)).execute()
+    elif categoria == 'Container':
+        try:
+            sb.table('container').delete().eq('item_id', int(item_id)).execute()
+        except Exception:
+            pass
+    else:
+        slug = _slug_categoria(categoria)
+        if slug and slug not in ('carros', 'container'):
+            try:
+                sb.table(slug).delete().eq('item_id', int(item_id)).execute()
+            except Exception:
+                pass
 
 def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
     item_atual = buscar_item_por_id(item_id)
@@ -185,10 +327,7 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     cidade_final = cidade or item_atual.cidade or ''
     uf_final = uf or item_atual.uf or ''
     if categoria_final == 'Carros' and campos_categoria:
-        placa = placa or campos_categoria.get('Placa')
-        marca = marca or campos_categoria.get('Marca')
-        modelo = modelo or campos_categoria.get('Modelo')
-        ano = ano or campos_categoria.get('Ano')
+        placa, marca, modelo, ano, _, _ = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
     valido, msg = validacoes.validar_item_completo(
         nome=nome, categoria=categoria_final, cidade=cidade_final, uf=uf_final,
         quantidade_total=quantidade_total, placa=placa, marca=marca, modelo=modelo, ano=ano, campos_categoria=campos_categoria
@@ -196,6 +335,9 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
     if not valido:
         raise ValueError(msg)
     sb = get_supabase()
+    dados_cat = campos_categoria if campos_categoria is not None else (item_atual.dados_categoria or {})
+
+    # 1) Sempre atualizar a tabela itens (todos os campos)
     payload = {
         'nome': nome,
         'quantidade_total': int(quantidade_total),
@@ -203,20 +345,53 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=No
         'cidade': cidade_final,
         'uf': uf_final[:2].upper(),
         'endereco': endereco if endereco is not None else item_atual.endereco,
-        'dados_categoria': campos_categoria if campos_categoria is not None else (item_atual.dados_categoria or {})
+        'dados_categoria': dados_cat
     }
     if categoria is not None:
-        payload['categoria'] = categoria
+        payload['categoria'] = categoria_final
     sb.table('itens').update(payload).eq('id', int(item_id)).execute()
-    if (categoria_final == 'Carros') and (placa and marca and modelo and ano):
+
+    # 2) Sincronizar tabela da categoria: remover da antiga (se mudou) e inserir/atualizar na atual
+    cat_antiga = item_atual.categoria or ''
+    if categoria is not None and cat_antiga != categoria_final:
+        _remover_item_da_tabela_categoria(sb, item_id, cat_antiga)
+
+    if categoria_final == 'Carros' and (placa and marca and modelo and ano is not None):
+        _, _, _, _, chassi, renavam = _campos_categoria_para_carro(campos_categoria or {}, placa, marca, modelo, ano)
+        carro_row = {
+            'item_id': int(item_id), 'placa': placa.upper().strip(), 'marca': marca.strip(),
+            'modelo': modelo.strip(), 'ano': int(ano),
+            'chassi': (chassi or '')[:50] if chassi else None,
+            'renavam': (renavam or '')[:20] if renavam else None
+        }
         cr = sb.table('carros').select('id').eq('item_id', int(item_id)).execute()
-        carro_row = {'item_id': int(item_id), 'placa': placa.upper().strip(), 'marca': marca.strip(), 'modelo': modelo.strip(), 'ano': int(ano)}
         if cr.data and len(cr.data) > 0:
             sb.table('carros').update(carro_row).eq('item_id', int(item_id)).execute()
         else:
             sb.table('carros').insert(carro_row).execute()
-    elif categoria is not None and categoria_final != 'Carros':
-        sb.table('carros').delete().eq('item_id', int(item_id)).execute()
+    elif categoria_final == 'Container':
+        row_data = _campos_categoria_para_container(dados_cat)
+        try:
+            cont = sb.table('container').select('id').eq('item_id', int(item_id)).execute()
+            if cont.data and len(cont.data) > 0:
+                sb.table('container').update(row_data).eq('item_id', int(item_id)).execute()
+            else:
+                sb.table('container').insert({'item_id': int(item_id), **row_data}).execute()
+        except Exception as e:
+            print(f"[Supabase] Aviso: atualizar container: {e}")
+    else:
+        slug = _slug_categoria(categoria_final)
+        if slug and slug not in ('carros', 'container'):
+            try:
+                slug_r = sb.table(slug).select('id').eq('item_id', int(item_id)).execute()
+                row_slug = {'item_id': int(item_id), 'dados_categoria': dados_cat}
+                if slug_r.data and len(slug_r.data) > 0:
+                    sb.table(slug).update(row_slug).eq('item_id', int(item_id)).execute()
+                else:
+                    sb.table(slug).insert(row_slug).execute()
+            except Exception as e:
+                print(f"[Supabase] Aviso: atualizar tabela categoria '{categoria_final}': {e}")
+
     auditoria.registrar_auditoria('UPDATE', 'Itens', item_id, valores_novos=payload)
     return buscar_item_por_id(item_id)
 

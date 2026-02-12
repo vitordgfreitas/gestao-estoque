@@ -213,7 +213,7 @@ export default function Dashboard() {
       setLocalizacoesData(locsArray)
       
     } catch (error) {
-      toast.error('Erro ao carregar dados do dashboard')
+      toast.error(error.response?.data?.detail || 'Erro ao carregar dados do dashboard')
       console.error('Erro ao carregar dados:', error)
     } finally {
       setLoading(false)

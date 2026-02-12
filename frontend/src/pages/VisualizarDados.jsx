@@ -61,7 +61,7 @@ export default function VisualizarDados() {
         setPecasCarros([])
       }
     } catch (error) {
-      toast.error('Erro ao carregar dados')
+      toast.error(error.response?.data?.detail || 'Erro ao carregar dados')
       console.error('Erro ao carregar dados:', error)
     } finally {
       setLoading(false)

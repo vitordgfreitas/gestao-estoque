@@ -25,7 +25,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Interceptor para tratar erros de autenticação
+// Interceptor para tratar erros de autenticação e logar 500 com detalhe
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,6 +36,9 @@ api.interceptors.response.use(
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
+    }
+    if (error.response?.status === 500 && error.response?.data?.detail) {
+      console.error('[API 500]', error.response.data.detail, error.response.data.hint || '')
     }
     return Promise.reject(error)
   }

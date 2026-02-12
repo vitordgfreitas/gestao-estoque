@@ -138,6 +138,25 @@ CREATE TABLE IF NOT EXISTS pecas_carros (
     observacoes TEXT
 );
 
+-- Função para criar tabela da categoria ao cadastrar nova categoria (chamada pelo backend)
+CREATE OR REPLACE FUNCTION criar_tabela_categoria(nome_tabela text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- nome_tabela deve conter apenas letras minúsculas, números e underscore (validado no backend)
+  EXECUTE format(
+    'CREATE TABLE IF NOT EXISTS %I (
+      id SERIAL PRIMARY KEY,
+      item_id INTEGER UNIQUE NOT NULL REFERENCES itens(id) ON DELETE CASCADE,
+      dados_categoria JSONB DEFAULT ''{}''
+    )',
+    nome_tabela
+  );
+END;
+$$;
+
 -- Inserir categorias padrão
 INSERT INTO categorias_itens (nome, data_criacao)
 VALUES 

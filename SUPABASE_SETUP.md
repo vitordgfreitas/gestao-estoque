@@ -27,6 +27,8 @@ Este guia explica como criar um projeto no Supabase e configurar o app para usar
 
 As tabelas criadas são: `categorias_itens`, `itens`, `carros`, `compromissos`, `contas_receber`, `contas_pagar`, `financiamentos`, `financiamentos_itens`, `parcelas_financiamento`, `pecas_carros`.
 
+O schema também cria a função **`criar_tabela_categoria`**: quando você cadastra uma **nova categoria** no app (Supabase), uma tabela é criada automaticamente no SQL com o nome da categoria em minúsculas e com espaços em `_` (ex.: "Reboques" → tabela `reboques`). Se você já tinha o schema antigo, rode o arquivo **`supabase_migration_criar_tabela_categoria.sql`** no SQL Editor para adicionar essa função.
+
 ---
 
 ## 3. Onde salvar as credenciais

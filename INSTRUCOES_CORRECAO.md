@@ -182,3 +182,33 @@ Eu **VERIFIQUEI LINHA POR LINHA**:
 7. ✅ `sheets_database.py` (linha 2196-2251): `deletar_financiamento` deleta Financiamentos_Itens
 
 **O problema está no GOOGLE SHEETS ou NO RENDER não ter redeployado!**
+
+---
+
+## 🔴 ERRO 500 (Request failed with status code 500)
+
+Quando as rotas `/api/itens`, `/api/compromissos`, `/api/categorias`, `/api/financiamentos` etc. retornam **500**, o backend agora devolve a **mensagem real** no corpo da resposta.
+
+### Como descobrir a causa
+
+1. **No navegador (após redeploy do frontend)**  
+   - Um **toast** deve mostrar a mensagem de erro (ex.: "SUPABASE_URL e SUPABASE_SERVICE_KEY devem estar configurados").  
+   - No **Console** (F12 → Console) procure por `[API 500]` seguido da mensagem e da dica.
+
+2. **Aba Network**  
+   - F12 → Network → recarregue a página ou repita a ação que falha.  
+   - Clique na requisição que retornou **500** (ex.: `itens`, `categorias`).  
+   - Aba **Response**: o JSON terá `detail` (mensagem do erro) e às vezes `hint` (dica de correção).
+
+3. **Logs no Render**  
+   - Render → seu serviço backend → **Logs**.  
+   - O traceback completo da exceção é impresso no log no momento do 500.
+
+### Causas comuns
+
+| Se `detail` ou o log disser… | O que fazer |
+|------------------------------|-------------|
+| SUPABASE_URL e SUPABASE_SERVICE_KEY… | Você está com toggle **Supabase** ligado. No Render, em **Environment**, defina `SUPABASE_URL` e `SUPABASE_SERVICE_KEY` (ou desligue o toggle para usar Sheets). |
+| relation "itens" does not exist | O SQL do Supabase não foi executado. No Supabase → SQL Editor, rode o conteúdo de `supabase_schema.sql`. |
+| No module named 'supabase' | No Render, redeploy o backend (o `requirements.txt` já inclui `supabase`). |
+| Credenciais do Sheets / quota | Use as credenciais corretas no Render ou desative o Supabase e use apenas Sheets. Verifique quota da API do Google. |

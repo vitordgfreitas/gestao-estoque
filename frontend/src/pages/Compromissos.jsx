@@ -109,7 +109,7 @@ export default function Compromissos() {
       const response = await itensAPI.listar()
       setItens(response.data)
     } catch (error) {
-      toast.error('Erro ao carregar itens')
+      toast.error(error.response?.data?.detail || 'Erro ao carregar itens')
     } finally {
       setLoadingItens(false)
     }

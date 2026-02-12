@@ -67,7 +67,7 @@ export default function Itens() {
       }
     } catch (error) {
       console.error('Erro ao carregar categorias:', error)
-      toast.error('Erro ao carregar categorias')
+      toast.error(error.response?.data?.detail || 'Erro ao carregar categorias')
       setCategorias([])
     } finally {
       setLoadingCategorias(false)
@@ -191,8 +191,10 @@ export default function Itens() {
         return
       }
 
-      // Valida campos dinâmicos obrigatórios
+      // Valida campos dinâmicos obrigatórios (Chassi e Renavam são opcionais)
+      const camposOpcionaisCategoria = ['Chassi', 'Renavam']
       for (const campo of camposCategoria) {
+        if (camposOpcionaisCategoria.includes(campo)) continue
         const valor = camposDinamicos[campo]
         if (!valor || (typeof valor === 'string' && !valor.trim())) {
           toast.error(`Por favor, preencha o campo: ${campo}`)
@@ -250,9 +252,10 @@ export default function Itens() {
     }
   }
 
-  const renderCampoDinamico = (campo) => {
+  const renderCampoDinamico = (campo, opcional = false) => {
     const tipo = inferirTipoCampo(campo)
     const valor = camposDinamicos[campo] || ''
+    const req = !opcional
 
     // Tratamento especial para Carros
     if (formData.categoria === 'Carros') {
@@ -261,7 +264,7 @@ export default function Itens() {
           <select
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-            required
+            required={req}
             className="input"
           >
             <option value="">Selecione a marca</option>
@@ -277,7 +280,7 @@ export default function Itens() {
             type="number"
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-            required
+            required={req}
             min="1900"
             max="2100"
             className="input"
@@ -291,10 +294,21 @@ export default function Itens() {
             type="text"
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value.toUpperCase())}
-            required
+            required={req}
             maxLength={10}
             className="input"
             placeholder="ABC-1234"
+          />
+        )
+      }
+      if (campo === 'Chassi' || campo === 'Renavam') {
+        return (
+          <input
+            type="text"
+            value={valor}
+            onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
+            className="input"
+            placeholder={campo === 'Chassi' ? 'Número do chassi' : 'Renavam'}
           />
         )
       }
@@ -309,7 +323,7 @@ export default function Itens() {
               type="number"
               value={valor}
               onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-              required
+              required={req}
               min="1900"
               max="2100"
               className="input"
@@ -321,7 +335,7 @@ export default function Itens() {
             type="number"
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-            required
+            required={req}
             min="1"
             className="input"
           />
@@ -332,7 +346,7 @@ export default function Itens() {
             type="date"
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-            required
+            required={req}
             className="input"
           />
         )
@@ -342,7 +356,7 @@ export default function Itens() {
             type="text"
             value={valor}
             onChange={(e) => handleCampoDinamicoChange(campo, e.target.value)}
-            required
+            required={req}
             className="input"
             placeholder={`Digite ${campo.toLowerCase()}...`}
           />
@@ -442,12 +456,15 @@ export default function Itens() {
               <h4 className="text-md font-semibold text-dark-50">
                 Detalhes de {formData.categoria}
               </h4>
-              {camposCategoria.map(campo => (
-                <div key={campo}>
-                  <label className="label">{campo} *</label>
-                  {renderCampoDinamico(campo)}
-                </div>
-              ))}
+              {camposCategoria.map(campo => {
+                const opcional = ['Chassi', 'Renavam'].includes(campo)
+                return (
+                  <div key={campo}>
+                    <label className="label">{campo}{opcional ? ' (opcional)' : ' *'}</label>
+                    {renderCampoDinamico(campo, opcional)}
+                  </div>
+                )
+              })}
             </div>
           )}
 
