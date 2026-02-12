@@ -359,28 +359,43 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
         'quantidade_disponivel': max(0, disponivel), 'compromissos_ativos': comps
     }
 
-def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_id=None):
+def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None, **kwargs):
+    # Aceitamos excluir_compromisso_id para bater com o main.py
+    # E usamos o **kwargs para ignorar qualquer outro nome que venha errado
     item = buscar_item_por_id(item_id)
     if not item: return None
-    d_ini = _date_parse(data_inicio); d_fim = _date_parse(data_fim)
+    
+    d_ini = _date_parse(data_inicio)
+    d_fim = _date_parse(data_fim)
     sb = get_supabase()
+    
     r = sb.table('compromissos').select('*').eq('item_id', item_id).execute()
-    comps = [c for c in (_row_to_compromisso(x) for x in r.data) if c.data_inicio <= d_fim and c.data_fim >= d_ini]
-    if excluir_id: comps = [c for c in comps if c.id != excluir_id]
+    
+    # Filtra excluindo o compromisso que estamos editando agora
+    comps = [
+        c for c in (_row_to_compromisso(x) for x in r.data) 
+        if c.data_inicio <= d_fim and c.data_fim >= d_ini
+    ]
+    
+    if excluir_compromisso_id:
+        comps = [c for c in comps if c.id != int(excluir_compromisso_id)]
     
     pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', item_id).execute()
     
-    max_occ = 0; curr = d_ini
+    max_occ = 0
+    curr = d_ini
     while curr <= d_fim:
         dia_alugado = sum(c.quantidade for c in comps if c.data_inicio <= curr <= c.data_fim)
         dia_instalado = sum(p['quantidade'] for p in (pecas_r.data or []) if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr)
         max_occ = max(max_occ, dia_alugado + dia_instalado)
         curr += timedelta(days=1)
     
-    return {'item': item, 'quantidade_total': item.quantidade_total, 'max_comprometido': max_occ, 'disponivel_minimo': max(0, item.quantidade_total - max_occ)}
-
-def verificar_disponibilidade_todos_itens(data_consulta, filtro_loc=None):
-    return [verificar_disponibilidade(i.id, data_consulta, filtro_loc) for i in listar_itens()]
+    return {
+        'item': item, 
+        'quantidade_total': item.quantidade_total, 
+        'max_comprometido': max_occ, 
+        'disponivel_minimo': max(0, item.quantidade_total - max_occ)
+    }
 
 
 # ---------- Financiamentos ----------
