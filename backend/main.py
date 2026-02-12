@@ -267,15 +267,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 class ItemCreate(BaseModel):
     nome: str
     quantidade_total: int
-    categoria: str = "Estrutura de Evento"
+    valor_compra: Optional[float] = 0.0 # <--- NOVO
+    data_aquisicao: Optional[date] = None # <--- NOVO
+    categoria: str
     descricao: Optional[str] = None
     cidade: str
     uf: str
-    endereco: Optional[str] = None
-    placa: Optional[str] = None
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    ano: Optional[int] = None
     campos_categoria: Optional[dict] = None
 
 class ItemUpdate(BaseModel):

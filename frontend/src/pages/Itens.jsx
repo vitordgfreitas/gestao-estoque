@@ -564,6 +564,37 @@ export default function Itens() {
           </div>
         </div>
 
+        <div className="space-y-4 pt-6 border-t border-dark-700">
+            <h3 className="text-lg font-semibold text-dark-50 flex items-center gap-2">
+                <div className="w-1 h-6 bg-green-500 rounded-full"></div>
+                Investimento e Aquisição
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="label">Valor de Compra Unitário (R$)</label>
+                    <input
+                        type="number"
+                        name="valor_compra"
+                        value={formData.valor_compra}
+                        onChange={handleChange}
+                        className="input"
+                        placeholder="0.00"
+                        step="0.01"
+                    />
+                </div>
+                <div>
+                    <label className="label">Data de Aquisição</label>
+                    <input
+                        type="date"
+                        name="data_aquisicao"
+                        value={formData.data_aquisicao}
+                        onChange={handleChange}
+                        className="input"
+                    />
+                </div>
+            </div>
+        </div>
+
         {/* Localização */}
         <div className="space-y-4 pt-6 border-t border-dark-700">
           <h3 className="text-lg font-semibold text-dark-50 flex items-center gap-2">

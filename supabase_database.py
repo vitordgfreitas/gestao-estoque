@@ -50,8 +50,38 @@ def _date_parse(d):
         return datetime.strptime(d[:10], '%Y-%m-%d').date()
     return d
 
+def registrar_movimentacao(item_id, quantidade, tipo, ref_id=None, desc=""):
+    """
+    Registra toda entrada e saída de estoque.
+    tipo: 'COMPRA', 'ALUGUEL_SAIDA', 'ALUGUEL_RETORNO', 'INSTALACAO', 'MANUTENCAO'
+    """
+    sb = get_supabase()
+    payload = {
+        'item_id': int(item_id),
+        'quantidade': int(quantidade),
+        'tipo': tipo,
+        'referencia_id': ref_id,
+        'descricao': desc,
+        'data_movimentacao': datetime.now().isoformat()
+    }
+    sb.table('movimentacoes_estoque').insert(payload).execute()
+
+def obter_campos_categoria(categoria):
+    sb = get_supabase()
+    slug = _slug_categoria(categoria) # sua função de slug existente
+    try:
+        # Chama o RPC que criamos no SQL
+        r = sb.rpc('get_table_columns', {'t_name': slug}).execute()
+        colunas = [row['column_name'] for row in (r.data or [])]
+        
+        # Filtramos o que NÃO deve aparecer no formulário
+        ignore = ['id', 'item_id', 'created_at', 'dados_categoria']
+        # Retorna formatado: 'placa' -> 'Placa'
+        return [c.replace('_', ' ').title() for c in colunas if c not in ignore]
+    except:
+        return []
+
 def _row_to_item(record, carro=None, dados_categoria=None):
-    """Converte linha do Supabase em objeto tipo Item."""
     class Item:
         def __init__(self):
             self.id = record.get('id')
@@ -62,9 +92,13 @@ def _row_to_item(record, carro=None, dados_categoria=None):
             self.cidade = record.get('cidade') or ''
             self.uf = (record.get('uf') or '')[:2].upper()
             self.endereco = record.get('endereco') or ''
+            
+            # --- NOVOS CAMPOS FINANCEIROS ---
+            self.valor_compra = float(record.get('valor_compra') or 0.0)
+            self.data_aquisicao = _date_parse(record.get('data_aquisicao'))
+            
             self.carro = carro
             self.dados_categoria = dados_categoria or (record.get('dados_categoria') or {})
-            self.compromissos = []
     return Item()
 
 def _row_to_carro(record):
@@ -159,70 +193,40 @@ def _campos_categoria_para_container(campos_categoria):
                 out[col] = v
     return out
 
-def criar_item(nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
-    cat = categoria or 'Estrutura de Evento'
-    if cat == 'Carros' and campos_categoria:
-        placa, marca, modelo, ano, _, _ = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
-    valido, msg = validacoes.validar_item_completo(
-        nome=nome, categoria=cat, cidade=cidade or '', uf=uf or '',
-        quantidade_total=quantidade_total, placa=placa, marca=marca, modelo=modelo, ano=ano, campos_categoria=campos_categoria
-    )
-    if not valido:
-        raise ValueError(msg)
+def criar_item(nome, quantidade_total, categoria=None, valor_compra=0, data_aquisicao=None, **kwargs):
     sb = get_supabase()
-    r = sb.table('itens').select('id').eq('nome', nome).eq('categoria', cat).execute()
-    if r.data and len(r.data) > 0:
-        raise ValueError(f"Item '{nome}' já existe na categoria '{cat}'")
-    if cat == 'Carros' and placa:
-        r2 = sb.table('carros').select('id').eq('placa', placa.upper().strip()).execute()
-        if r2.data and len(r2.data) > 0:
-            raise ValueError(f"Placa {placa} já cadastrada")
+    cat = categoria or 'Estrutura de Evento'
+    campos_recebidos = kwargs.get('campos_categoria', {})
 
-    # 1) Sempre inserir na tabela itens (obrigatório)
+    # 1. Tabela Base
     payload_itens = {
-        'nome': nome,
-        'quantidade_total': int(quantidade_total),
-        'categoria': cat,
-        'descricao': descricao or '',
-        'cidade': cidade or '',
-        'uf': (uf or '')[:2].upper(),
-        'endereco': endereco or '',
-        'dados_categoria': campos_categoria or {}
+        'nome': nome, 'quantidade_total': int(quantidade_total),
+        'categoria': cat, 'valor_compra': float(valor_compra or 0),
+        'data_aquisicao': data_aquisicao or date.today().isoformat(),
+        'descricao': kwargs.get('descricao', ''),
+        'cidade': kwargs.get('cidade', ''),
+        'uf': (kwargs.get('uf', ''))[:2].upper(),
+        'dados_categoria': campos_recebidos
     }
     ins = sb.table('itens').insert(payload_itens).execute()
-    if not ins.data or len(ins.data) == 0:
-        raise Exception("Erro ao criar item")
     item_id = ins.data[0]['id']
 
-    # 2) Sempre inserir também na tabela da categoria
-    if cat == 'Carros':
-        placa, marca, modelo, ano, chassi, renavam = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
-        if placa and marca and modelo and ano is not None:
-            sb.table('carros').insert({
-                'item_id': item_id,
-                'placa': placa.upper().strip(),
-                'marca': (marca or '').strip(),
-                'modelo': (modelo or '').strip(),
-                'ano': int(ano),
-                'chassi': (chassi or '')[:50] if chassi else None,
-                'renavam': (renavam or '')[:20] if renavam else None
-            }).execute()
-    elif cat == 'Container':
-        row_container = {'item_id': item_id, **_campos_categoria_para_container(campos_categoria)}
-        sb.table('container').insert(row_container).execute()
-    else:
-        slug = _slug_categoria(cat)
-        if slug:
-            try:
-                sb.table(slug).insert({
-                    'item_id': item_id,
-                    'dados_categoria': campos_categoria or {}
-                }).execute()
-            except Exception as e:
-                print(f"[Supabase] Aviso: não foi possível inserir na tabela da categoria '{cat}' ({slug}): {e}")
+    # 2. Log de Compra
+    registrar_movimentacao(item_id, quantidade_total, 'COMPRA')
 
-    auditoria.registrar_auditoria('CREATE', 'Itens', item_id, valores_novos=payload_itens)
-    return buscar_item_por_id(item_id)
+    # 3. Tabela Específica (Mapeamento Dinâmico)
+    slug = _slug_categoria(cat)
+    if slug and slug not in ('itens', 'compromissos'):
+        payload_cat = {'item_id': item_id}
+        for label, valor in campos_recebidos.items():
+            payload_cat[_slugify_label(label)] = valor # 'Placa' -> 'placa'
+        
+        try:
+            sb.table(slug).insert(payload_cat).execute()
+        except Exception as e:
+            print(f"Erro ao inserir em {slug}: {e}")
+
+    return buscar_item_por_id(item_id
 
 def _container_row_to_dados_categoria(record):
     """Converte linha da tabela container em dict de dados_categoria (nomes do frontend)."""
@@ -596,65 +600,104 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
     item = buscar_item_por_id(item_id)
     if not item:
         return None
+        
     data_consulta = _date_parse(data_consulta)
-    compromissos = listar_compromissos()
-    compromissos_ativos = [c for c in compromissos if c.item_id == int(item_id) and c.data_inicio <= data_consulta <= c.data_fim]
+    sb = get_supabase()
+    
+    # 1. Busca compromissos (Rentals)
+    # Em vez de listar todos, filtramos direto no banco para performance
+    query_comp = sb.table('compromissos').select('*').eq('item_id', int(item_id))
+    r_comp = query_comp.execute()
+    compromissos = [_row_to_compromisso(c) for c in (r_comp.data or [])]
+    
+    # Filtra compromissos ativos na data
+    compromissos_ativos = [c for c in compromissos if c.data_inicio <= data_consulta <= c.data_fim]
+    
+    # 2. Aplica sua lógica de Filtro de Localização nos Compromissos
     if filtro_localizacao:
         cidade_uf = filtro_localizacao.split(" - ")
         if len(cidade_uf) == 2:
             cidade_f, uf_f = cidade_uf[0], cidade_uf[1]
             compromissos_ativos = [c for c in compromissos_ativos if getattr(c, 'cidade', '') == cidade_f and getattr(c, 'uf', '') == uf_f.upper()]
+
     quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
-    pecas = listar_pecas_carros()
+
+    # 3. Busca peças instaladas (Ativo Imobilizado)
+    # Filtramos por data_instalacao para saber se na data da consulta a peça já estava no carro
+    pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', int(item_id)).execute()
+    
     quantidade_instalada = sum(
-        p.quantidade for p in pecas
-        if int(p.peca_id) == int(item_id)
-        and (p.data_instalacao is None or p.data_instalacao <= data_consulta)
+        p['quantidade'] for p in (pecas_r.data or [])
+        if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= data_consulta
     )
+
+    # 4. Cálculo final considerando a Localização do Item
     total_ocupado = quantidade_comprometida + quantidade_instalada
+    
     if filtro_localizacao:
         cidade_uf = filtro_localizacao.split(" - ")
         if len(cidade_uf) == 2:
             cidade_f, uf_f = cidade_uf[0], cidade_uf[1]
+            # Verifica se o item físico está nesta cidade
             item_na_loc = (getattr(item, 'cidade', '') == cidade_f and getattr(item, 'uf', '') == uf_f.upper())
             quantidade_disponivel = (item.quantidade_total - total_ocupado) if item_na_loc else 0
         else:
             quantidade_disponivel = item.quantidade_total - total_ocupado
     else:
         quantidade_disponivel = item.quantidade_total - total_ocupado
+
     return {
         'item': item,
         'quantidade_total': item.quantidade_total,
         'quantidade_comprometida': quantidade_comprometida,
         'quantidade_instalada': quantidade_instalada,
         'quantidade_disponivel': max(0, quantidade_disponivel),
-        'compromissos_ativos': compromissos_ativos
+        'compromissos_ativos': compromissos_ativos,
+        'valor_patrimonial_unitario': getattr(item, 'valor_compra', 0) # Inteligência Financeira
     }
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None):
     item = buscar_item_por_id(item_id)
     if not item:
         return None
+        
     data_inicio = _date_parse(data_inicio)
     data_fim = _date_parse(data_fim)
-    compromissos = [c for c in listar_compromissos() if c.item_id == int(item_id)
-                    and c.data_inicio <= data_fim and c.data_fim >= data_inicio]
+    
+    # Busca compromissos que colidem com o período
+    sb = get_supabase()
+    r_comp = sb.table('compromissos').select('*').eq('item_id', int(item_id)).execute()
+    compromissos = [_row_to_compromisso(c) for c in (r_comp.data or [])]
+    
+    compromissos = [c for c in compromissos if c.data_inicio <= data_fim and c.data_fim >= data_inicio]
+    
     if excluir_compromisso_id:
         compromissos = [c for c in compromissos if c.id != excluir_compromisso_id]
+
+    # Lógica de "Pior Cenário": Verifica dia a dia qual o pico de ocupação
     max_comprometido = 0
     d = data_inicio
     while d <= data_fim:
         no_dia = sum(c.quantidade for c in compromissos if c.data_inicio <= d <= c.data_fim)
-        max_comprometido = max(max_comprometido, no_dia)
+        # Somamos o que está instalado nos carros também para esse dia
+        # (Considerando que peças instaladas raramente saem, mas a data_instalacao importa)
+        pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', int(item_id)).execute()
+        qtd_inst_no_dia = sum(
+            p['quantidade'] for p in (pecas_r.data or [])
+            if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= d
+        )
+        
+        total_ocupado_no_dia = no_dia + qtd_inst_no_dia
+        max_comprometido = max(max_comprometido, total_ocupado_no_dia)
         d += timedelta(days=1)
-    pecas = listar_pecas_carros(peca_id=item_id)
-    qtd_instalada = sum(p.quantidade for p in pecas if p.data_instalacao is None or p.data_instalacao <= data_fim)
+
     return {
         'item': item,
         'quantidade_total': item.quantidade_total,
-        'max_comprometido': max_comprometido + qtd_instalada,
-        'disponivel_minimo': item.quantidade_total - (max_comprometido + qtd_instalada)
+        'max_ocupado_no_periodo': max_comprometido,
+        'disponivel_minimo': max(0, item.quantidade_total - max_comprometido)
     }
+    
 
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
     resultados = []
