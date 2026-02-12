@@ -107,16 +107,34 @@ def obter_campos_categoria(categoria):
 # --- CRUD DE ITENS (ESTOQUE) ---
 
 def criar_item(nome, quantidade_total, categoria=None, valor_compra=0.0, data_aquisicao=None, **kwargs):
-    sb = get_supabase(); cat = categoria or 'Estrutura de Evento'
+    sb = get_supabase()
+    cat = categoria or 'Estrutura de Evento'
     campos_extra = kwargs.get('campos_categoria', {})
+    
+    # --- CURA PARA O ERRO 500 (JSON SERIALIZABLE) ---
+    # Transforma o objeto date em string "AAAA-MM-DD" antes de enviar pro Supabase
+    dt_fix = data_aquisicao
+    if hasattr(dt_fix, 'isoformat'):
+        dt_fix = dt_fix.isoformat()
+    elif not dt_fix:
+        dt_fix = date.today().isoformat()
+
     payload = {
-        'nome': nome, 'quantidade_total': int(quantidade_total), 'categoria': cat,
-        'valor_compra': float(valor_compra or 0.0), 'data_aquisicao': data_aquisicao or date.today().isoformat(),
-        'descricao': kwargs.get('descricao', ''), 'cidade': kwargs.get('cidade', ''),
-        'uf': (kwargs.get('uf', ''))[:2].upper(), 'endereco': kwargs.get('endereco', ''),
+        'nome': nome, 
+        'quantidade_total': int(quantidade_total), 
+        'categoria': cat,
+        'valor_compra': float(valor_compra or 0.0), 
+        'data_aquisicao': dt_fix, # Agora é uma string segura!
+        'descricao': kwargs.get('descricao', ''), 
+        'cidade': kwargs.get('cidade', ''),
+        'uf': (kwargs.get('uf', ''))[:2].upper(), 
+        'endereco': kwargs.get('endereco', ''),
         'dados_categoria': campos_extra
     }
+    
     ins = sb.table('itens').insert(payload).execute()
+    if not ins.data: raise Exception("Falha ao inserir no banco")
+    
     item_id = ins.data[0]['id']
     registrar_movimentacao(item_id, quantidade_total, 'COMPRA')
     
@@ -126,6 +144,35 @@ def criar_item(nome, quantidade_total, categoria=None, valor_compra=0.0, data_aq
         for k, v in campos_extra.items(): p_spec[_slugify_label(k)] = v
         try: sb.table(slug).insert(p_spec).execute()
         except: pass
+        
+    return buscar_item_por_id(item_id)
+
+def atualizar_item(item_id, nome, quantidade_total, categoria=None, **kwargs):
+    sb = get_supabase()
+    
+    # Converte data para string se ela existir
+    dt_aq = kwargs.get('data_aquisicao')
+    if hasattr(dt_aq, 'isoformat'):
+        dt_aq = dt_aq.isoformat()
+
+    payload = {'nome': nome, 'quantidade_total': int(quantidade_total)}
+    if dt_aq: payload['data_aquisicao'] = dt_aq
+    
+    for k in ['descricao', 'cidade', 'uf', 'endereco', 'valor_compra']:
+        if k in kwargs and kwargs[k] is not None: 
+            payload[k] = kwargs[k]
+            
+    if 'campos_categoria' in kwargs: payload['dados_categoria'] = kwargs['campos_categoria']
+    
+    sb.table('itens').update(payload).eq('id', int(item_id)).execute()
+    
+    slug = _slug_categoria(categoria or buscar_item_por_id(item_id).categoria)
+    if slug and slug != 'itens' and 'campos_categoria' in kwargs:
+        p_spec = {'item_id': int(item_id)}
+        for label, valor in kwargs['campos_categoria'].items(): p_spec[_slugify_label(label)] = valor
+        try: sb.table(slug).upsert(p_spec, on_conflict='item_id').execute()
+        except: pass
+        
     return buscar_item_por_id(item_id)
 
 def listar_itens():
@@ -151,23 +198,7 @@ def buscar_item_por_id(item_id):
             if r_s.data: d_spec = {_labelify_column(k): v for k, v in r_s.data[0].items() if k not in ['id', 'item_id']}
         except: pass
     return _row_to_item(row, dados_categoria={**row.get('dados_categoria', {}), **d_spec})
-
-def atualizar_item(item_id, nome, quantidade_total, categoria=None, **kwargs):
-    sb = get_supabase()
-    payload = {'nome': nome, 'quantidade_total': int(quantidade_total)}
-    for k in ['descricao', 'cidade', 'uf', 'endereco', 'valor_compra', 'data_aquisicao']:
-        if k in kwargs and kwargs[k] is not None: payload[k] = kwargs[k]
-    if 'campos_categoria' in kwargs: payload['dados_categoria'] = kwargs['campos_categoria']
     
-    sb.table('itens').update(payload).eq('id', int(item_id)).execute()
-    slug = _slug_categoria(categoria or buscar_item_por_id(item_id).categoria)
-    if slug and slug != 'itens' and 'campos_categoria' in kwargs:
-        p_spec = {'item_id': int(item_id)}
-        for label, valor in kwargs['campos_categoria'].items(): p_spec[_slugify_label(label)] = valor
-        try: sb.table(slug).upsert(p_spec, on_conflict='item_id').execute()
-        except: pass
-    return buscar_item_por_id(item_id)
-
 def deletar_item(item_id):
     sb = get_supabase(); item = buscar_item_por_id(item_id)
     if item:

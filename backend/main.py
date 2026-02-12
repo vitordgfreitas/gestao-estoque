@@ -827,8 +827,8 @@ from fastapi.encoders import jsonable_encoder # <--- Adicione este import
 @app.post("/api/itens")
 async def create_item(item: ItemCreate, db_module = Depends(get_db)):
     try:
-        # Forçamos a limpeza do valor aqui no "portal" do backend
-        valor_limpo = float(item.valor_compra) if item.valor_compra is not None else 0.0
+        # Pega o valor_compra garantindo que seja float
+        val_compra = float(item.valor_compra) if item.valor_compra is not None else 0.0
         
         novo_item = db_module.criar_item(
             nome=item.nome,
@@ -838,12 +838,14 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            valor_compra=valor_limpo, # <--- Enviando o valor garantido como float
-            data_aquisicao=item.data_aquisicao,
+            valor_compra=val_compra, 
+            data_aquisicao=item.data_aquisicao, # O db_module agora vai limpar isso
             campos_categoria=item.campos_categoria
         )
-        # O retorno agora usa o tradutor que limpa as datas!
-        return item_to_dict(novo_item)
+        
+        # O jsonable_encoder é a proteção final contra erros de serialização
+        return JSONResponse(content=jsonable_encoder(item_to_dict(novo_item)))
+        
     except Exception as e:
         print(f"ERRO CRITICAL: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
