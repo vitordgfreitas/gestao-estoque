@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Body, Request, Quer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
+from types import SimpleNamespace
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 import os
@@ -910,31 +911,34 @@ async def deletar_item(item_id: int, db_module = Depends(get_db)):
 
 # ============= COMPROMISSOS =============
 
+from types import SimpleNamespace # Importe no topo do arquivo
+
 @app.get("/api/compromissos", response_model=List[dict])
 async def listar_compromissos(db_module = Depends(get_db)):
+    """Lista compromissos sem quebrar o tradutor legado"""
     try:
-        # 1. Busca os dados brutos (Raw) do banco com os JOINS necessários
-        # Certifique-se que o listar_compromissos() no supabase_database.py 
-        # está fazendo: .select('*, compromisso_itens(*, itens(nome))')
+        # 1. Busca os dados brutos (Dicionários do Supabase)
         compromissos_brutos = db_module.listar_compromissos()
         
         resultado_final = []
-        for comp_bruto in compromissos_brutos:
-            # 2. Usa o seu tradutor original (que você não quer mexer)
-            d = compromisso_to_dict(comp_bruto)
+        for comp_raw in compromissos_brutos:
+            # 2. ADAPTER: Resolve o erro "'dict' object has no attribute"
+            # Transformamos o dicionário em objeto para o tradutor não explodir
+            comp_obj = SimpleNamespace(**comp_raw)
             
-            # 3. COMPATIBILITY PATCH (Injetamos o que o tradutor ignorou)
-            # Pegamos o valor_total_contrato direto do dado bruto, caso o tradutor tenha zerado
-            d['valor_total_contrato'] = float(comp_bruto.get('valor_total_contrato') or 0)
+            # 3. Chama o seu tradutor que você não quer mexer
+            d = compromisso_to_dict(comp_obj)
             
-            # Pegamos a lista de equipamentos que o tradutor original não conhece
-            d['compromisso_itens'] = comp_bruto.get('compromisso_itens', [])
+            # 4. PATCH: Injeta os dados que o tradutor ignorou ou não mapeou
+            # Pegamos direto do dado bruto para garantir que não venha zerado
+            d['valor_total_contrato'] = float(comp_raw.get('valor_total_contrato') or 0)
+            d['compromisso_itens'] = comp_raw.get('compromisso_itens', [])
             
             resultado_final.append(d)
             
         return resultado_final
-        
     except Exception as e:
+        print(f"❌ ERRO LISTAR COMPROMISSOS: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/compromissos/buscar", response_model=dict)
