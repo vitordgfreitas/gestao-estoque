@@ -528,25 +528,27 @@ class ValorPresenteResponse(BaseModel):
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
-    """Converte Item para dict, tratando datas para evitar erro de serialização"""
-    result = {
-        "id": item.id,
-        "nome": item.nome,
-        "quantidade_total": item.quantidade_total,
-        "categoria": item.categoria or "",
-        "descricao": item.descricao or "",
-        "cidade": item.cidade or "",
-        "uf": item.uf or "",
-        "endereco": item.endereco or "",
-        # TRATAMENTO DE DATA: Converte para "AAAA-MM-DD" ou retorna None
-        "data_aquisicao": item.data_aquisicao.isoformat() if hasattr(item, 'data_aquisicao') and item.data_aquisicao else None,
-        "valor_compra": getattr(item, 'valor_compra', 0.0),
-    }
+    """Converte Item para dict, garantindo que datas sejam strings para o JSON"""
+    # Usamos o vars(item) para pegar os dados e o .get() para não dar erro se o campo faltar
+    d = item.__dict__ if hasattr(item, '__dict__') else item
     
-    # Mantém sua lógica de dados_categoria e carro intacta
-    if hasattr(item, 'dados_categoria') and item.dados_categoria:
-        result["dados_categoria"] = item.dados_categoria if isinstance(item.dados_categoria, dict) else {}
+    result = {
+        "id": d.get('id'),
+        "nome": d.get('nome'),
+        "quantidade_total": d.get('quantidade_total'),
+        "categoria": d.get('categoria'),
+        "descricao": d.get('descricao'),
+        "cidade": d.get('cidade'),
+        "uf": d.get('uf'),
+        "endereco": d.get('endereco'),
+        "valor_compra": float(d.get('valor_compra') or 0.0),
+    }
 
+    # O PULO DO GATO: Se for data, vira string. Se não, fica None.
+    data = d.get('data_aquisicao')
+    result["data_aquisicao"] = data.isoformat() if hasattr(data, 'isoformat') else str(data) if data else None
+
+    # Se for carro, mantém a lógica
     if hasattr(item, 'carro') and item.carro:
         result["carro"] = {
             "placa": getattr(item.carro, 'placa', ''),
@@ -554,9 +556,7 @@ def item_to_dict(item: Item) -> dict:
             "modelo": getattr(item.carro, 'modelo', ''),
             "ano": getattr(item.carro, 'ano', 0)
         }
-    
     return result
-
 def compromisso_to_dict(comp: Compromisso) -> dict:
     """Converte Compromisso para dict, tratando as datas para JSON"""
     result = {
@@ -821,6 +821,9 @@ from fastapi.encoders import jsonable_encoder # <--- Adicione este import
 @app.post("/api/itens")
 async def create_item(item: ItemCreate, db_module = Depends(get_db)):
     try:
+        # Forçamos o valor_compra a ser float aqui no portal de entrada
+        val_compra = float(item.valor_compra or 0.0)
+        
         novo_item = db_module.criar_item(
             nome=item.nome,
             quantidade_total=item.quantidade_total,
@@ -829,15 +832,15 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            valor_compra=item.valor_compra,
+            valor_compra=val_compra, # Passando o valor limpo
             data_aquisicao=item.data_aquisicao,
             campos_categoria=item.campos_categoria
         )
-        # O jsonable_encoder é a "vacina" final contra erros de serialização
-        return jsonable_encoder(item_to_dict(novo_item)) 
-        
+        # Usamos o tradutor corrigido
+        return item_to_dict(novo_item)
     except Exception as e:
         print(f"ERRO CRITICAL: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/itens/{item_id}", response_model=dict)
 async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
