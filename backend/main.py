@@ -528,27 +528,35 @@ class ValorPresenteResponse(BaseModel):
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
-    """Converte Item para dict, garantindo que datas sejam strings para o JSON"""
-    # Usamos o vars(item) para pegar os dados e o .get() para não dar erro se o campo faltar
-    d = item.__dict__ if hasattr(item, '__dict__') else item
+    """Converte Item para dict, blindando contra erro de datas no JSON"""
+    if not item: return {}
     
+    # Pegamos os dados do objeto. Se for Supabase, ele tem esses atributos:
     result = {
-        "id": d.get('id'),
-        "nome": d.get('nome'),
-        "quantidade_total": d.get('quantidade_total'),
-        "categoria": d.get('categoria'),
-        "descricao": d.get('descricao'),
-        "cidade": d.get('cidade'),
-        "uf": d.get('uf'),
-        "endereco": d.get('endereco'),
-        "valor_compra": float(d.get('valor_compra') or 0.0),
+        "id": getattr(item, 'id', None),
+        "nome": getattr(item, 'nome', ''),
+        "quantidade_total": int(getattr(item, 'quantidade_total', 0)),
+        "categoria": getattr(item, 'categoria', '') or "",
+        "descricao": getattr(item, 'descricao', ''),
+        "cidade": getattr(item, 'cidade', ''),
+        "uf": getattr(item, 'uf', ''),
+        "endereco": getattr(item, 'endereco', ''),
+        "valor_compra": float(getattr(item, 'valor_compra', 0.0) or 0.0),
     }
 
-    # O PULO DO GATO: Se for data, vira string. Se não, fica None.
-    data = d.get('data_aquisicao')
-    result["data_aquisicao"] = data.isoformat() if hasattr(data, 'isoformat') else str(data) if data else None
+    # --- O PULO DO GATO: TRATAMENTO DE DATA ---
+    data_aq = getattr(item, 'data_aquisicao', None)
+    if data_aq:
+        # Se for um objeto de data real, transforma em texto "2026-02-12"
+        result["data_aquisicao"] = data_aq.isoformat() if hasattr(data_aq, 'isoformat') else str(data_aq)
+    else:
+        result["data_aquisicao"] = None
 
-    # Se for carro, mantém a lógica
+    # Mantém os dados dinâmicos
+    if hasattr(item, 'dados_categoria'):
+        result["dados_categoria"] = item.dados_categoria
+
+    # Mantém a lógica de carro para o front não quebrar
     if hasattr(item, 'carro') and item.carro:
         result["carro"] = {
             "placa": getattr(item.carro, 'placa', ''),
@@ -556,28 +564,26 @@ def item_to_dict(item: Item) -> dict:
             "modelo": getattr(item.carro, 'modelo', ''),
             "ano": getattr(item.carro, 'ano', 0)
         }
+    
     return result
+
 def compromisso_to_dict(comp: Compromisso) -> dict:
-    """Converte Compromisso para dict, tratando as datas para JSON"""
-    result = {
+    """Converte Compromisso tratando datas de início e fim"""
+    if not comp: return {}
+    return {
         "id": comp.id,
         "item_id": comp.item_id,
         "quantidade": comp.quantidade,
-        # CONVERSÃO DE DATAS: Transforma objetos date em strings "AAAA-MM-DD"
-        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp, 'data_inicio') and comp.data_inicio else None,
-        "data_fim": comp.data_fim.isoformat() if hasattr(comp, 'data_fim') and comp.data_fim else None,
+        # Transforma objetos de data em texto para o JSON
+        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp.data_inicio, 'isoformat') else str(comp.data_inicio),
+        "data_fim": comp.data_fim.isoformat() if hasattr(comp.data_fim, 'isoformat') else str(comp.data_fim),
         "descricao": comp.descricao or "",
         "cidade": comp.cidade or "",
         "uf": comp.uf or "",
         "endereco": comp.endereco or "",
         "contratante": comp.contratante or "",
+        "item": item_to_dict(comp.item) if hasattr(comp, 'item') and comp.item else None
     }
-    
-    # Se o compromisso trouxer o item junto, usamos a função item_to_dict que já corrigimos
-    if hasattr(comp, 'item') and comp.item:
-        result["item"] = item_to_dict(comp.item)
-    
-    return result
 
 # ============= AUTENTICAÇÃO =============
 
@@ -821,8 +827,8 @@ from fastapi.encoders import jsonable_encoder # <--- Adicione este import
 @app.post("/api/itens")
 async def create_item(item: ItemCreate, db_module = Depends(get_db)):
     try:
-        # Forçamos o valor_compra a ser float aqui no portal de entrada
-        val_compra = float(item.valor_compra or 0.0)
+        # Forçamos a limpeza do valor aqui no "portal" do backend
+        valor_limpo = float(item.valor_compra) if item.valor_compra is not None else 0.0
         
         novo_item = db_module.criar_item(
             nome=item.nome,
@@ -832,11 +838,11 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            valor_compra=val_compra, # Passando o valor limpo
+            valor_compra=valor_limpo, # <--- Enviando o valor garantido como float
             data_aquisicao=item.data_aquisicao,
             campos_categoria=item.campos_categoria
         )
-        # Usamos o tradutor corrigido
+        # O retorno agora usa o tradutor que limpa as datas!
         return item_to_dict(novo_item)
     except Exception as e:
         print(f"ERRO CRITICAL: {str(e)}")
@@ -846,6 +852,12 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
 async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
     """Atualiza um item existente com suporte a campos financeiros e dinâmicos"""
     try:
+        # SOLUÇÃO PARA O VALOR 0:
+        # Se no seu modelo ItemUpdate o campo estiver como Optional[float] = 0.0,
+        # o Pydantic vai mandar 0.0 sempre que o campo não vier do front.
+        # Fazemos essa trava para só atualizar se o valor for realmente enviado.
+        v_compra = item.valor_compra if item.valor_compra is not None else None
+
         item_atualizado = db_module.atualizar_item(
             item_id=item_id,
             nome=item.nome,
@@ -854,18 +866,21 @@ async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get
             descricao=item.descricao,
             cidade=item.cidade,
             uf=item.uf,
-            endereco=item.endereco, # Crucial para evitar o erro de atributo
-            valor_compra=item.valor_compra, # NOVO: Para o Centro de Custo
-            data_aquisicao=item.data_aquisicao, # NOVO: Para o Centro de Custo
+            endereco=item.endereco,
+            valor_compra=v_compra,  # Passa None se não foi enviado, mantendo o valor atual no banco
+            data_aquisicao=item.data_aquisicao,
             placa=item.placa,
             marca=item.marca,
             modelo=item.modelo,
             ano=item.ano,
             campos_categoria=item.campos_categoria
         )
+        
         if not item_atualizado:
             raise HTTPException(status_code=404, detail="Item não encontrado")
         
+        # O PONTO CHAVE: Usar o item_to_dict que criamos para converter 
+        # as datas do Supabase em texto antes de mandar para o navegador.
         return item_to_dict(item_atualizado)
         
     except HTTPException:
@@ -873,7 +888,6 @@ async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        # Log detalhado no console do servidor para debug
         print(f"Erro no Update: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
