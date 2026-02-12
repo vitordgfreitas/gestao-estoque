@@ -401,7 +401,7 @@ export default function Itens() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="label">Categoria *</label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <select
                   name="categoria"
                   value={formData.categoria}
@@ -417,7 +417,7 @@ export default function Itens() {
                 <button
                   type="button"
                   onClick={() => setMostrarModalNovaCategoria(true)}
-                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
                   title="Nova Categoria"
                 >
                   <Plus size={20} />

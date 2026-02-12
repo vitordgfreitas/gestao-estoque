@@ -106,7 +106,7 @@ export default function ContasReceber() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-3xl font-bold text-dark-50">Contas a Receber</h1>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -118,12 +118,15 @@ export default function ContasReceber() {
       </div>
 
       {/* Filtros */}
-      <div className="flex items-center gap-4">
-        <Filter size={20} className="text-dark-400" />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="inline-flex items-center gap-2 text-dark-400">
+          <Filter size={20} className="text-dark-400" />
+          <span className="text-sm">Filtrar por status</span>
+        </div>
         <select
           value={filtroStatus}
           onChange={(e) => setFiltroStatus(e.target.value)}
-          className="px-4 py-2 bg-dark-800 border border-dark-600 rounded-lg text-dark-50"
+          className="px-4 py-2 bg-dark-800 border border-dark-600 rounded-lg text-dark-50 max-w-xs"
         >
           <option value="Todos">Todos</option>
           <option value="Pendente">Pendentes</option>
@@ -219,18 +222,18 @@ export default function ContasReceber() {
                 placeholder="Observações adicionais..."
               />
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                className="w-full sm:w-auto px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
               >
                 {loading ? 'Salvando...' : 'Salvar'}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-lg transition-colors"
+                className="w-full sm:w-auto px-6 py-2 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-lg transition-colors"
               >
                 Cancelar
               </button>

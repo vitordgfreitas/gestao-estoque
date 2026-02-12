@@ -500,7 +500,7 @@ export default function Calendario() {
 
           <div>
             <label className="label">Visualização</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => setViewMode('mensal')}
                 className={`flex-1 px-4 py-2 rounded-lg transition-colors ${

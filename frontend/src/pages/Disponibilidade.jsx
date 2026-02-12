@@ -202,7 +202,7 @@ export default function Disponibilidade() {
 
         <div>
           <label className="label mb-4 block">Tipo de Consulta</label>
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
