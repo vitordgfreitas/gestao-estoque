@@ -1,7 +1,3 @@
-"""
-Implementação do banco de dados usando Supabase (PostgreSQL).
-Interface compatível com sheets_database e database para o backend FastAPI.
-"""
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -12,76 +8,50 @@ import auditoria
 _supabase_client = None
 
 def get_supabase():
-    """Obtém o cliente Supabase (singleton)."""
     global _supabase_client
     if _supabase_client is None:
         url = os.getenv('SUPABASE_URL')
         key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
         if not url or not key:
-            raise ValueError(
-                "SUPABASE_URL e SUPABASE_SERVICE_KEY (ou SUPABASE_KEY) devem estar configurados. "
-                "Configure no .env ou nas variáveis de ambiente."
-            )
+            raise ValueError("SUPABASE_URL e chaves de acesso devem estar configurados.")
         from supabase import create_client
         _supabase_client = create_client(url, key)
     return _supabase_client
 
-# Compatibilidade: main.py pode chamar get_sheets() no Sheets; Supabase não tem "sheets"
-def get_sheets():
-    """Retorna info do projeto (compatibilidade com código que verifica conexão)."""
-    sb = get_supabase()
-    return {
-        'spreadsheet_url': os.getenv('SUPABASE_URL', ''),
-        'spreadsheet_id': 'supabase',
-        'database': 'supabase'
-    }
-
-def _clear_cache():
-    """Compatibilidade com sheets_database (cache não usado aqui)."""
-    pass
+# --- HELPERS E DINAMISMO ---
 
 def _date_parse(d):
-    """Converte string ou date para date."""
-    if d is None:
-        return None
-    if isinstance(d, date):
-        return d
+    if d is None: return None
+    if isinstance(d, date): return d
     if isinstance(d, str):
-        return datetime.strptime(d[:10], '%Y-%m-%d').date()
+        try: return datetime.strptime(d[:10], '%Y-%m-%d').date()
+        except: return None
     return d
 
+def _slug_categoria(text):
+    if not text: return ""
+    return re.sub(r'[^a-z0-9_]', '', text.strip().lower().replace(' ', '_'))
+
+def _slugify_label(text):
+    return _slug_categoria(text)
+
+def _labelify_column(text):
+    return text.replace('_', ' ').title()
+
 def registrar_movimentacao(item_id, quantidade, tipo, ref_id=None, desc=""):
-    """
-    Registra toda entrada e saída de estoque.
-    tipo: 'COMPRA', 'ALUGUEL_SAIDA', 'ALUGUEL_RETORNO', 'INSTALACAO', 'MANUTENCAO'
-    """
-    sb = get_supabase()
-    payload = {
-        'item_id': int(item_id),
-        'quantidade': int(quantidade),
-        'tipo': tipo,
-        'referencia_id': ref_id,
-        'descricao': desc,
-        'data_movimentacao': datetime.now().isoformat()
-    }
-    sb.table('movimentacoes_estoque').insert(payload).execute()
-
-def obter_campos_categoria(categoria):
-    sb = get_supabase()
-    slug = _slug_categoria(categoria) # sua função de slug existente
+    """Registra histórico: COMPRA, ALUGUEL_SAIDA, ALUGUEL_RETORNO, INSTALACAO, REMOCAO_PECA."""
     try:
-        # Chama o RPC que criamos no SQL
-        r = sb.rpc('get_table_columns', {'t_name': slug}).execute()
-        colunas = [row['column_name'] for row in (r.data or [])]
-        
-        # Filtramos o que NÃO deve aparecer no formulário
-        ignore = ['id', 'item_id', 'created_at', 'dados_categoria']
-        # Retorna formatado: 'placa' -> 'Placa'
-        return [c.replace('_', ' ').title() for c in colunas if c not in ignore]
-    except:
-        return []
+        sb = get_supabase()
+        sb.table('movimentacoes_estoque').insert({
+            'item_id': int(item_id), 'quantidade': int(quantidade),
+            'tipo': tipo, 'referencia_id': ref_id, 'descricao': desc,
+            'data_movimentacao': datetime.now().isoformat()
+        }).execute()
+    except: pass
 
-def _row_to_item(record, carro=None, dados_categoria=None):
+# --- MAPEAMENTO DE OBJETOS (CLASSES INTERNAS) ---
+
+def _row_to_item(record, dados_categoria=None):
     class Item:
         def __init__(self):
             self.id = record.get('id')
@@ -92,334 +62,15 @@ def _row_to_item(record, carro=None, dados_categoria=None):
             self.cidade = record.get('cidade') or ''
             self.uf = (record.get('uf') or '')[:2].upper()
             self.endereco = record.get('endereco') or ''
-            
-            # --- NOVOS CAMPOS FINANCEIROS ---
             self.valor_compra = float(record.get('valor_compra') or 0.0)
             self.data_aquisicao = _date_parse(record.get('data_aquisicao'))
-            
-            self.carro = carro
-            self.dados_categoria = dados_categoria or (record.get('dados_categoria') or {})
+            self.dados_categoria = dados_categoria or record.get('dados_categoria') or {}
     return Item()
 
-def _row_to_carro(record):
-    class Carro:
-        def __init__(self):
-            self.item_id = record.get('item_id')
-            self.placa = record.get('placa') or ''
-            self.marca = record.get('marca') or ''
-            self.modelo = record.get('modelo') or ''
-            self.ano = int(record.get('ano') or 0)
-            self.chassi = record.get('chassi') or ''
-            self.renavam = record.get('renavam') or ''
-    return Carro()
-
-# Mapeamento Container: nome do campo no frontend -> coluna na tabela container
-_CAMPOS_CONTAINER_FRONT_TO_DB = {
-    'Tara': 'tara', 'Carga Máxima': 'carga_maxima', 'Comprimento': 'comprimento',
-    'Largura': 'largura', 'Altura': 'altura', 'Capacidade': 'capacidade', 'Cor': 'cor', 'Modelo': 'modelo'
-}
-_CAMPOS_CONTAINER_DB_TO_FRONT = {v: k for k, v in _CAMPOS_CONTAINER_FRONT_TO_DB.items()}
-
-# ---------- Categorias ----------
-def obter_categorias():
-    sb = get_supabase()
-    r = sb.table('categorias_itens').select('nome').order('nome').execute()
-    return sorted([row['nome'] for row in (r.data or []) if row.get('nome')])
-
-def obter_campos_categoria(categoria):
-    """Retorna os campos obrigatórios/desejados para cada categoria (formulário)."""
-    if categoria == 'Carros':
-        return ['Placa', 'Marca', 'Modelo', 'Ano', 'Chassi', 'Renavam']
-    if categoria == 'Container':
-        return ['Tara', 'Carga Máxima', 'Comprimento', 'Largura', 'Altura', 'Capacidade', 'Cor', 'Modelo']
-    if categoria == 'Pecas':
-        return ['Marca']
-    return []
-
-def _slug_categoria(nome_categoria):
-    """Gera nome de tabela válido para PostgreSQL: só letras minúsculas, números e underscore."""
-    s = (nome_categoria or '').strip().lower()
-    s = re.sub(r'[\s\-]+', '_', s)
-    s = re.sub(r'[^a-z0-9_]', '', s)
-    return s or 'categoria'
-
-def criar_categoria(nome_categoria):
-    sb = get_supabase()
-    existentes = obter_categorias()
-    if nome_categoria.strip() in existentes:
-        return None
-    r = sb.table('categorias_itens').insert({
-        'nome': nome_categoria.strip(),
-        'data_criacao': date.today().isoformat()
-    }).execute()
-    if r.data and len(r.data) > 0:
-        cat_id = r.data[0].get('id')
-        # Criar tabela no SQL para essa categoria (id, item_id, dados_categoria)
-        slug = _slug_categoria(nome_categoria)
-        if slug:
-            try:
-                sb.rpc('criar_tabela_categoria', {'nome_tabela': slug}).execute()
-            except Exception as e:
-                # Categoria já foi criada; falha só na tabela (ex.: função não existe ainda)
-                import traceback
-                print(f"[Supabase] Aviso: não foi possível criar tabela da categoria '{nome_categoria}' ({slug}): {e}")
-                traceback.print_exc()
-        return cat_id
-    return None
-
-# ---------- Itens ----------
-def _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano):
-    """Extrai placa, marca, modelo, ano, chassi, renavam de campos_categoria ou args."""
-    c = campos_categoria or {}
-    return (
-        placa or c.get('Placa') or '',
-        marca or c.get('Marca') or '',
-        modelo or c.get('Modelo') or '',
-        ano if ano is not None else (int(c['Ano']) if c.get('Ano') not in (None, '') else None),
-        (c.get('Chassi') or '').strip(),
-        (c.get('Renavam') or '').strip()
-    )
-
-def _campos_categoria_para_container(campos_categoria):
-    """Converte campos_categoria (frontend) para dict de colunas da tabela container."""
-    c = campos_categoria or {}
-    out = {}
-    for front, col in _CAMPOS_CONTAINER_FRONT_TO_DB.items():
-        v = c.get(front)
-        if v is not None and v != '':
-            try:
-                out[col] = float(v) if isinstance(v, str) and v.replace('.', '').replace(',', '').replace('-', '').isdigit() else v
-            except (ValueError, TypeError):
-                out[col] = v
-    return out
-
-def criar_item(nome, quantidade_total, categoria=None, valor_compra=0, data_aquisicao=None, **kwargs):
-    sb = get_supabase()
-    cat = categoria or 'Estrutura de Evento'
-    campos_recebidos = kwargs.get('campos_categoria', {})
-
-    # 1. Tabela Base
-    payload_itens = {
-        'nome': nome, 'quantidade_total': int(quantidade_total),
-        'categoria': cat, 'valor_compra': float(valor_compra or 0),
-        'data_aquisicao': data_aquisicao or date.today().isoformat(),
-        'descricao': kwargs.get('descricao', ''),
-        'cidade': kwargs.get('cidade', ''),
-        'uf': (kwargs.get('uf', ''))[:2].upper(),
-        'dados_categoria': campos_recebidos
-    }
-    ins = sb.table('itens').insert(payload_itens).execute()
-    item_id = ins.data[0]['id']
-
-    # 2. Log de Compra
-    registrar_movimentacao(item_id, quantidade_total, 'COMPRA')
-
-    # 3. Tabela Específica (Mapeamento Dinâmico)
-    slug = _slug_categoria(cat)
-    if slug and slug not in ('itens', 'compromissos'):
-        payload_cat = {'item_id': item_id}
-        for label, valor in campos_recebidos.items():
-            payload_cat[_slugify_label(label)] = valor # 'Placa' -> 'placa'
-        
-        try:
-            sb.table(slug).insert(payload_cat).execute()
-        except Exception as e:
-            print(f"Erro ao inserir em {slug}: {e}")
-
-    return buscar_item_por_id(item_id)
-
-def _container_row_to_dados_categoria(record):
-    """Converte linha da tabela container em dict de dados_categoria (nomes do frontend)."""
-    if not record:
-        return {}
-    out = {}
-    for col, front in _CAMPOS_CONTAINER_DB_TO_FRONT.items():
-        v = record.get(col)
-        if v is not None:
-            out[front] = v
-    return out
-
-def listar_itens():
-    sb = get_supabase()
-    r = sb.table('itens').select('*').execute()
-    carros_r = sb.table('carros').select('*').execute()
-    carros_by_item = {c['item_id']: c for c in (carros_r.data or [])}
-    try:
-        container_r = sb.table('container').select('*').execute()
-        container_by_item = {c['item_id']: c for c in (container_r.data or [])}
-    except Exception:
-        container_by_item = {}
-    itens = []
-    for row in (r.data or []):
-        carro = None
-        dados_cat = dict(row.get('dados_categoria') or {})
-        iid = row.get('id')
-        if iid in carros_by_item:
-            carro = _row_to_carro(carros_by_item[iid])
-            c = carros_by_item[iid]
-            dados_cat = {'Placa': c.get('placa'), 'Marca': c.get('marca'), 'Modelo': c.get('modelo'), 'Ano': c.get('ano'), 'Chassi': c.get('chassi'), 'Renavam': c.get('renavam'), **dados_cat}
-        elif iid in container_by_item:
-            dados_cat = {**_container_row_to_dados_categoria(container_by_item[iid]), **dados_cat}
-        else:
-            cat = row.get('categoria') or ''
-            slug = _slug_categoria(cat)
-            if slug and slug not in ('carros', 'container'):
-                try:
-                    slug_r = sb.table(slug).select('*').eq('item_id', iid).execute()
-                    if slug_r.data and len(slug_r.data) > 0:
-                        dc = (slug_r.data[0].get('dados_categoria') or {})
-                        dados_cat = {**dc, **dados_cat}
-                except Exception:
-                    pass
-        itens.append(_row_to_item(row, carro=carro, dados_categoria=dados_cat))
-    return itens
-
-def buscar_item_por_id(item_id):
-    sb = get_supabase()
-    r = sb.table('itens').select('*').eq('id', int(item_id)).execute()
-    if not r.data or len(r.data) == 0:
-        return None
-    row = r.data[0]
-    carro = None
-    dados_cat = dict(row.get('dados_categoria') or {})
-    cat = row.get('categoria') or ''
-    if cat == 'Carros':
-        cr = sb.table('carros').select('*').eq('item_id', int(item_id)).execute()
-        if cr.data and len(cr.data) > 0:
-            carro = _row_to_carro(cr.data[0])
-            c = cr.data[0]
-            dados_cat = {'Placa': c.get('placa'), 'Marca': c.get('marca'), 'Modelo': c.get('modelo'), 'Ano': c.get('ano'), 'Chassi': c.get('chassi'), 'Renavam': c.get('renavam'), **dados_cat}
-    elif cat == 'Container':
-        try:
-            cont = sb.table('container').select('*').eq('item_id', int(item_id)).execute()
-            if cont.data and len(cont.data) > 0:
-                dados_cat = {**_container_row_to_dados_categoria(cont.data[0]), **dados_cat}
-        except Exception:
-            pass
-    else:
-        slug = _slug_categoria(cat)
-        if slug and slug not in ('carros', 'container'):
-            try:
-                slug_r = sb.table(slug).select('*').eq('item_id', int(item_id)).execute()
-                if slug_r.data and len(slug_r.data) > 0:
-                    dc = slug_r.data[0].get('dados_categoria') or {}
-                    dados_cat = {**dc, **dados_cat}
-            except Exception:
-                pass
-    return _row_to_item(row, carro=carro, dados_categoria=dados_cat)
-
-def _remover_item_da_tabela_categoria(sb, item_id, categoria):
-    """Remove o item da tabela da categoria (carros, container ou slug), se existir."""
-    if categoria == 'Carros':
-        sb.table('carros').delete().eq('item_id', int(item_id)).execute()
-    elif categoria == 'Container':
-        try:
-            sb.table('container').delete().eq('item_id', int(item_id)).execute()
-        except Exception:
-            pass
-    else:
-        slug = _slug_categoria(categoria)
-        if slug and slug not in ('carros', 'container'):
-            try:
-                sb.table(slug).delete().eq('item_id', int(item_id)).execute()
-            except Exception:
-                pass
-
-def atualizar_item(item_id, nome, quantidade_total, categoria=None, descricao=None, cidade=None, uf=None, endereco=None, placa=None, marca=None, modelo=None, ano=None, campos_categoria=None):
-    item_atual = buscar_item_por_id(item_id)
-    if not item_atual:
-        raise ValueError(f"Item com ID {item_id} não encontrado")
-    categoria_final = categoria if categoria is not None else (item_atual.categoria or '')
-    cidade_final = cidade or item_atual.cidade or ''
-    uf_final = uf or item_atual.uf or ''
-    if categoria_final == 'Carros' and campos_categoria:
-        placa, marca, modelo, ano, _, _ = _campos_categoria_para_carro(campos_categoria, placa, marca, modelo, ano)
-    valido, msg = validacoes.validar_item_completo(
-        nome=nome, categoria=categoria_final, cidade=cidade_final, uf=uf_final,
-        quantidade_total=quantidade_total, placa=placa, marca=marca, modelo=modelo, ano=ano, campos_categoria=campos_categoria
-    )
-    if not valido:
-        raise ValueError(msg)
-    sb = get_supabase()
-    dados_cat = campos_categoria if campos_categoria is not None else (item_atual.dados_categoria or {})
-
-    # 1) Sempre atualizar a tabela itens (todos os campos)
-    payload = {
-        'nome': nome,
-        'quantidade_total': int(quantidade_total),
-        'descricao': descricao if descricao is not None else item_atual.descricao,
-        'cidade': cidade_final,
-        'uf': uf_final[:2].upper(),
-        'endereco': endereco if endereco is not None else item_atual.endereco,
-        'dados_categoria': dados_cat
-    }
-    if categoria is not None:
-        payload['categoria'] = categoria_final
-    sb.table('itens').update(payload).eq('id', int(item_id)).execute()
-
-    # 2) Sincronizar tabela da categoria: remover da antiga (se mudou) e inserir/atualizar na atual
-    cat_antiga = item_atual.categoria or ''
-    if categoria is not None and cat_antiga != categoria_final:
-        _remover_item_da_tabela_categoria(sb, item_id, cat_antiga)
-
-    if categoria_final == 'Carros' and (placa and marca and modelo and ano is not None):
-        _, _, _, _, chassi, renavam = _campos_categoria_para_carro(campos_categoria or {}, placa, marca, modelo, ano)
-        carro_row = {
-            'item_id': int(item_id), 'placa': placa.upper().strip(), 'marca': marca.strip(),
-            'modelo': modelo.strip(), 'ano': int(ano),
-            'chassi': (chassi or '')[:50] if chassi else None,
-            'renavam': (renavam or '')[:20] if renavam else None
-        }
-        cr = sb.table('carros').select('id').eq('item_id', int(item_id)).execute()
-        if cr.data and len(cr.data) > 0:
-            sb.table('carros').update(carro_row).eq('item_id', int(item_id)).execute()
-        else:
-            sb.table('carros').insert(carro_row).execute()
-    elif categoria_final == 'Container':
-        row_data = _campos_categoria_para_container(dados_cat)
-        try:
-            cont = sb.table('container').select('id').eq('item_id', int(item_id)).execute()
-            if cont.data and len(cont.data) > 0:
-                sb.table('container').update(row_data).eq('item_id', int(item_id)).execute()
-            else:
-                sb.table('container').insert({'item_id': int(item_id), **row_data}).execute()
-        except Exception as e:
-            print(f"[Supabase] Aviso: atualizar container: {e}")
-    else:
-        slug = _slug_categoria(categoria_final)
-        if slug and slug not in ('carros', 'container'):
-            try:
-                slug_r = sb.table(slug).select('id').eq('item_id', int(item_id)).execute()
-                row_slug = {'item_id': int(item_id), 'dados_categoria': dados_cat}
-                if slug_r.data and len(slug_r.data) > 0:
-                    sb.table(slug).update(row_slug).eq('item_id', int(item_id)).execute()
-                else:
-                    sb.table(slug).insert(row_slug).execute()
-            except Exception as e:
-                print(f"[Supabase] Aviso: atualizar tabela categoria '{categoria_final}': {e}")
-
-    auditoria.registrar_auditoria('UPDATE', 'Itens', item_id, valores_novos=payload)
-    return buscar_item_por_id(item_id)
-
-def deletar_item(item_id):
-    """Remove o item da tabela itens e também da tabela da categoria (carros, container ou slug)."""
-    sb = get_supabase()
-    item = buscar_item_por_id(item_id)
-    if item:
-        # 1) Remover explicitamente da tabela da categoria
-        categoria = item.categoria or ''
-        _remover_item_da_tabela_categoria(sb, item_id, categoria)
-    # 2) Remover da tabela itens (CASCADE no DB também remove nas categorias; remoção explícita acima garante tabelas dinâmicas)
-    r = sb.table('itens').delete().eq('id', int(item_id)).execute()
-    return r.data is not None and len(r.data) > 0
-
-
-# ---------- Compromissos ----------
 def _row_to_compromisso(record, item=None):
     class Compromisso:
         def __init__(self):
-            self.id = record.get('id')
-            self.item_id = record.get('item_id')
+            self.id = record.get('id'); self.item_id = record.get('item_id')
             self.quantidade = record.get('quantidade') or 0
             self.data_inicio = _date_parse(record.get('data_inicio'))
             self.data_fim = _date_parse(record.get('data_fim'))
@@ -431,287 +82,251 @@ def _row_to_compromisso(record, item=None):
             self._item = item
         @property
         def item(self):
-            if self._item is None and self.item_id:
-                self._item = buscar_item_por_id(self.item_id)
+            if self._item is None and self.item_id: self._item = buscar_item_por_id(self.item_id)
             return self._item
     return Compromisso()
 
-def criar_compromisso(item_id, quantidade, data_inicio, data_fim, descricao=None, cidade=None, uf=None, endereco=None, contratante=None):
-    if not cidade or not uf:
-        raise ValueError("Cidade e UF são obrigatórios")
+# --- GESTÃO DE CATEGORIAS ---
+
+def obter_categorias():
     sb = get_supabase()
-    data_inicio = _date_parse(data_inicio)
-    data_fim = _date_parse(data_fim)
-    ins = sb.table('compromissos').insert({
-        'item_id': int(item_id),
-        'quantidade': int(quantidade),
-        'data_inicio': data_inicio.isoformat(),
-        'data_fim': data_fim.isoformat(),
-        'descricao': descricao or '',
-        'cidade': cidade,
-        'uf': uf[:2].upper(),
-        'endereco': endereco or '',
-        'contratante': contratante or ''
-    }).execute()
-    if not ins.data or len(ins.data) == 0:
-        raise Exception("Erro ao criar compromisso")
-    row = ins.data[0]
-    auditoria.registrar_auditoria('CREATE', 'Compromissos', row['id'], valores_novos=row)
-    return _row_to_compromisso(row)
+    r = sb.table('categorias_itens').select('nome').order('nome').execute()
+    return sorted([row['nome'] for row in (r.data or []) if row.get('nome')])
+
+def obter_campos_categoria(categoria):
+    """Lê as colunas reais da tabela no Supabase via RPC."""
+    sb = get_supabase(); slug = _slug_categoria(categoria)
+    try:
+        r = sb.rpc('get_table_columns', {'t_name': slug}).execute()
+        colunas = [row['column_name'] for row in (r.data or [])]
+        ignore = ['id', 'item_id', 'created_at', 'dados_categoria']
+        return [_labelify_column(c) for c in colunas if c not in ignore]
+    except:
+        return []
+
+# --- CRUD DE ITENS (ESTOQUE) ---
+
+def criar_item(nome, quantidade_total, categoria=None, valor_compra=0, data_aquisicao=None, **kwargs):
+    sb = get_supabase(); cat = categoria or 'Estrutura de Evento'
+    campos_extra = kwargs.get('campos_categoria', {})
+    payload = {
+        'nome': nome, 'quantidade_total': int(quantidade_total), 'categoria': cat,
+        'valor_compra': float(valor_compra or 0), 'data_aquisicao': data_aquisicao or date.today().isoformat(),
+        'descricao': kwargs.get('descricao', ''), 'cidade': kwargs.get('cidade', ''),
+        'uf': (kwargs.get('uf', ''))[:2].upper(), 'endereco': kwargs.get('endereco', ''),
+        'dados_categoria': campos_extra
+    }
+    ins = sb.table('itens').insert(payload).execute()
+    item_id = ins.data[0]['id']
+    registrar_movimentacao(item_id, quantidade_total, 'COMPRA')
+    
+    slug = _slug_categoria(cat)
+    if slug and slug != 'itens':
+        p_spec = {'item_id': item_id}
+        for k, v in campos_extra.items(): p_spec[_slugify_label(k)] = v
+        try: sb.table(slug).insert(p_spec).execute()
+        except: pass
+    return buscar_item_por_id(item_id)
+
+def listar_itens():
+    sb = get_supabase(); r = sb.table('itens').select('*').execute()
+    itens = []
+    for row in (r.data or []):
+        iid = row['id']; slug = _slug_categoria(row['categoria']); d_spec = {}
+        if slug and slug != 'itens':
+            try:
+                r_s = sb.table(slug).select('*').eq('item_id', iid).execute()
+                if r_s.data: d_spec = {_labelify_column(k): v for k, v in r_s.data[0].items() if k not in ['id', 'item_id']}
+            except: pass
+        itens.append(_row_to_item(row, dados_categoria={**row.get('dados_categoria', {}), **d_spec}))
+    return itens
+
+def buscar_item_por_id(item_id):
+    sb = get_supabase(); r = sb.table('itens').select('*').eq('id', int(item_id)).execute()
+    if not r.data: return None
+    row = r.data[0]; slug = _slug_categoria(row['categoria']); d_spec = {}
+    if slug and slug != 'itens':
+        try:
+            r_s = sb.table(slug).select('*').eq('item_id', int(item_id)).execute()
+            if r_s.data: d_spec = {_labelify_column(k): v for k, v in r_s.data[0].items() if k not in ['id', 'item_id']}
+        except: pass
+    return _row_to_item(row, dados_categoria={**row.get('dados_categoria', {}), **d_spec})
+
+def atualizar_item(item_id, nome, quantidade_total, categoria=None, **kwargs):
+    sb = get_supabase()
+    payload = {'nome': nome, 'quantidade_total': int(quantidade_total)}
+    for k in ['descricao', 'cidade', 'uf', 'endereco', 'valor_compra', 'data_aquisicao']:
+        if k in kwargs and kwargs[k] is not None: payload[k] = kwargs[k]
+    if 'campos_categoria' in kwargs: payload['dados_categoria'] = kwargs['campos_categoria']
+    
+    sb.table('itens').update(payload).eq('id', int(item_id)).execute()
+    slug = _slug_categoria(categoria or buscar_item_por_id(item_id).categoria)
+    if slug and slug != 'itens' and 'campos_categoria' in kwargs:
+        p_spec = {'item_id': int(item_id)}
+        for label, valor in kwargs['campos_categoria'].items(): p_spec[_slugify_label(label)] = valor
+        try: sb.table(slug).upsert(p_spec, on_conflict='item_id').execute()
+        except: pass
+    return buscar_item_por_id(item_id)
+
+def deletar_item(item_id):
+    sb = get_supabase(); item = buscar_item_por_id(item_id)
+    if item:
+        slug = _slug_categoria(item.categoria)
+        if slug: sb.table(slug).delete().eq('item_id', int(item_id)).execute()
+        sb.table('pecas_carros').delete().or_(f"carro_id.eq.{item_id},peca_id.eq.{item_id}").execute()
+    r = sb.table('itens').delete().eq('id', int(item_id)).execute()
+    return r.data is not None
+
+# --- CRUD DE COMPROMISSOS (ALUGUÉIS) ---
+
+def criar_compromisso(item_id, quantidade, data_inicio, data_fim, **kwargs):
+    sb = get_supabase()
+    payload = {
+        'item_id': int(item_id), 'quantidade': int(quantidade),
+        'data_inicio': _date_parse(data_inicio).isoformat(),
+        'data_fim': _date_parse(data_fim).isoformat(),
+        'descricao': kwargs.get('descricao', ''), 'cidade': kwargs.get('cidade', ''),
+        'uf': (kwargs.get('uf', ''))[:2].upper(), 'endereco': kwargs.get('endereco', ''),
+        'contratante': kwargs.get('contratante', '')
+    }
+    ins = sb.table('compromissos').insert(payload).execute()
+    if ins.data:
+        registrar_movimentacao(item_id, -quantidade, 'ALUGUEL_SAIDA', ref_id=ins.data[0]['id'])
+        return _row_to_compromisso(ins.data[0])
+    raise Exception("Erro ao criar compromisso")
 
 def listar_compromissos():
     sb = get_supabase()
-    r = sb.table('compromissos').select('*').order('data_inicio', desc=False).execute()
-    itens_cache = {}
-    out = []
-    for row in (r.data or []):
-        iid = row.get('item_id')
-        if iid and iid not in itens_cache:
-            itens_cache[iid] = buscar_item_por_id(iid)
-        out.append(_row_to_compromisso(row, item=itens_cache.get(iid)))
-    return out
+    r = sb.table('compromissos').select('*').order('data_inicio').execute()
+    return [_row_to_compromisso(row) for row in (r.data or [])]
 
-def atualizar_compromisso(compromisso_id, item_id, quantidade, data_inicio, data_fim, descricao=None, cidade=None, uf=None, endereco=None, contratante=None):
-    sb = get_supabase()
-    payload = {}
-    if item_id is not None:
-        payload['item_id'] = int(item_id)
-    if quantidade is not None:
-        payload['quantidade'] = int(quantidade)
-    if data_inicio is not None:
-        payload['data_inicio'] = _date_parse(data_inicio).isoformat()
-    if data_fim is not None:
-        payload['data_fim'] = _date_parse(data_fim).isoformat()
-    if descricao is not None:
-        payload['descricao'] = descricao
-    if cidade is not None:
-        payload['cidade'] = cidade
-    if uf is not None:
-        payload['uf'] = uf[:2].upper()
-    if endereco is not None:
-        payload['endereco'] = endereco
-    if contratante is not None:
-        payload['contratante'] = contratante
-    if not payload:
-        return buscar_compromisso_por_id(compromisso_id)
-    sb.table('compromissos').update(payload).eq('id', int(compromisso_id)).execute()
-    return buscar_compromisso_por_id(compromisso_id)
+def buscar_compromisso_por_id(cid):
+    sb = get_supabase(); r = sb.table('compromissos').select('*').eq('id', int(cid)).execute()
+    return _row_to_compromisso(r.data[0]) if r.data else None
 
-def buscar_compromisso_por_id(compromisso_id):
-    sb = get_supabase()
-    r = sb.table('compromissos').select('*').eq('id', int(compromisso_id)).execute()
-    if not r.data or len(r.data) == 0:
-        return None
-    row = r.data[0]
-    item = buscar_item_por_id(row['item_id']) if row.get('item_id') else None
-    return _row_to_compromisso(row, item=item)
+def atualizar_compromisso(cid, **kwargs):
+    sb = get_supabase(); payload = {}
+    for k in ['item_id', 'quantidade', 'data_inicio', 'data_fim', 'descricao', 'cidade', 'uf', 'endereco', 'contratante']:
+        if k in kwargs and kwargs[k] is not None:
+            payload[k] = _date_parse(kwargs[k]).isoformat() if 'data' in k else kwargs[k]
+    sb.table('compromissos').update(payload).eq('id', int(cid)).execute()
+    return buscar_compromisso_por_id(cid)
 
-def deletar_compromisso(compromisso_id):
-    sb = get_supabase()
-    r = sb.table('compromissos').delete().eq('id', int(compromisso_id)).execute()
-    return r.data is not None and len(r.data) > 0
+def deletar_compromisso(cid):
+    sb = get_supabase(); r = sb.table('compromissos').delete().eq('id', int(cid)).execute()
+    return r.data is not None
 
-
-# ---------- Disponibilidade (inclui peças instaladas) ----------
-def listar_pecas_carros(carro_id=None, peca_id=None):
-    sb = get_supabase()
-    q = sb.table('pecas_carros').select('*')
-    if carro_id is not None:
-        q = q.eq('carro_id', int(carro_id))
-    if peca_id is not None:
-        q = q.eq('peca_id', int(peca_id))
-    r = q.execute()
-    class PecaCarroRow:
-        def __init__(self, row):
-            self.id = row.get('id')
-            self.peca_id = row.get('peca_id')
-            self.carro_id = row.get('carro_id')
-            self.quantidade = row.get('quantidade') or 1
-            self.data_instalacao = _date_parse(row.get('data_instalacao'))
-            self.observacoes = row.get('observacoes') or ''
-    return [PecaCarroRow(x) for x in (r.data or [])]
-
-# No Supabase a categoria de peças chama-se "Pecas" (tabela pecas)
-CATEGORIA_PECAS_SUPABASE = 'Pecas'
+# --- CRUD DE PEÇAS EM CARROS (ASSOCIAÇÕES) ---
 
 def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, observacoes=None):
-    """Associa uma peça (item) a um carro (item). Peça deve ser categoria 'Pecas', carro deve ser 'Carros'."""
-    sb = get_supabase()
-    peca = buscar_item_por_id(peca_id)
-    if not peca:
-        raise ValueError(f"Peça {peca_id} não encontrada")
-    cat_peca = (getattr(peca, 'categoria', '') or '').strip()
-    if cat_peca != CATEGORIA_PECAS_SUPABASE:
-        raise ValueError(f"Item {peca_id} não é uma peça (categoria: {peca.categoria}). No Supabase use categoria '{CATEGORIA_PECAS_SUPABASE}'.")
-    carro = buscar_item_por_id(carro_id)
-    if not carro:
-        raise ValueError(f"Carro {carro_id} não encontrado")
-    if (getattr(carro, 'categoria', '') or '') != 'Carros':
-        raise ValueError(f"Item {carro_id} não é um carro (categoria: {carro.categoria})")
+    sb = get_supabase(); peca = buscar_item_por_id(peca_id)
+    custo = peca.valor_compra if peca else 0
     payload = {
-        'peca_id': int(peca_id),
-        'carro_id': int(carro_id),
-        'quantidade': int(quantidade),
+        'peca_id': int(peca_id), 'carro_id': int(carro_id), 'quantidade': int(quantidade),
+        'custo_na_data': custo, 'data_instalacao': data_instalacao or date.today().isoformat(),
         'observacoes': observacoes or ''
     }
-    if data_instalacao is not None:
-        payload['data_instalacao'] = _date_parse(data_instalacao).isoformat()
     ins = sb.table('pecas_carros').insert(payload).execute()
-    if not ins.data or len(ins.data) == 0:
-        raise Exception("Erro ao criar associação peça-carro")
-    auditoria.registrar_auditoria('CREATE', 'Pecas_Carros', ins.data[0]['id'], valores_novos=payload)
-    return buscar_peca_carro_por_id(ins.data[0]['id'])
+    registrar_movimentacao(peca_id, -quantidade, 'INSTALACAO', ref_id=carro_id)
+    return ins.data[0]
+
+def listar_pecas_carros(carro_id=None, peca_id=None):
+    sb = get_supabase(); q = sb.table('pecas_carros').select('*')
+    if carro_id: q = q.eq('carro_id', int(carro_id))
+    if peca_id: q = q.eq('peca_id', int(peca_id))
+    r = q.execute()
+    class Row:
+        def __init__(self, d):
+            self.id=d['id']; self.peca_id=d['peca_id']; self.carro_id=d['carro_id']
+            self.quantidade=d['quantidade']; self.data_instalacao=_date_parse(d['data_instalacao'])
+            self.observacoes=d.get('observacoes','')
+    return [Row(x) for x in (r.data or [])]
 
 def buscar_peca_carro_por_id(associacao_id):
     sb = get_supabase()
     r = sb.table('pecas_carros').select('*').eq('id', int(associacao_id)).execute()
-    if not r.data or len(r.data) == 0:
-        return None
+    if not r.data: return None
     row = r.data[0]
-    class PecaCarroRow:
+    class Row:
         def __init__(self):
-            self.id = row.get('id')
-            self.peca_id = row.get('peca_id')
-            self.carro_id = row.get('carro_id')
-            self.quantidade = row.get('quantidade') or 1
-            self.data_instalacao = _date_parse(row.get('data_instalacao'))
-            self.observacoes = row.get('observacoes') or ''
-    return PecaCarroRow()
+            self.id=row['id']; self.peca_id=row['peca_id']; self.carro_id=row['carro_id']
+            self.quantidade=row['quantidade']; self.data_instalacao=_date_parse(row['data_instalacao'])
+            self.observacoes=row.get('observacoes','')
+    return Row()
 
 def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, observacoes=None):
     sb = get_supabase()
+    # Busca associação antiga para calcular diferença no log
+    r_antiga = sb.table('pecas_carros').select('*').eq('id', associacao_id).single().execute()
     payload = {}
-    if quantidade is not None:
-        payload['quantidade'] = int(quantidade)
-    if data_instalacao is not None:
-        payload['data_instalacao'] = _date_parse(data_instalacao).isoformat()
-    if observacoes is not None:
-        payload['observacoes'] = observacoes
-    if payload:
-        sb.table('pecas_carros').update(payload).eq('id', int(associacao_id)).execute()
-    return buscar_peca_carro_por_id(associacao_id)
+    if quantidade is not None: payload['quantidade'] = int(quantidade)
+    if data_instalacao: payload['data_instalacao'] = _date_parse(data_instalacao).isoformat()
+    if observacoes is not None: payload['observacoes'] = observacoes
+    
+    if quantidade is not None and r_antiga.data:
+        diff = r_antiga.data['quantidade'] - int(quantidade)
+        registrar_movimentacao(r_antiga.data['peca_id'], diff, 'AJUSTE_INSTALACAO', ref_id=r_antiga.data['carro_id'])
+    
+    r = sb.table('pecas_carros').update(payload).eq('id', int(associacao_id)).execute()
+    return r.data[0] if r.data else None
 
 def deletar_peca_carro(associacao_id):
     sb = get_supabase()
+    r_assoc = sb.table('pecas_carros').select('*').eq('id', associacao_id).single().execute()
+    if r_assoc.data:
+        # Quando removemos a peça do carro, ela volta para o estoque disponível (+)
+        registrar_movimentacao(r_assoc.data['peca_id'], r_assoc.data['quantidade'], 'REMOCAO_PECA', ref_id=r_assoc.data['carro_id'])
     r = sb.table('pecas_carros').delete().eq('id', int(associacao_id)).execute()
-    return r.data is not None and len(r.data) > 0
+    return len(r.data) > 0
 
-def verificar_disponibilidade(item_id, data_consulta, filtro_localizacao=None):
+# --- MOTOR DE DISPONIBILIDADE (TOTAL - ALUGADO - INSTALADO) ---
+
+def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
     item = buscar_item_por_id(item_id)
-    if not item:
-        return None
-        
-    data_consulta = _date_parse(data_consulta)
-    sb = get_supabase()
+    if not item: return None
+    dt = _date_parse(data_consulta); sb = get_supabase()
     
-    # 1. Busca compromissos (Rentals)
-    # Em vez de listar todos, filtramos direto no banco para performance
-    query_comp = sb.table('compromissos').select('*').eq('item_id', int(item_id))
-    r_comp = query_comp.execute()
-    compromissos = [_row_to_compromisso(c) for c in (r_comp.data or [])]
-    
-    # Filtra compromissos ativos na data
-    compromissos_ativos = [c for c in compromissos if c.data_inicio <= data_consulta <= c.data_fim]
-    
-    # 2. Aplica sua lógica de Filtro de Localização nos Compromissos
-    if filtro_localizacao:
-        cidade_uf = filtro_localizacao.split(" - ")
-        if len(cidade_uf) == 2:
-            cidade_f, uf_f = cidade_uf[0], cidade_uf[1]
-            compromissos_ativos = [c for c in compromissos_ativos if getattr(c, 'cidade', '') == cidade_f and getattr(c, 'uf', '') == uf_f.upper()]
+    # 1. Alugado na data
+    r_c = sb.table('compromissos').select('quantidade, cidade, uf').eq('item_id', item_id).lte('data_inicio', dt.isoformat()).gte('data_fim', dt.isoformat()).execute()
+    comps = r_c.data or []
+    if filtro_loc:
+        p = filtro_loc.split(" - ")
+        if len(p)==2: comps = [c for c in comps if c['cidade']==p[0] and c['uf']==p[1].upper()]
+    qtd_alugada = sum(c['quantidade'] for c in comps)
 
-    quantidade_comprometida = sum(c.quantidade for c in compromissos_ativos)
-
-    # 3. Busca peças instaladas (Ativo Imobilizado)
-    # Filtramos por data_instalacao para saber se na data da consulta a peça já estava no carro
-    pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', int(item_id)).execute()
+    # 2. Instalado em carros (Compromisso Interno)
+    r_i = sb.table('pecas_carros').select('quantidade').eq('peca_id', item_id).lte('data_instalacao', dt.isoformat()).execute()
+    qtd_inst = sum(p['quantidade'] for p in (r_i.data or []))
     
-    quantidade_instalada = sum(
-        p['quantidade'] for p in (pecas_r.data or [])
-        if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= data_consulta
-    )
-
-    # 4. Cálculo final considerando a Localização do Item
-    total_ocupado = quantidade_comprometida + quantidade_instalada
-    
-    if filtro_localizacao:
-        cidade_uf = filtro_localizacao.split(" - ")
-        if len(cidade_uf) == 2:
-            cidade_f, uf_f = cidade_uf[0], cidade_uf[1]
-            # Verifica se o item físico está nesta cidade
-            item_na_loc = (getattr(item, 'cidade', '') == cidade_f and getattr(item, 'uf', '') == uf_f.upper())
-            quantidade_disponivel = (item.quantidade_total - total_ocupado) if item_na_loc else 0
-        else:
-            quantidade_disponivel = item.quantidade_total - total_ocupado
-    else:
-        quantidade_disponivel = item.quantidade_total - total_ocupado
-
+    disponivel = item.quantidade_total - qtd_alugada - qtd_inst
     return {
-        'item': item,
-        'quantidade_total': item.quantidade_total,
-        'quantidade_comprometida': quantidade_comprometida,
-        'quantidade_instalada': quantidade_instalada,
-        'quantidade_disponivel': max(0, quantidade_disponivel),
-        'compromissos_ativos': compromissos_ativos,
-        'valor_patrimonial_unitario': getattr(item, 'valor_compra', 0) # Inteligência Financeira
+        'item': item, 'quantidade_total': item.quantidade_total,
+        'quantidade_comprometida': qtd_alugada, 'quantidade_instalada': qtd_inst,
+        'quantidade_disponivel': max(0, disponivel), 'compromissos_ativos': comps
     }
 
-def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None):
+def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_id=None):
     item = buscar_item_por_id(item_id)
-    if not item:
-        return None
-        
-    data_inicio = _date_parse(data_inicio)
-    data_fim = _date_parse(data_fim)
-    
-    # Busca compromissos que colidem com o período
+    if not item: return None
+    d_ini = _date_parse(data_inicio); d_fim = _date_parse(data_fim)
     sb = get_supabase()
-    r_comp = sb.table('compromissos').select('*').eq('item_id', int(item_id)).execute()
-    compromissos = [_row_to_compromisso(c) for c in (r_comp.data or [])]
+    r = sb.table('compromissos').select('*').eq('item_id', item_id).execute()
+    comps = [c for c in (_row_to_compromisso(x) for x in r.data) if c.data_inicio <= d_fim and c.data_fim >= d_ini]
+    if excluir_id: comps = [c for c in comps if c.id != excluir_id]
     
-    compromissos = [c for c in compromissos if c.data_inicio <= data_fim and c.data_fim >= data_inicio]
+    pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', item_id).execute()
     
-    if excluir_compromisso_id:
-        compromissos = [c for c in compromissos if c.id != excluir_compromisso_id]
-
-    # Lógica de "Pior Cenário": Verifica dia a dia qual o pico de ocupação
-    max_comprometido = 0
-    d = data_inicio
-    while d <= data_fim:
-        no_dia = sum(c.quantidade for c in compromissos if c.data_inicio <= d <= c.data_fim)
-        # Somamos o que está instalado nos carros também para esse dia
-        # (Considerando que peças instaladas raramente saem, mas a data_instalacao importa)
-        pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', int(item_id)).execute()
-        qtd_inst_no_dia = sum(
-            p['quantidade'] for p in (pecas_r.data or [])
-            if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= d
-        )
-        
-        total_ocupado_no_dia = no_dia + qtd_inst_no_dia
-        max_comprometido = max(max_comprometido, total_ocupado_no_dia)
-        d += timedelta(days=1)
-
-    return {
-        'item': item,
-        'quantidade_total': item.quantidade_total,
-        'max_ocupado_no_periodo': max_comprometido,
-        'disponivel_minimo': max(0, item.quantidade_total - max_comprometido)
-    }
+    max_occ = 0; curr = d_ini
+    while curr <= d_fim:
+        dia_alugado = sum(c.quantidade for c in comps if c.data_inicio <= curr <= c.data_fim)
+        dia_instalado = sum(p['quantidade'] for p in (pecas_r.data or []) if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr)
+        max_occ = max(max_occ, dia_alugado + dia_instalado)
+        curr += timedelta(days=1)
     
+    return {'item': item, 'quantidade_total': item.quantidade_total, 'max_comprometido': max_occ, 'disponivel_minimo': max(0, item.quantidade_total - max_occ)}
 
-def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
-    resultados = []
-    for item in listar_itens():
-        disp = verificar_disponibilidade(item.id, data_consulta, filtro_localizacao)
-        if disp:
-            resultados.append({
-                'item': disp['item'],
-                'quantidade_total': disp['quantidade_total'],
-                'quantidade_comprometida': disp['quantidade_comprometida'],
-                'quantidade_instalada': disp.get('quantidade_instalada', 0),
-                'quantidade_disponivel': disp['quantidade_disponivel']
-            })
-    return resultados
+def verificar_disponibilidade_todos_itens(data_consulta, filtro_loc=None):
+    return [verificar_disponibilidade(i.id, data_consulta, filtro_loc) for i in listar_itens()]
 
 
 # ---------- Financiamentos ----------
