@@ -36,6 +36,7 @@ export default function VisualizarDados() {
   const [deletingCompromisso, setDeletingCompromisso] = useState(null)
   const [viewingItem, setViewingItem] = useState(null)
   const [viewingCompromisso, setViewingCompromisso] = useState(null)
+  const [editingPecaCarro, setEditingPecaCarro] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -111,6 +112,18 @@ export default function VisualizarDados() {
       setEditingCompromisso(null)
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Erro ao atualizar compromisso')
+    }
+  }
+
+  const handleSavePecaCarro = async (data) => {
+    if (!editingPecaCarro) return
+    try {
+      await api.put(`/api/pecas-carros/${editingPecaCarro.id}`, data)
+      toast.success('Associação atualizada com sucesso!')
+      await loadData()
+      setEditingPecaCarro(null)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao atualizar associação')
     }
   }
 
@@ -213,7 +226,8 @@ export default function VisualizarDados() {
         )}
       </div>
 
-      {/* Table */}
+      {/* Tabela de Itens ou Compromissos (oculta na aba Peças em Carros) */}
+      {(activeTab === 'itens' || activeTab === 'compromissos') && (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -376,16 +390,17 @@ export default function VisualizarDados() {
           </table>
         </div>
       </motion.div>
+      )}
 
-      {/* Tabela de Peças em Carros */}
+      {/* Tabela de Peças em Carros (só nesta aba) */}
       {activeTab === 'pecas-carros' && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="card overflow-hidden"
+          className="card overflow-hidden p-0"
         >
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -407,22 +422,30 @@ export default function VisualizarDados() {
                         key={peca.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
+                        className="hover:bg-dark-700/30"
                       >
-                        <td className="text-dark-400 font-mono text-sm">{peca.id}</td>
-                        <td className="text-dark-50 font-medium">
+                        <td className="font-mono text-xs text-dark-400">{peca.id}</td>
+                        <td className="font-medium text-dark-50">
                           {carro ? formatItemName(carro) : 'Carro Deletado'}
                         </td>
                         <td className="text-dark-50">{pecaItem?.nome || 'Peça Deletada'}</td>
                         <td className="text-dark-50">{peca.quantidade}</td>
-                        <td className="text-dark-50">
+                        <td className="text-dark-400">
                           {peca.data_instalacao ? formatDate(peca.data_instalacao) : '-'}
                         </td>
-                        <td className="text-dark-400 text-sm max-w-xs truncate" title={peca.observacoes}>
+                        <td className="text-dark-400 text-sm max-w-xs truncate" title={peca.observacoes || ''}>
                           {peca.observacoes || '-'}
                         </td>
                         <td>
-                          <div className="flex gap-1">
-                            <button 
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEditingPecaCarro(peca)}
+                              className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit size={16} className="text-primary-400" />
+                            </button>
+                            <button
                               onClick={async () => {
                                 if (window.confirm('Deseja remover esta associação?')) {
                                   try {
@@ -524,6 +547,16 @@ export default function VisualizarDados() {
           itens={itens}
           onClose={() => setEditingCompromisso(null)}
           onSave={handleSaveCompromisso}
+        />
+      )}
+
+      {/* Modal de Edição de Peça em Carro */}
+      {editingPecaCarro && (
+        <EditPecaCarroModal
+          pecaCarro={editingPecaCarro}
+          itens={itens}
+          onClose={() => setEditingPecaCarro(null)}
+          onSave={handleSavePecaCarro}
         />
       )}
 
@@ -1060,6 +1093,84 @@ function EditCompromissoModal({ compromisso, itens, onClose, onSave }) {
           </button>
           <button type="submit" disabled={loading} className="btn btn-primary flex-1">
             {loading ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// Modal de Edição de Peça em Carro (associação)
+function EditPecaCarroModal({ pecaCarro, itens, onClose, onSave }) {
+  const carro = itens.find(i => i.id === pecaCarro.carro_id)
+  const pecaItem = itens.find(i => i.id === pecaCarro.peca_id)
+  const [formData, setFormData] = useState({
+    quantidade: pecaCarro.quantidade ?? 1,
+    data_instalacao: pecaCarro.data_instalacao ? (typeof pecaCarro.data_instalacao === 'string' ? pecaCarro.data_instalacao.split('T')[0] : pecaCarro.data_instalacao) : '',
+    observacoes: pecaCarro.observacoes || '',
+  })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await onSave({
+        quantidade: parseInt(formData.quantidade, 10) || 1,
+        data_instalacao: formData.data_instalacao || null,
+        observacoes: formData.observacoes || null,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Editar associação #${pecaCarro.id}`}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="label">Carro</label>
+          <p className="text-dark-50 font-medium">{carro ? formatItemName(carro) : 'Carro Deletado'}</p>
+        </div>
+        <div>
+          <label className="label">Peça</label>
+          <p className="text-dark-50 font-medium">{pecaItem?.nome || 'Peça Deletada'}</p>
+        </div>
+        <div>
+          <label className="label">Quantidade *</label>
+          <input
+            type="number"
+            value={formData.quantidade}
+            onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
+            required
+            min="1"
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="label">Data Instalação</label>
+          <input
+            type="date"
+            value={formData.data_instalacao}
+            onChange={(e) => setFormData({ ...formData, data_instalacao: e.target.value })}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="label">Observações</label>
+          <textarea
+            value={formData.observacoes}
+            onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+            className="input resize-none"
+            rows={3}
+          />
+        </div>
+        <div className="flex gap-3 pt-4">
+          <button type="button" onClick={onClose} className="btn btn-secondary flex-1">
+            Cancelar
+          </button>
+          <button type="submit" disabled={loading} className="btn btn-primary flex-1">
+            {loading ? 'Salvando...' : 'Salvar'}
           </button>
         </div>
       </form>
