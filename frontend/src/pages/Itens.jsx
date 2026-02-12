@@ -107,6 +107,20 @@ export default function Itens() {
     }
   }
 
+  const formatarMoeda = (valor) => {
+    // Remove tudo que não é dígito
+    const apenasNumeros = valor.replace(/\D/g, "");
+    
+    // Converte para decimal (centavos)
+    const valorDecimal = (Number(apenasNumeros) / 100).toFixed(2);
+    
+    // Formata para o padrão brasileiro de exibição
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'decimal',
+      minimumFractionDigits: 2,
+    }).format(valorDecimal);
+  };
+  
   const loadCamposCategoria = async (categoria) => {
     try {
       const response = await categoriasAPI.obterCampos(categoria)
@@ -127,22 +141,15 @@ export default function Itens() {
   }
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-
-    // Se mudou categoria, limpa campos dinâmicos
-    if (name === 'categoria') {
-      setCamposDinamicos({})
+    const { name, value } = e.target;
+  
+    if (name === 'valor_compra') {
+      // Aplica a máscara visual
+      const valorFormatado = formatarMoeda(value);
+      setFormData(prev => ({ ...prev, [name]: valorFormatado }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
-
-    // Para Carros, gera nome automaticamente
-    if (name === 'categoria' && value === 'Carros') {
-      setFormData(prev => ({ ...prev, quantidade_total: 1 }))
-    }
-  }
 
   const handleCampoDinamicoChange = (campo, value) => {
     setCamposDinamicos(prev => ({

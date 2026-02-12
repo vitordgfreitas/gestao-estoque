@@ -288,7 +288,7 @@ class ItemUpdate(BaseModel):
     cidade: Optional[str] = None
     uf: Optional[str] = None
     endereco: Optional[str] = None # <--- ADICIONE TAMBÉM AQUI
-    valor_compra: Optional[float] = None
+    valor_compra: Optional[float] = 0.0
     data_aquisicao: Optional[date] = None
     placa: Optional[str] = None
     marca: Optional[str] = None
