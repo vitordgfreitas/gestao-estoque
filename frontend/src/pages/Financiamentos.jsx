@@ -294,16 +294,19 @@ export default function Financiamentos() {
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-        <select
-          value={filtroStatus}
-          onChange={(e) => setFiltroStatus(e.target.value)}
-          className="px-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white"
-        >
-          <option value="Todos">Todos</option>
-          <option value="Ativo">Ativos</option>
-          <option value="Quitado">Quitados</option>
-          <option value="Cancelado">Cancelados</option>
-        </select>
+        <div className="text-sm text-dark-400">Filtrar por status</div>
+        <div className="flex flex-col xs:flex-row gap-3">
+          <select
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value)}
+            className="px-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white max-w-xs"
+          >
+            <option value="Todos">Todos</option>
+            <option value="Ativo">Ativos</option>
+            <option value="Quitado">Quitados</option>
+            <option value="Cancelado">Cancelados</option>
+          </select>
+        </div>
       </div>
 
       {/* Formulário */}
@@ -648,7 +651,7 @@ export default function Financiamentos() {
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <div>
                       <p className="text-sm text-dark-400">Valor Total</p>
                       <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_total)}</p>

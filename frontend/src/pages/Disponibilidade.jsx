@@ -201,8 +201,8 @@ export default function Disponibilidade() {
         </div>
 
         <div>
-          <label className="label mb-4 block">Tipo de Consulta</label>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <label className="label mb-2 block">Tipo de Consulta</label>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
@@ -449,8 +449,8 @@ export default function Disponibilidade() {
                           </button>
 
                           {isExpanded && (
-                            <div className="p-4 space-y-4">
-                              <div className="grid grid-cols-3 gap-4">
+                              <div className="p-4 space-y-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div>
                                   <p className="text-sm text-dark-400">Total de Itens</p>
                                   <p className="text-xl font-bold text-dark-50">{totalItens}</p>

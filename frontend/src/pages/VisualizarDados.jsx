@@ -165,7 +165,7 @@ export default function VisualizarDados() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-dark-700">
+      <div className="flex flex-wrap gap-2 border-b border-dark-700">
         <button
           onClick={() => setActiveTab('itens')}
           className={`px-6 py-3 font-medium transition-colors border-b-2 ${
@@ -234,7 +234,7 @@ export default function VisualizarDados() {
         className="card overflow-hidden p-0"
       >
         <div className="overflow-x-auto">
-          <table className="table">
+          <table className="table min-w-[720px]">
             <thead>
               <tr>
                 {activeTab === 'itens' ? (
@@ -400,7 +400,7 @@ export default function VisualizarDados() {
           className="card overflow-hidden p-0"
         >
           <div className="overflow-x-auto">
-            <table className="table">
+            <table className="table min-w-[720px]">
               <thead>
                 <tr>
                   <th>ID</th>
