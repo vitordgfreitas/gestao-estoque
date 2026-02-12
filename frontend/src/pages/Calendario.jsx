@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { compromissosAPI, itensAPI, categoriasAPI } from '../services/api'
 import api from '../services/api'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, Package } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, Package, FileText, PlayCircle, Calendar, ExternalLink, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import { formatItemName, formatDate } from '../utils/format'
+
+const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0)
 
 export default function Calendario() {
   const [compromissos, setCompromissos] = useState([])
@@ -35,17 +37,40 @@ export default function Calendario() {
   
   // Estado para modal de detalhes
   const [detalhesDia, setDetalhesDia] = useState(null)
+  // Parcelas do mês (para contagem nos dias)
+  const [parcelasMes, setParcelasMes] = useState([])
 
-  const abrirDetalhesDia = async (data, compsDia) => {
+  const dataToStr = (d) => (d instanceof Date ? d.toISOString().split('T')[0] : (d || '').split('T')[0])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await api.get('/api/parcelas', { params: { mes: mesAtual, ano: anoAtual } })
+        if (!cancelled) setParcelasMes(res.data || [])
+      } catch (e) {
+        if (!cancelled) setParcelasMes([])
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [mesAtual, anoAtual])
+
+  const abrirDetalhesDia = async (data, compsInicio, compsAtivos) => {
     const dataObj = data instanceof Date ? data : new Date(data)
-    const dataStr = dataObj.toISOString().split('T')[0]
-    setDetalhesDia({ data: dataObj, compromissos: compsDia || [], parcelas: [], loadingParcelas: true })
+    const dataStr = dataToStr(dataObj)
+    setDetalhesDia({
+      data: dataObj,
+      compromissosInicio: compsInicio || [],
+      compromissosAtivos: compsAtivos || [],
+      parcelas: [],
+      loadingParcelas: true
+    })
     try {
-      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr } })
+      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr, incluir_pagas: true } })
       setDetalhesDia((prev) => {
         if (!prev) return prev
-        const prevStr = prev.data?.toISOString?.().split('T')[0]
-        if (prevStr !== dataStr) return prev
+        if (dataToStr(prev.data) !== dataStr) return prev
         return { ...prev, parcelas: res.data || [], loadingParcelas: false }
       })
     } catch (error) {
@@ -218,34 +243,36 @@ export default function Calendario() {
               }
 
               const dataAtual = new Date(anoAtual, mesAtual - 1, dia)
+              const dataStr = dataToStr(dataAtual)
               const hoje = new Date()
               const isHoje = dataAtual.toDateString() === hoje.toDateString()
-              const compsDia = compromissosPorData(dataAtual)
-              const numComps = compsDia.length
+              const compsAtivos = compromissosPorData(dataAtual)
+              const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dataStr)
+              const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dataStr).length
+              const temAlgo = numBoletos > 0 || compsInicio.length > 0 || compsAtivos.length > 0
 
               return (
                 <button
                   key={`${semanaIdx}-${diaIdx}`}
-                  onClick={() => {
-                    // Abre modal mesmo sem compromissos (pode haver boletos/parcelas)
-                    abrirDetalhesDia(dataAtual, compsDia)
-                  }}
-                  className={`aspect-square p-2 rounded-lg border transition-colors ${
+                  onClick={() => abrirDetalhesDia(dataAtual, compsInicio, compsAtivos)}
+                  className={`aspect-square p-1.5 rounded-lg border transition-colors text-left ${
                     isHoje
                       ? 'bg-primary-600 border-primary-500 text-white'
-                      : numComps > 0
+                      : temAlgo
                       ? 'bg-primary-600/20 border-primary-600/30 hover:bg-primary-600/30'
                       : 'bg-dark-800 border-dark-700 hover:bg-dark-700'
                   }`}
                 >
-                  <div className="flex flex-col h-full">
+                  <div className="flex flex-col h-full gap-0.5">
                     <span className={`text-sm font-medium ${isHoje ? 'text-white' : 'text-dark-50'}`}>
                       {dia}
                     </span>
-                    {numComps > 0 && (
-                      <span className={`text-xs mt-auto ${isHoje ? 'text-white/80' : 'text-primary-400'}`}>
-                        {numComps} comp{numComps > 1 ? 's' : ''}
-                      </span>
+                    {(numBoletos > 0 || compsInicio.length > 0 || compsAtivos.length > 0) && (
+                      <div className={`text-[10px] mt-auto space-y-0.5 ${isHoje ? 'text-white/90' : 'text-dark-300'}`}>
+                        {numBoletos > 0 && <div className="flex items-center gap-1"><FileText size={10} /> {numBoletos} boleto{numBoletos !== 1 ? 's' : ''}</div>}
+                        {compsInicio.length > 0 && <div className="flex items-center gap-1"><PlayCircle size={10} /> {compsInicio.length} início</div>}
+                        {compsAtivos.length > 0 && <div className="flex items-center gap-1"><Calendar size={10} /> {compsAtivos.length} ativo{compsAtivos.length !== 1 ? 's' : ''}</div>}
+                      </div>
                     )}
                   </div>
                 </button>
@@ -293,7 +320,10 @@ export default function Calendario() {
         {/* Dias da semana */}
         <div className="space-y-4">
           {dias.map((dia, idx) => {
-            const compsDia = compromissosPorData(dia)
+            const dataStr = dataToStr(dia)
+            const compsAtivos = compromissosPorData(dia)
+            const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dataStr)
+            const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dataStr).length
             const hoje = new Date()
             const isHoje = dia.toDateString() === hoje.toDateString()
 
@@ -310,30 +340,39 @@ export default function Calendario() {
                   <h4 className="font-semibold text-dark-50">
                     {diasSemana[idx]} - {formatDate(dia.toISOString().split('T')[0])}
                   </h4>
-                  {compsDia.length > 0 && (
-                    <span className="text-sm text-primary-400">
-                      {compsDia.length} compromisso{compsDia.length > 1 ? 's' : ''}
-                    </span>
-                  )}
+                  <div className="flex gap-2 text-xs text-dark-400">
+                    {numBoletos > 0 && <span>{numBoletos} boleto{numBoletos !== 1 ? 's' : ''}</span>}
+                    {compsInicio.length > 0 && <span>{compsInicio.length} início</span>}
+                    {compsAtivos.length > 0 && <span>{compsAtivos.length} ativo{compsAtivos.length !== 1 ? 's' : ''}</span>}
+                  </div>
                 </div>
 
-                {compsDia.length > 0 ? (
-                  <div className="space-y-2">
-                    {compsDia.map(comp => (
-                      <div
-                        key={comp.id}
-                        onClick={() => abrirDetalhesDia(dia, [comp])}
-                        className="p-3 bg-dark-700/50 rounded-lg hover:bg-dark-700 cursor-pointer transition-colors"
-                      >
-                        <p className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</p>
-                        <p className="text-sm text-dark-400">
-                          {comp.quantidade} unidades • {comp.contratante || 'Sem contratante'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                {(compsAtivos.length > 0 || compsInicio.length > 0 || numBoletos > 0) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => abrirDetalhesDia(dia, compsInicio, compsAtivos)}
+                      className="text-sm text-primary-400 hover:text-primary-300 mb-2"
+                    >
+                      Ver detalhes do dia
+                    </button>
+                    <div className="space-y-2">
+                      {compsAtivos.map(comp => (
+                        <div
+                          key={comp.id}
+                          onClick={() => abrirDetalhesDia(dia, compsInicio, compsAtivos)}
+                          className="p-3 bg-dark-700/50 rounded-lg hover:bg-dark-700 cursor-pointer transition-colors"
+                        >
+                          <p className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</p>
+                          <p className="text-sm text-dark-400">
+                            {comp.quantidade} unidades • {comp.contratante || 'Sem contratante'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
-                  <p className="text-sm text-dark-400">Nenhum compromisso neste dia.</p>
+                  <p className="text-sm text-dark-400">Nada neste dia.</p>
                 )}
               </div>
             )
@@ -344,73 +383,69 @@ export default function Calendario() {
   }
 
   const renderCalendarioDiario = () => {
-    const compsDia = compromissosPorData(diaSelecionado)
+    const dataStr = dataToStr(diaSelecionado)
+    const compsAtivos = compromissosPorData(diaSelecionado)
+    const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dataStr)
+    const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dataStr).length
     const hoje = new Date()
     const isHoje = diaSelecionado.toDateString() === hoje.toDateString()
-
     const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
     const diaSemanaNome = diasSemana[diaSelecionado.getDay()]
 
     return (
       <div className="space-y-4">
-        {/* Navegação do dia */}
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => navegarDia('anterior')}
-            className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
-          >
+          <button onClick={() => navegarDia('anterior')} className="p-2 hover:bg-dark-700 rounded-lg transition-colors">
             <ChevronLeft className="text-dark-400" size={20} />
           </button>
           <h3 className={`text-xl font-semibold ${isHoje ? 'text-primary-400' : 'text-dark-50'}`}>
             {diaSemanaNome} - {formatDate(diaSelecionado.toISOString().split('T')[0])}
             {isHoje && ' (Hoje)'}
           </h3>
-          <button
-            onClick={() => navegarDia('proximo')}
-            className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
-          >
+          <button onClick={() => navegarDia('proximo')} className="p-2 hover:bg-dark-700 rounded-lg transition-colors">
             <ChevronRight className="text-dark-400" size={20} />
           </button>
         </div>
-
-        {/* Compromissos do dia */}
-        {compsDia.length > 0 ? (
+        <div className="flex gap-4 text-sm text-dark-400 mb-4">
+          {numBoletos > 0 && <span>{numBoletos} boleto{numBoletos !== 1 ? 's' : ''}</span>}
+          {compsInicio.length > 0 && <span>{compsInicio.length} que iniciam</span>}
+          {compsAtivos.length > 0 && <span>{compsAtivos.length} ativo{compsAtivos.length !== 1 ? 's' : ''}</span>}
+        </div>
+        <button
+          type="button"
+          onClick={() => abrirDetalhesDia(diaSelecionado, compsInicio, compsAtivos)}
+          className="text-primary-400 hover:text-primary-300 text-sm"
+        >
+          Ver detalhes do dia (compromissos e boletos)
+        </button>
+        {compsAtivos.length > 0 && (
           <div className="space-y-3">
-            {compsDia.map(comp => (
+            {compsAtivos.map(comp => (
               <div
                 key={comp.id}
-                onClick={() => abrirDetalhesDia(diaSelecionado, [comp])}
+                onClick={() => abrirDetalhesDia(diaSelecionado, compsInicio, compsAtivos)}
                 className="p-4 bg-dark-800 border border-dark-700 rounded-lg hover:border-primary-600/50 cursor-pointer transition-colors"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-dark-50 mb-2">
-                      {formatItemName(comp.item) || 'Item Deletado'}
-                    </h4>
-                    <div className="space-y-1 text-sm text-dark-400">
-                      <p>Quantidade: {comp.quantidade} unidades</p>
-                      <p>
-                        Período: {formatDate(comp.data_inicio)} a{' '}
-                        {formatDate(comp.data_fim)}
-                      </p>
-                      {comp.descricao && <p>Descrição: {comp.descricao}</p>}
-                      {comp.contratante && <p>Contratante: {comp.contratante}</p>}
-                      {comp.cidade && comp.uf && (
-                        <div className="flex items-center gap-1 mt-2">
-                          <MapPin size={14} />
-                          <span>{comp.cidade} - {comp.uf}</span>
-                        </div>
-                      )}
+                <h4 className="font-semibold text-dark-50 mb-2">{formatItemName(comp.item) || 'Item Deletado'}</h4>
+                <div className="space-y-1 text-sm text-dark-400">
+                  <p>Quantidade: {comp.quantidade} unidades</p>
+                  <p>Período: {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}</p>
+                  {comp.contratante && <p>Contratante: {comp.contratante}</p>}
+                  {comp.cidade && comp.uf && (
+                    <div className="flex items-center gap-1 mt-2">
+                      <MapPin size={14} />
+                      <span>{comp.cidade} - {comp.uf}</span>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        ) : (
+        )}
+        {compsAtivos.length === 0 && numBoletos === 0 && (
           <div className="text-center py-12 text-dark-400">
             <CalendarIcon className="mx-auto mb-3 opacity-50" size={48} />
-            <p>Nenhum compromisso neste dia.</p>
+            <p>Nada neste dia.</p>
           </div>
         )}
       </div>
@@ -508,94 +543,121 @@ export default function Calendario() {
         {viewMode === 'diaria' && renderCalendarioDiario()}
       </div>
 
-      {/* Modal de detalhes */}
+      {/* Modal de detalhes do dia */}
       {detalhesDia && (
         <Modal
           isOpen={!!detalhesDia}
           onClose={() => setDetalhesDia(null)}
           title={`Agenda em ${formatDate(detalhesDia.data.toISOString().split('T')[0])}`}
         >
-          <div className="space-y-4">
-            {/* Compromissos */}
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Compromissos que iniciam neste dia */}
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-dark-200">Compromissos</h4>
-              {detalhesDia.compromissos.length > 0 ? (
-                detalhesDia.compromissos.map(comp => (
+              <h4 className="text-sm font-semibold text-dark-200 flex items-center gap-2">
+                <PlayCircle size={16} /> Compromissos que iniciam neste dia ({detalhesDia.compromissosInicio?.length || 0})
+              </h4>
+              {detalhesDia.compromissosInicio?.length > 0 ? (
+                detalhesDia.compromissosInicio.map(comp => (
                   <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
-                    <h5 className="font-semibold text-dark-50 mb-3">
-                      {formatItemName(comp.item) || 'Item Deletado'}
-                    </h5>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Quantidade:</span>
-                        <span className="text-dark-50 font-medium">{comp.quantidade} unidades</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Período:</span>
-                        <span className="text-dark-50">
-                          {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}
-                        </span>
-                      </div>
-                      {comp.descricao && (
-                        <div>
-                          <span className="text-dark-400">Descrição:</span>
-                          <p className="text-dark-50 mt-1">{comp.descricao}</p>
-                        </div>
-                      )}
-                      {comp.contratante && (
-                        <div className="flex justify-between">
-                          <span className="text-dark-400">Contratante:</span>
-                          <span className="text-dark-50">{comp.contratante}</span>
-                        </div>
-                      )}
-                      {comp.cidade && comp.uf && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <MapPin size={14} className="text-dark-400" />
-                          <span className="text-dark-400">{comp.cidade} - {comp.uf}</span>
-                          {comp.endereco && <span className="text-dark-400">({comp.endereco})</span>}
-                        </div>
-                      )}
+                    <h5 className="font-semibold text-dark-50 mb-2">{formatItemName(comp.item) || 'Item Deletado'}</h5>
+                    <div className="space-y-1 text-sm text-dark-400">
+                      <p>Quantidade: {comp.quantidade} • Período: {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}</p>
+                      {comp.contratante && <p>Contratante: {comp.contratante}</p>}
+                      {comp.cidade && comp.uf && <p><MapPin size={12} className="inline" /> {comp.cidade} - {comp.uf}</p>}
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-dark-400 text-center py-4">Nenhum compromisso neste dia.</p>
+                <p className="text-dark-500 text-sm">Nenhum compromisso inicia neste dia.</p>
               )}
             </div>
 
-            {/* Parcelas (boletos) */}
+            {/* Compromissos ativos neste dia */}
             <div className="space-y-3 pt-2 border-t border-dark-700">
-              <h4 className="text-sm font-semibold text-dark-200">Parcelas (boletos) vencendo hoje</h4>
-              {detalhesDia.loadingParcelas ? (
-                <p className="text-dark-400 text-center py-4">Carregando parcelas...</p>
-              ) : detalhesDia.parcelas && detalhesDia.parcelas.length > 0 ? (
-                detalhesDia.parcelas.map((p) => (
-                  <div key={p.id} className="p-4 bg-dark-700/30 rounded-lg border border-dark-700">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="text-dark-50 font-semibold">
-                          Parcela {p.numero_parcela} (Financiamento #{p.financiamento_id})
-                        </p>
-                        <p className="text-sm text-dark-400 mt-1">
-                          Valor: R$ {Number(p.valor_original || 0).toFixed(2).replace('.', ',')}
-                        </p>
-                        <p className="text-sm text-dark-400">Status: {p.status}</p>
-                      </div>
-                      {p.link_boleto && (
-                        <a
-                          href={p.link_boleto}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 bg-primary-600/20 hover:bg-primary-600/30 text-primary-300 rounded-lg text-sm transition-colors whitespace-nowrap"
-                        >
-                          Abrir boleto
-                        </a>
-                      )}
+              <h4 className="text-sm font-semibold text-dark-200 flex items-center gap-2">
+                <Calendar size={16} /> Compromissos ativos neste dia ({detalhesDia.compromissosAtivos?.length || 0})
+              </h4>
+              {detalhesDia.compromissosAtivos?.length > 0 ? (
+                detalhesDia.compromissosAtivos.map(comp => (
+                  <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
+                    <h5 className="font-semibold text-dark-50 mb-2">{formatItemName(comp.item) || 'Item Deletado'}</h5>
+                    <div className="space-y-1 text-sm text-dark-400">
+                      <p>Quantidade: {comp.quantidade} • Período: {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}</p>
+                      {comp.contratante && <p>Contratante: {comp.contratante}</p>}
+                      {comp.cidade && comp.uf && <p><MapPin size={12} className="inline" /> {comp.cidade} - {comp.uf}</p>}
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-dark-400 text-center py-4">Nenhuma parcela vencendo hoje.</p>
+                <p className="text-dark-500 text-sm">Nenhum compromisso ativo neste dia.</p>
+              )}
+            </div>
+
+            {/* Parcelas (boletos) – mesmo layout do olhinho do financiamento */}
+            <div className="space-y-3 pt-2 border-t border-dark-700">
+              <h4 className="text-sm font-semibold text-dark-200 flex items-center gap-2">
+                <FileText size={16} /> Parcelas (boletos) com vencimento neste dia
+              </h4>
+              {detalhesDia.loadingParcelas ? (
+                <p className="text-dark-400 text-center py-4">Carregando parcelas...</p>
+              ) : detalhesDia.parcelas?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-dark-600">
+                        <th className="text-left py-2 text-dark-400 font-medium">Contrato</th>
+                        <th className="text-left py-2 text-dark-400 font-medium">Parcela</th>
+                        <th className="text-left py-2 text-dark-400 font-medium">Vencimento</th>
+                        <th className="text-right py-2 text-dark-400 font-medium">Valor</th>
+                        <th className="text-right py-2 text-dark-400 font-medium">Pago</th>
+                        <th className="text-left py-2 text-dark-400 font-medium">Status</th>
+                        <th className="text-left py-2 text-dark-400 font-medium">Boleto</th>
+                        <th className="text-left py-2 text-dark-400 font-medium">Comprovante</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detalhesDia.parcelas.map((p) => {
+                        const StatusIcon = p.status === 'Paga' ? CheckCircle : p.status === 'Atrasada' ? AlertCircle : Clock
+                        const statusColor = p.status === 'Paga' ? 'text-green-400' : p.status === 'Atrasada' ? 'text-red-400' : 'text-yellow-400'
+                        return (
+                          <tr key={p.id} className="border-b border-dark-700/50">
+                            <td className="py-2 text-dark-50 font-medium">{p.codigo_contrato || `Financiamento #${p.financiamento_id}`}</td>
+                            <td className="py-2 text-dark-50">{p.numero_parcela}</td>
+                            <td className="py-2 text-dark-400">{formatDate(p.data_vencimento)}</td>
+                            <td className="py-2 text-right text-dark-50 font-medium">{formatCurrency(p.valor_original)}</td>
+                            <td className="py-2 text-right text-dark-400">{formatCurrency(p.valor_pago)}</td>
+                            <td className="py-2">
+                              <span className={`flex items-center gap-1 ${statusColor}`}>
+                                <StatusIcon size={14} />
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="py-2">
+                              {p.link_boleto ? (
+                                <a href={p.link_boleto} target="_blank" rel="noreferrer" className="text-primary-400 hover:text-primary-300 inline-flex items-center gap-1">
+                                  <ExternalLink size={14} /> Boleto
+                                </a>
+                              ) : (
+                                <span className="text-dark-500">-</span>
+                              )}
+                            </td>
+                            <td className="py-2">
+                              {p.link_comprovante ? (
+                                <a href={p.link_comprovante} target="_blank" rel="noreferrer" className="text-green-400 hover:text-green-300 inline-flex items-center gap-1">
+                                  <ExternalLink size={14} /> Comprovante
+                                </a>
+                              ) : (
+                                <span className="text-dark-500">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-dark-500 text-sm">Nenhuma parcela vence neste dia.</p>
               )}
             </div>
           </div>

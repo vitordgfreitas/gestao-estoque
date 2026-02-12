@@ -2077,22 +2077,60 @@ async def obter_dashboard_financiamentos(token: str = Depends(verify_token), db_
 
 # ============= ENDPOINTS PARCELAS (BOLETOS) =============
 
+def _parcela_data_vencimento(p):
+    """Retorna data_vencimento da parcela como date para comparação."""
+    dv = getattr(p, "data_vencimento", None)
+    if dv is None:
+        return None
+    if isinstance(dv, date):
+        return dv
+    if isinstance(dv, str):
+        try:
+            return datetime.strptime(dv[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
+
 @app.get("/api/parcelas", response_model=List[dict])
 async def listar_parcelas(
     data_vencimento: Optional[date] = Query(None),
+    mes: Optional[int] = Query(None, ge=1, le=12),
+    ano: Optional[int] = Query(None, ge=2000, le=2100),
     status: Optional[str] = Query(None),
     incluir_pagas: bool = Query(False),
     token: str = Depends(verify_token),
     db_module = Depends(get_db),
 ):
-    """Lista parcelas do financiamento. Pode filtrar por data_vencimento e/ou status."""
+    """Lista parcelas do financiamento. Filtros: data_vencimento, mes/ano, status. Retorna codigo_contrato."""
     try:
         parcelas = db_module.listar_parcelas_financiamento(status=status)
         if not incluir_pagas:
             parcelas = [p for p in parcelas if (getattr(p, "status", None) or "") != "Paga"]
         if data_vencimento:
-            parcelas = [p for p in parcelas if getattr(p, "data_vencimento", None) == data_vencimento]
-        return [parcela_to_dict(p) for p in parcelas]
+            parcelas = [p for p in parcelas if _parcela_data_vencimento(p) == data_vencimento]
+        if mes is not None and ano is not None:
+            parcelas = [
+                p for p in parcelas
+                if (_parcela_data_vencimento(p) and _parcela_data_vencimento(p).month == mes and _parcela_data_vencimento(p).year == ano)
+            ]
+        # Enriquecer com codigo_contrato
+        resultado = []
+        fins_cache = {}
+        for p in parcelas:
+            d = parcela_to_dict(p)
+            fin_id = getattr(p, "financiamento_id", None)
+            if fin_id is not None:
+                if fin_id not in fins_cache:
+                    try:
+                        fin = db_module.buscar_financiamento(fin_id)
+                        fins_cache[fin_id] = getattr(fin, "codigo_contrato", None) or ""
+                    except Exception:
+                        fins_cache[fin_id] = ""
+                d["codigo_contrato"] = fins_cache[fin_id] or f"Financiamento #{fin_id}"
+            else:
+                d["codigo_contrato"] = ""
+            resultado.append(d)
+        return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
