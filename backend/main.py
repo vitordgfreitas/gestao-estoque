@@ -1,7 +1,7 @@
 """
 Backend FastAPI para o CRM de Gestão de Estoque
 """
-from fastapi import FastAPI, HTTPException, Depends, status, Body, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Body, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
@@ -2072,6 +2072,24 @@ async def obter_dashboard_financiamentos(token: str = Depends(verify_token), db_
             'valor_total_pago': valor_total_pago,
             'valor_total_restante': valor_total_restante
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= ENDPOINTS PARCELAS (BOLETOS) =============
+
+@app.get("/api/parcelas", response_model=List[dict])
+async def listar_parcelas(
+    data_vencimento: Optional[date] = Query(None),
+    status: Optional[str] = Query(None),
+    token: str = Depends(verify_token),
+    db_module = Depends(get_db),
+):
+    """Lista parcelas do financiamento. Pode filtrar por data_vencimento e/ou status."""
+    try:
+        parcelas = db_module.listar_parcelas_financiamento(status=status)
+        if data_vencimento:
+            parcelas = [p for p in parcelas if getattr(p, "data_vencimento", None) == data_vencimento]
+        return [parcela_to_dict(p) for p in parcelas]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

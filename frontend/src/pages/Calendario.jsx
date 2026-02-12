@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { compromissosAPI, itensAPI, categoriasAPI } from '../services/api'
+import api from '../services/api'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
@@ -34,6 +35,24 @@ export default function Calendario() {
   
   // Estado para modal de detalhes
   const [detalhesDia, setDetalhesDia] = useState(null)
+
+  const abrirDetalhesDia = async (data, compsDia) => {
+    const dataObj = data instanceof Date ? data : new Date(data)
+    const dataStr = dataObj.toISOString().split('T')[0]
+    setDetalhesDia({ data: dataObj, compromissos: compsDia || [], parcelas: [], loadingParcelas: true })
+    try {
+      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr, status: 'Pendente' } })
+      setDetalhesDia((prev) => {
+        if (!prev) return prev
+        const prevStr = prev.data?.toISOString?.().split('T')[0]
+        if (prevStr !== dataStr) return prev
+        return { ...prev, parcelas: res.data || [], loadingParcelas: false }
+      })
+    } catch (error) {
+      console.error('Erro ao carregar parcelas do dia:', error)
+      setDetalhesDia((prev) => (prev ? { ...prev, parcelas: [], loadingParcelas: false } : prev))
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -208,9 +227,8 @@ export default function Calendario() {
                 <button
                   key={`${semanaIdx}-${diaIdx}`}
                   onClick={() => {
-                    if (numComps > 0) {
-                      setDetalhesDia({ data: dataAtual, compromissos: compsDia })
-                    }
+                    // Abre modal mesmo sem compromissos (pode haver boletos/parcelas)
+                    abrirDetalhesDia(dataAtual, compsDia)
                   }}
                   className={`aspect-square p-2 rounded-lg border transition-colors ${
                     isHoje
@@ -304,7 +322,7 @@ export default function Calendario() {
                     {compsDia.map(comp => (
                       <div
                         key={comp.id}
-                        onClick={() => setDetalhesDia({ data: dia, compromissos: [comp] })}
+                        onClick={() => abrirDetalhesDia(dia, [comp])}
                         className="p-3 bg-dark-700/50 rounded-lg hover:bg-dark-700 cursor-pointer transition-colors"
                       >
                         <p className="font-medium text-dark-50">{formatItemName(comp.item) || 'Item Deletado'}</p>
@@ -361,7 +379,7 @@ export default function Calendario() {
             {compsDia.map(comp => (
               <div
                 key={comp.id}
-                onClick={() => setDetalhesDia({ data: diaSelecionado, compromissos: [comp] })}
+                onClick={() => abrirDetalhesDia(diaSelecionado, [comp])}
                 className="p-4 bg-dark-800 border border-dark-700 rounded-lg hover:border-primary-600/50 cursor-pointer transition-colors"
               >
                 <div className="flex items-start justify-between">
@@ -495,54 +513,91 @@ export default function Calendario() {
         <Modal
           isOpen={!!detalhesDia}
           onClose={() => setDetalhesDia(null)}
-          title={`Compromissos em ${formatDate(detalhesDia.data.toISOString().split('T')[0])}`}
+          title={`Agenda em ${formatDate(detalhesDia.data.toISOString().split('T')[0])}`}
         >
           <div className="space-y-4">
-            {detalhesDia.compromissos.length > 0 ? (
-              detalhesDia.compromissos.map(comp => (
-                <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
-                  <h4 className="font-semibold text-dark-50 mb-3">
-                    {formatItemName(comp.item) || 'Item Deletado'}
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-dark-400">Quantidade:</span>
-                      <span className="text-dark-50 font-medium">{comp.quantidade} unidades</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-dark-400">Período:</span>
-                      <span className="text-dark-50">
-                        {formatDate(comp.data_inicio)} a{' '}
-                        {formatDate(comp.data_fim)}
-                      </span>
-                    </div>
-                    {comp.descricao && (
-                      <div>
-                        <span className="text-dark-400">Descrição:</span>
-                        <p className="text-dark-50 mt-1">{comp.descricao}</p>
-                      </div>
-                    )}
-                    {comp.contratante && (
+            {/* Compromissos */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-dark-200">Compromissos</h4>
+              {detalhesDia.compromissos.length > 0 ? (
+                detalhesDia.compromissos.map(comp => (
+                  <div key={comp.id} className="p-4 bg-dark-700/50 rounded-lg border border-dark-700">
+                    <h5 className="font-semibold text-dark-50 mb-3">
+                      {formatItemName(comp.item) || 'Item Deletado'}
+                    </h5>
+                    <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-dark-400">Contratante:</span>
-                        <span className="text-dark-50">{comp.contratante}</span>
+                        <span className="text-dark-400">Quantidade:</span>
+                        <span className="text-dark-50 font-medium">{comp.quantidade} unidades</span>
                       </div>
-                    )}
-                    {comp.cidade && comp.uf && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <MapPin size={14} className="text-dark-400" />
-                        <span className="text-dark-400">{comp.cidade} - {comp.uf}</span>
-                        {comp.endereco && (
-                          <span className="text-dark-400">({comp.endereco})</span>
-                        )}
+                      <div className="flex justify-between">
+                        <span className="text-dark-400">Período:</span>
+                        <span className="text-dark-50">
+                          {formatDate(comp.data_inicio)} a {formatDate(comp.data_fim)}
+                        </span>
                       </div>
-                    )}
+                      {comp.descricao && (
+                        <div>
+                          <span className="text-dark-400">Descrição:</span>
+                          <p className="text-dark-50 mt-1">{comp.descricao}</p>
+                        </div>
+                      )}
+                      {comp.contratante && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-400">Contratante:</span>
+                          <span className="text-dark-50">{comp.contratante}</span>
+                        </div>
+                      )}
+                      {comp.cidade && comp.uf && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <MapPin size={14} className="text-dark-400" />
+                          <span className="text-dark-400">{comp.cidade} - {comp.uf}</span>
+                          {comp.endereco && <span className="text-dark-400">({comp.endereco})</span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-dark-400 text-center py-8">Nenhum compromisso neste dia.</p>
-            )}
+                ))
+              ) : (
+                <p className="text-dark-400 text-center py-4">Nenhum compromisso neste dia.</p>
+              )}
+            </div>
+
+            {/* Parcelas (boletos) */}
+            <div className="space-y-3 pt-2 border-t border-dark-700">
+              <h4 className="text-sm font-semibold text-dark-200">Parcelas (boletos) vencendo hoje</h4>
+              {detalhesDia.loadingParcelas ? (
+                <p className="text-dark-400 text-center py-4">Carregando parcelas...</p>
+              ) : detalhesDia.parcelas && detalhesDia.parcelas.length > 0 ? (
+                detalhesDia.parcelas.map((p) => (
+                  <div key={p.id} className="p-4 bg-dark-700/30 rounded-lg border border-dark-700">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-dark-50 font-semibold">
+                          Parcela {p.numero_parcela} (Financiamento #{p.financiamento_id})
+                        </p>
+                        <p className="text-sm text-dark-400 mt-1">
+                          Valor: R$ {Number(p.valor_original || 0).toFixed(2).replace('.', ',')}
+                        </p>
+                        <p className="text-sm text-dark-400">Status: {p.status}</p>
+                      </div>
+                      {p.link_boleto && (
+                        <a
+                          href={p.link_boleto}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-2 bg-primary-600/20 hover:bg-primary-600/30 text-primary-300 rounded-lg text-sm transition-colors whitespace-nowrap"
+                        >
+                          Abrir boleto
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-dark-400 text-center py-4">Nenhuma parcela vencendo hoje.</p>
+              )}
+            </div>
           </div>
         </Modal>
       )}
