@@ -63,15 +63,21 @@ export default function VisualizarDados() {
   }
 
   // Handlers de exclusão
-  const handleDeleteItem = async () => {
-    try {
-      await itensAPI.deletar(deletingItem.id)
-      toast.success('Item removido com sucesso')
-      setItens(itens.filter(i => i.id !== deletingItem.id))
-      setDeletingItem(null)
-    } catch (error) { toast.error('Erro ao excluir item') }
-  }
+  const handleDelete = async (id, nome) => {
+  if (!window.confirm(`Deseja realmente apagar o contrato "${nome}"?`)) return;
 
+  try {
+    // Certifique-se que o seu services/api.js aponte para a rota DELETE /api/compromissos/:id
+    await compromissosAPI.excluir(id); 
+    
+    toast.success("Contrato removido e estoque liberado!");
+    
+    // Atualiza a lista removendo o contrato deletado
+    setCompromissos(prev => prev.filter(c => c.id !== id));
+  } catch (error) {
+    toast.error("Erro ao deletar contrato.");
+  }
+};
   const handleDeleteCompromisso = async () => {
     try {
       await compromissosAPI.deletar(deletingCompromisso.id)

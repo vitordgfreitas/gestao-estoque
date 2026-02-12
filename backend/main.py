@@ -1083,19 +1083,15 @@ async def atualizar_compromisso(compromisso_id: int, comp_in: CompromissoUpdateM
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.delete("/api/compromissos/{compromisso_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
-    """Deleta um compromisso"""
+@app.delete("/api/compromissos/{compromisso_id}")
+async def excluir_compromisso(compromisso_id: int, db_module = Depends(get_db)):
     try:
-        sucesso = db_module.deletar_compromisso(compromisso_id)
-        if not sucesso:
-            raise HTTPException(status_code=404, detail="Compromisso não encontrado")
-        return None
-    except HTTPException:
-        raise
+        resultado = db_module.deletar_compromisso(compromisso_id)
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Contrato não encontrado")
+        return {"status": "success", "message": "Contrato e itens removidos"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 # ============= DISPONIBILIDADE =============
 
 @app.post("/api/disponibilidade", response_model=dict)
