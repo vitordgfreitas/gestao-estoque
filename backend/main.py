@@ -271,13 +271,9 @@ class ItemCreate(BaseModel):
     descricao: Optional[str] = None
     cidade: str
     uf: str
-    endereco: Optional[str] = None # <--- ADICIONE ESTA LINHA
-    valor_compra: Optional[float] = 0.0 # Sugestão para o Centro de Custo
-    data_aquisicao: Optional[date] = None # Sugestão para o Centro de Custo
-    placa: Optional[str] = None
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    ano: Optional[int] = None
+    endereco: Optional[str] = None
+    valor_compra: Optional[float] = 0.0 # Agora o maestro reconhece essa nota
+    data_aquisicao: Optional[date] = None
     campos_categoria: Optional[dict] = None
 
 class ItemUpdate(BaseModel):
@@ -287,13 +283,9 @@ class ItemUpdate(BaseModel):
     descricao: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
-    endereco: Optional[str] = None # <--- ADICIONE TAMBÉM AQUI
-    valor_compra: Optional[float] = 0.0
+    endereco: Optional[str] = None
+    valor_compra: Optional[float] = None
     data_aquisicao: Optional[date] = None
-    placa: Optional[str] = None
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    ano: Optional[int] = None
     campos_categoria: Optional[dict] = None
 
 class ItemResponse(BaseModel):
@@ -305,7 +297,10 @@ class ItemResponse(BaseModel):
     cidade: str
     uf: str
     endereco: Optional[str]
+    valor_compra: float = 0.0 # Adicionado para o Front conseguir ler
+    data_aquisicao: Optional[date] = None # Adicionado para o Front conseguir ler
     carro: Optional[dict] = None
+    dados_categoria: Optional[dict] = None
     
     class Config:
         from_attributes = True
@@ -833,9 +828,9 @@ async def buscar_item(item_id: int, db_module = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/itens")
-async def create_item(item: ItemCreate):
+async def create_item(item: ItemCreate, db_module = Depends(get_db)):
     try:
-        # Garanta que o valor_compra está sendo passado aqui!
+        # Os nomes aqui (esquerda) devem bater com os nomes na função criar_item
         novo_item = db_module.criar_item(
             nome=item.nome,
             quantidade_total=item.quantidade_total,
@@ -844,12 +839,14 @@ async def create_item(item: ItemCreate):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            valor_compra=item.valor_compra,  # <--- ESSA LINHA É O FOCO
+            valor_compra=item.valor_compra,  # <--- Deve bater com o nome na função
             data_aquisicao=item.data_aquisicao,
             campos_categoria=item.campos_categoria
         )
         return item_to_dict(novo_item)
     except Exception as e:
+        # Isso ajuda a ver o erro real no log do servidor
+        print(f"ERRO CRITICAL: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/itens/{item_id}", response_model=dict)
