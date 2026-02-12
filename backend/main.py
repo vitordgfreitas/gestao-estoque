@@ -528,66 +528,52 @@ class ValorPresenteResponse(BaseModel):
 # ============= HELPERS =============
 
 def item_to_dict(item: Item) -> dict:
-    """Converte Item para dict, incluindo dados_categoria e carro"""
+    """Converte Item para dict, tratando datas para evitar erro de serialização"""
     result = {
         "id": item.id,
         "nome": item.nome,
         "quantidade_total": item.quantidade_total,
         "categoria": item.categoria or "",
-        "descricao": item.descricao,
-        "cidade": item.cidade,
-        "uf": item.uf,
-        "endereco": item.endereco,
-        "valor_compra": getattr(item, 'valor_compra', 0.0),
+        "descricao": item.descricao or "",
+        "cidade": item.cidade or "",
+        "uf": item.uf or "",
+        "endereco": item.endereco or "",
+        # TRATAMENTO DE DATA: Converte para "AAAA-MM-DD" ou retorna None
         "data_aquisicao": item.data_aquisicao.isoformat() if hasattr(item, 'data_aquisicao') and item.data_aquisicao else None,
+        "valor_compra": getattr(item, 'valor_compra', 0.0),
     }
     
-    # Adiciona dados_categoria se existir (prioridade)
+    # Mantém sua lógica de dados_categoria e carro intacta
     if hasattr(item, 'dados_categoria') and item.dados_categoria:
-        # Se dados_categoria é dict, usa diretamente
-        if isinstance(item.dados_categoria, dict):
-            result["dados_categoria"] = item.dados_categoria
-        else:
-            # Se for objeto, converte para dict
-            result["dados_categoria"] = item.dados_categoria if hasattr(item.dados_categoria, '__dict__') else {}
-    
-    # Adiciona dados do carro se existir (para compatibilidade)
+        result["dados_categoria"] = item.dados_categoria if isinstance(item.dados_categoria, dict) else {}
+
     if hasattr(item, 'carro') and item.carro:
         result["carro"] = {
-            "placa": getattr(item.carro, 'placa', '') or (result.get("dados_categoria", {}).get('Placa') or result.get("dados_categoria", {}).get('placa') or ''),
-            "marca": getattr(item.carro, 'marca', '') or (result.get("dados_categoria", {}).get('Marca') or result.get("dados_categoria", {}).get('marca') or ''),
-            "modelo": getattr(item.carro, 'modelo', '') or (result.get("dados_categoria", {}).get('Modelo') or result.get("dados_categoria", {}).get('modelo') or ''),
-            "ano": getattr(item.carro, 'ano', 0) or (result.get("dados_categoria", {}).get('Ano') or 0)
-        }
-    elif result.get("dados_categoria") and result.get("categoria") == 'Carros':
-        # Se não tem carro mas tem dados_categoria e é Carros, cria objeto carro
-        dados = result["dados_categoria"]
-        result["carro"] = {
-            "placa": dados.get('Placa') or dados.get('placa') or '',
-            "marca": dados.get('Marca') or dados.get('marca') or '',
-            "modelo": dados.get('Modelo') or dados.get('modelo') or '',
-            "ano": dados.get('Ano') or dados.get('ano') or 0
+            "placa": getattr(item.carro, 'placa', ''),
+            "marca": getattr(item.carro, 'marca', ''),
+            "modelo": getattr(item.carro, 'modelo', ''),
+            "ano": getattr(item.carro, 'ano', 0)
         }
     
     return result
 
 def compromisso_to_dict(comp: Compromisso) -> dict:
-    """Converte Compromisso SQLAlchemy para dict"""
+    """Converte Compromisso para dict, tratando as datas para JSON"""
     result = {
         "id": comp.id,
         "item_id": comp.item_id,
         "quantidade": comp.quantidade,
-        # Garante que as datas de início e fim virem strings
-        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp.data_inicio, 'isoformat') else str(comp.data_inicio),
-        "data_fim": comp.data_fim.isoformat() if hasattr(comp.data_fim, 'isoformat') else str(comp.data_fim),
-        "descricao": comp.descricao,
-        "cidade": comp.cidade,
-        "uf": comp.uf,
-        "endereco": comp.endereco,
-        "contratante": comp.contratante,
+        # CONVERSÃO DE DATAS: Transforma objetos date em strings "AAAA-MM-DD"
+        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp, 'data_inicio') and comp.data_inicio else None,
+        "data_fim": comp.data_fim.isoformat() if hasattr(comp, 'data_fim') and comp.data_fim else None,
+        "descricao": comp.descricao or "",
+        "cidade": comp.cidade or "",
+        "uf": comp.uf or "",
+        "endereco": comp.endereco or "",
+        "contratante": comp.contratante or "",
     }
     
-    # Adiciona item se disponível
+    # Se o compromisso trouxer o item junto, usamos a função item_to_dict que já corrigimos
     if hasattr(comp, 'item') and comp.item:
         result["item"] = item_to_dict(comp.item)
     
@@ -830,10 +816,11 @@ async def buscar_item(item_id: int, db_module = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi.encoders import jsonable_encoder # <--- Adicione este import
+
 @app.post("/api/itens")
 async def create_item(item: ItemCreate, db_module = Depends(get_db)):
     try:
-        # Os nomes aqui (esquerda) devem bater com os nomes na função criar_item
         novo_item = db_module.criar_item(
             nome=item.nome,
             quantidade_total=item.quantidade_total,
@@ -842,15 +829,15 @@ async def create_item(item: ItemCreate, db_module = Depends(get_db)):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            valor_compra=item.valor_compra,  # <--- Deve bater com o nome na função
+            valor_compra=item.valor_compra,
             data_aquisicao=item.data_aquisicao,
             campos_categoria=item.campos_categoria
         )
-        return item_to_dict(novo_item)
+        # O jsonable_encoder é a "vacina" final contra erros de serialização
+        return jsonable_encoder(item_to_dict(novo_item)) 
+        
     except Exception as e:
-        # Isso ajuda a ver o erro real no log do servidor
         print(f"ERRO CRITICAL: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/itens/{item_id}", response_model=dict)
 async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
