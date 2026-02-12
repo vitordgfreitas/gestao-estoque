@@ -538,6 +538,8 @@ def item_to_dict(item: Item) -> dict:
         "cidade": item.cidade,
         "uf": item.uf,
         "endereco": item.endereco,
+        "valor_compra": getattr(item, 'valor_compra', 0.0),
+        "data_aquisicao": item.data_aquisicao.isoformat() if hasattr(item, 'data_aquisicao') and item.data_aquisicao else None,
     }
     
     # Adiciona dados_categoria se existir (prioridade)
@@ -575,8 +577,9 @@ def compromisso_to_dict(comp: Compromisso) -> dict:
         "id": comp.id,
         "item_id": comp.item_id,
         "quantidade": comp.quantidade,
-        "data_inicio": comp.data_inicio.isoformat() if isinstance(comp.data_inicio, date) else comp.data_inicio,
-        "data_fim": comp.data_fim.isoformat() if isinstance(comp.data_fim, date) else comp.data_fim,
+        # Garante que as datas de início e fim virem strings
+        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp.data_inicio, 'isoformat') else str(comp.data_inicio),
+        "data_fim": comp.data_fim.isoformat() if hasattr(comp.data_fim, 'isoformat') else str(comp.data_fim),
         "descricao": comp.descricao,
         "cidade": comp.cidade,
         "uf": comp.uf,
