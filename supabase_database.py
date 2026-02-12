@@ -586,9 +586,9 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
     # CORREÇÃO: Forçamos a query a olhar APENAS para a tabela de relação.
     # Se o erro 500 persistir, verifique se a VIEW 'view_saude_ativo' foi realmente recriada.
     r = sb.table('compromisso_itens') \
-          .select('quantidade, compromissos(id, data_inicio, data_fim)') \
-          .eq('item_id', item_id) \
-          .execute()
+      .select('quantidade, compromissos(id, data_inicio, data_fim)') \
+      .eq('item_id', item_id) \
+      .execute()
     
     dados_relacionamento = r.data or []
     

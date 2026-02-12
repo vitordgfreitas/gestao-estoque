@@ -64,8 +64,9 @@ export const compromissosAPI = {
 
 // Disponibilidade
 export const disponibilidadeAPI = {
-  verificar: (data) => api.post('/api/disponibilidade', data),
-}
+  // Antes estava api.post, mude para api.get
+  verificar: (params) => api.get('/api/disponibilidade', { params })
+};
 
 // Estatísticas
 export const statsAPI = {
