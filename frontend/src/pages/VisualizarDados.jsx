@@ -295,7 +295,6 @@ export default function VisualizarDados() {
   )
 }
 
-// --- SUB-COMPONENTE MODAL EDIÇÃO ITEM ---
 function EditItemModal({ item, categorias, onClose, onSave }) {
   const [formData, setFormData] = useState({
     nome: item.nome || '',
@@ -305,18 +304,31 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
     cidade: item.cidade || '',
     uf: item.uf || 'DF',
     endereco: item.endereco || '',
+    // Formata o valor para a máscara R$
     valor_compra: new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(item.valor_compra || 0),
     data_aquisicao: item.data_aquisicao || '',
-    placa: item.carro?.placa || item.dados_categoria?.Placa || '',
-    marca: item.carro?.marca || item.dados_categoria?.Marca || '',
-    modelo: item.carro?.modelo || item.dados_categoria?.Modelo || '',
-    ano: item.carro?.ano || item.dados_categoria?.Ano || '',
+    // Campos auxiliares para Carros
+    placa: item.dados_categoria?.Placa || item.dados_categoria?.placa || '',
+    marca: item.dados_categoria?.Marca || item.dados_categoria?.marca || '',
+    modelo: item.dados_categoria?.Modelo || item.dados_categoria?.modelo || '',
+    ano: item.dados_categoria?.Ano || item.dados_categoria?.ano || '',
   })
+  
+  const [camposCategoria, setCamposCategoria] = useState([])
+  const [camposDinamicos, setCamposDinamicos] = useState(item.dados_categoria || {})
   const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
 
   useEffect(() => {
+    if (formData.categoria) loadCampos(formData.categoria)
     if (formData.uf) setCidadesDisponiveis(getCidadesPorUF(formData.uf))
-  }, [formData.uf])
+  }, [formData.categoria, formData.uf])
+
+  const loadCampos = async (cat) => {
+    try {
+      const res = await categoriasAPI.obterCampos(cat)
+      setCamposCategoria(res.data || [])
+    } catch (e) { setCamposCategoria([]) }
+  }
 
   const handleMoeda = (v) => {
     const n = v.replace(/\D/g, "");
@@ -325,46 +337,108 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // SOLUÇÃO PARA O ERRO 422:
+    // Se a data for string vazia, vira null para o Pydantic não reclamar
+    const dataFormatada = formData.data_aquisicao === "" ? null : formData.data_aquisicao;
+
     const payload = {
-      ...formData,
+      nome: formData.nome,
+      quantidade_total: parseInt(formData.quantidade_total),
+      categoria: formData.categoria,
+      descricao: formData.descricao,
+      cidade: formData.cidade,
+      uf: formData.uf,
+      endereco: formData.endereco,
       valor_compra: parseFloat(formData.valor_compra.replace(/\./g, '').replace(',', '.')) || 0,
+      data_aquisicao: dataFormatada,
+      // Se for Carros, monta o objeto específico. Se não, usa os campos dinâmicos gerais.
       campos_categoria: formData.categoria === 'Carros' ? { 
         Placa: formData.placa, 
         Marca: formData.marca, 
         Modelo: formData.modelo, 
         Ano: formData.ano 
-      } : item.dados_categoria
+      } : camposDinamicos
     };
+
     onSave(payload);
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="Editar Ativo">
+    <Modal isOpen={true} onClose={onClose} title={`Editar ${formData.categoria}`}>
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
         <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2"><label className="label">Nome</label><input className="input" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} /></div>
-          <div><label className="label">Valor de Compra (R$)</label><input className="input text-green-400 font-bold" value={formData.valor_compra} onChange={e => setFormData({...formData, valor_compra: handleMoeda(e.target.value)})} /></div>
-          <div><label className="label">Data de Aquisição</label><input type="date" className="input" value={formData.data_aquisicao} onChange={e => setFormData({...formData, data_aquisicao: e.target.value})} /></div>
+          <div className="col-span-2">
+            <label className="label">Nome do Item *</label>
+            <input className="input" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} required />
+          </div>
+          <div>
+            <label className="label">Valor de Compra (R$)</label>
+            <input className="input text-green-400 font-bold" value={formData.valor_compra} 
+                   onChange={e => setFormData({...formData, valor_compra: handleMoeda(e.target.value)})} />
+          </div>
+          <div>
+            <label className="label">Data de Aquisição</label>
+            <input type="date" className="input" value={formData.data_aquisicao} 
+                   onChange={e => setFormData({...formData, data_aquisicao: e.target.value})} />
+          </div>
         </div>
 
-        {formData.categoria === 'Carros' && (
+        {/* Renderização específica para Carros */}
+        {formData.categoria === 'Carros' ? (
           <div className="grid grid-cols-2 gap-4 p-3 bg-dark-700/30 rounded border border-dark-600">
-            <div><label className="label">Placa</label><input className="input" value={formData.placa} onChange={e => setFormData({...formData, placa: e.target.value.toUpperCase()})} /></div>
-            <div><label className="label">Marca</label><select className="input" value={formData.marca} onChange={e => setFormData({...formData, marca: e.target.value})}>
+            <div className="col-span-2 text-xs font-bold text-primary-400 uppercase">Dados do Veículo</div>
+            <div>
+              <label className="label">Placa</label>
+              <input className="input" value={formData.placa} onChange={e => setFormData({...formData, placa: e.target.value.toUpperCase()})} />
+            </div>
+            <div>
+              <label className="label">Marca</label>
+              <select className="input" value={formData.marca} onChange={e => setFormData({...formData, marca: e.target.value})}>
                 <option value="">Selecione</option>
                 {MARCAS_CARROS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select></div>
-            <div><label className="label">Modelo</label><input className="input" value={formData.modelo} onChange={e => setFormData({...formData, modelo: e.target.value})} /></div>
-            <div><label className="label">Ano</label><input type="number" className="input" value={formData.ano} onChange={e => setFormData({...formData, ano: e.target.value})} /></div>
+              </select>
+            </div>
           </div>
+        ) : (
+          /* Renderização de campos dinâmicos para outras categorias */
+          camposCategoria.length > 0 && (
+            <div className="space-y-4 p-3 bg-dark-700/30 rounded border border-dark-600">
+              <div className="text-xs font-bold text-primary-400 uppercase">Campos de {formData.categoria}</div>
+              {camposCategoria.map(campo => (
+                <div key={campo}>
+                  <label className="label">{campo}</label>
+                  <input 
+                    className="input" 
+                    value={camposDinamicos[campo] || ''} 
+                    onChange={e => setCamposDinamicos({...camposDinamicos, [campo]: e.target.value})}
+                  />
+                </div>
+              ))}
+            </div>
+          )
         )}
         
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">UF</label><select className="input" value={formData.uf} onChange={e => setFormData({...formData, uf: e.target.value})}>{UFS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
-          <div><label className="label">Cidade</label><select className="input" value={formData.cidade} onChange={e => setFormData({...formData, cidade: e.target.value})}>{cidadesDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div>
+            <label className="label">UF</label>
+            <select className="input" value={formData.uf} onChange={e => setFormData({...formData, uf: e.target.value})}>
+              {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Cidade</label>
+            <select className="input" value={formData.cidade} onChange={e => setFormData({...formData, cidade: e.target.value})}>
+              <option value="">Selecione</option>
+              {cidadesDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
 
-        <button type="submit" className="btn btn-primary w-full py-3">Salvar Alterações</button>
+        <div className="flex gap-2 pt-4">
+          <button type="button" onClick={onClose} className="btn btn-secondary flex-1">Cancelar</button>
+          <button type="submit" className="btn btn-primary flex-1">Salvar Alterações</button>
+        </div>
       </form>
     </Modal>
   )
