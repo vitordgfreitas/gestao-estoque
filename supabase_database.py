@@ -235,13 +235,32 @@ def buscar_compromisso_por_id(cid):
     sb = get_supabase(); r = sb.table('compromissos').select('*').eq('id', int(cid)).execute()
     return _row_to_compromisso(r.data[0]) if r.data else None
 
-def atualizar_compromisso(cid, **kwargs):
-    sb = get_supabase(); payload = {}
-    for k in ['item_id', 'quantidade', 'data_inicio', 'data_fim', 'descricao', 'cidade', 'uf', 'endereco', 'contratante']:
+def atualizar_compromisso(compromisso_id, **kwargs):
+    """Atualiza um compromisso no Supabase usando o ID correto enviado pelo Main.py"""
+    sb = get_supabase()
+    payload = {}
+    
+    # Mapeia os campos permitidos
+    campos_permitidos = [
+        'item_id', 'quantidade', 'data_inicio', 'data_fim', 
+        'descricao', 'cidade', 'uf', 'endereco', 'contratante'
+    ]
+    
+    for k in campos_permitidos:
         if k in kwargs and kwargs[k] is not None:
-            payload[k] = _date_parse(kwargs[k]).isoformat() if 'data' in k else kwargs[k]
-    sb.table('compromissos').update(payload).eq('id', int(cid)).execute()
-    return buscar_compromisso_por_id(cid)
+            # Tratamento especial para datas: converte objeto em string ISO
+            if 'data' in k:
+                dt = _date_parse(kwargs[k])
+                payload[k] = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+            else:
+                payload[k] = kwargs[k]
+    
+    # Executa a atualização no banco
+    if payload:
+        sb.table('compromissos').update(payload).eq('id', int(compromisso_id)).execute()
+    
+    # Retorna o compromisso atualizado (usando o tradutor que já temos)
+    return buscar_compromisso_por_id(compromisso_id)
 
 def deletar_compromisso(cid):
     sb = get_supabase(); r = sb.table('compromissos').delete().eq('id', int(cid)).execute()
@@ -396,6 +415,8 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         'max_comprometido': max_occ, 
         'disponivel_minimo': max(0, item.quantidade_total - max_occ)
     }
+def verificar_disponibilidade_todos_itens(data_consulta, filtro_loc=None):
+    return [verificar_disponibilidade(i.id, data_consulta, filtro_loc) for i in listar_itens()]
 
 
 # ---------- Financiamentos ----------
