@@ -1094,57 +1094,42 @@ async def excluir_compromisso(compromisso_id: int, db_module = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 # ============= DISPONIBILIDADE =============
 
-@app.post("/api/disponibilidade", response_model=dict)
-async def verificar_disponibilidade(request: DisponibilidadeRequest, db_module = Depends(get_db)):
-    """Verifica disponibilidade de itens"""
+@app.get("/api/disponibilidade")
+async def verificar_disponibilidade(
+    item_id: int, 
+    data_inicio: str, 
+    data_fim: str, 
+    db_module = Depends(get_db)
+):
+    """
+    Verifica disponibilidade de um item em um intervalo de datas.
+    Compatível com o modelo de Contrato Master (1:N).
+    """
     try:
-        if request.item_id:
-            # Chama a função que alterámos no sheets_database.py
-            disponibilidade = db_module.verificar_disponibilidade(
-                request.item_id,
-                request.data_consulta,
-                request.filtro_localizacao
-            )
-            if not disponibilidade:
-                raise HTTPException(status_code=404, detail="Item não encontrado")
+        # Chamamos a função MASTER que criamos no supabase_database.py
+        # Ela já resolve o problema da coluna deletada (item_id)
+        resultado = db_module.verificar_disponibilidade_periodo(
+            item_id=item_id,
+            data_inicio=data_inicio,
+            data_fim=data_fim
+        )
+        
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        
+        # O tradutor item_to_dict precisa do objeto, resultado['item'] já é objeto
+        # graças ao buscar_item_por_id que você tem.
+        return {
+            "item": item_to_dict(resultado['item']),
+            "quantidade_total": resultado['quantidade_total'],
+            "max_comprometido": resultado['max_comprometido'],
+            "disponivel_minimo": resultado['disponivel_minimo'], # Chave que o Front espera
+            # Se você precisar dos compromissos detalhados para o modal de info:
+            "compromissos_ativos": [compromisso_to_dict(c) for c in resultado.get('compromissos_atuais', [])]
+        }
             
-            return {
-                "item": item_to_dict(disponibilidade['item']),
-                "quantidade_total": disponibilidade['quantidade_total'],
-                "quantidade_comprometida": disponibilidade['quantidade_comprometida'],
-                "quantidade_instalada": disponibilidade['quantidade_instalada'], # <--- ADICIONA ISTO
-                "quantidade_disponivel": disponibilidade['quantidade_disponivel'],
-                "compromissos_ativos": [compromisso_to_dict(c) for c in disponibilidade.get('compromissos_ativos', [])]
-            }
-        else:
-            # Verifica disponibilidade de todos os itens
-            resultados = db_module.verificar_disponibilidade_todos_itens(
-                request.data_consulta,
-                request.filtro_localizacao
-            )
-            
-            # Aplica filtro de categoria se fornecido
-            if request.filtro_categoria:
-                resultados = [
-                    r for r in resultados
-                    if getattr(r['item'], 'categoria', '') == request.filtro_categoria
-                ]
-            
-            return {
-                "resultados": [
-                    {
-                        "item": item_to_dict(r['item']),
-                        "quantidade_total": r['quantidade_total'],
-                        "quantidade_comprometida": r['quantidade_comprometida'],
-                        "quantidade_instalada": r.get('quantidade_instalada', 0),
-                        "quantidade_disponivel": r['quantidade_disponivel']
-                    }
-                    for r in resultados
-                ]
-            }
-    except HTTPException:
-        raise
     except Exception as e:
+        print(f"❌ ERRO DISPONIBILIDADE: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============= CATEGORIAS E CAMPOS =============
