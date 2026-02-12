@@ -1131,6 +1131,8 @@ async def verificar_disponibilidade(
                 "item": item_to_dict(resultado['item']),
                 "quantidade_total": resultado['quantidade_total'],
                 "max_comprometido": resultado['max_comprometido'],
+                "quantidade_comprometida": resultado['qtd_alugada'], # <--- AQUI
+                "quantidade_instalada": resultado['qtd_instalada'],
                 "quantidade_disponivel": resultado['disponivel_minimo'], # Chave para o Front
                 "compromissos_ativos": [compromisso_to_dict(c) for c in resultado.get('compromissos_atuais', [])]
             }

@@ -623,6 +623,8 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
     pecas_data = pecas_r.data or []
     
     max_occ = 0
+    total_alugado_no_pico = 0  # <--- NOVA VARIÁVEL
+    total_instalado_no_pico = 0 # <--- NOVA VARIÁVEL
     curr = d_ini
     
     # 3. Motor de estoque dia a dia (mantendo sua lógica original)
@@ -636,7 +638,11 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
             if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr
         )
         
-        max_occ = max(max_occ, dia_alugado + dia_instalado)
+        ocupacao_hoje = dia_alugado + dia_instalado
+        if ocupacao_hoje >= max_occ:
+            max_occ = ocupacao_hoje
+            total_alugado_no_pico = dia_alugado
+            total_instalado_no_pico = dia_instalado
         curr += timedelta(days=1)
     
     # Retorno idêntico ao original para não quebrar o Frontend
@@ -644,6 +650,8 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
         'item': item, 
         'quantidade_total': item.quantidade_total, 
         'max_comprometido': max_occ, 
+        'qtd_alugada': total_alugado_no_pico,   # <--- RETORNO ADICIONAL
+        'qtd_instalada': total_instalado_no_pico, # <--- RETORNO ADICIONAL
         'disponivel_minimo': max(0, item.quantidade_total - max_occ)
     }
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
@@ -673,7 +681,7 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
             'item': SimpleNamespace(**item), # Objeto para o tradutor
             'quantidade_total': status['quantidade_total'],
             'quantidade_comprometida': status['max_comprometido'],
-            'quantidade_disponivel': status['disponivel_minimo']
+            'quantidade_disponivel': status['disponivel_minimo'],
         })
         
     return resultados
