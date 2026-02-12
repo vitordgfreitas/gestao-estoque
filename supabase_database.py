@@ -527,8 +527,23 @@ def listar_pecas_carros(carro_id=None, peca_id=None):
             self.observacoes = row.get('observacoes') or ''
     return [PecaCarroRow(x) for x in (r.data or [])]
 
+# No Supabase a categoria de peças chama-se "Pecas" (tabela pecas)
+CATEGORIA_PECAS_SUPABASE = 'Pecas'
+
 def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, observacoes=None):
+    """Associa uma peça (item) a um carro (item). Peça deve ser categoria 'Pecas', carro deve ser 'Carros'."""
     sb = get_supabase()
+    peca = buscar_item_por_id(peca_id)
+    if not peca:
+        raise ValueError(f"Peça {peca_id} não encontrada")
+    cat_peca = (getattr(peca, 'categoria', '') or '').strip()
+    if cat_peca != CATEGORIA_PECAS_SUPABASE:
+        raise ValueError(f"Item {peca_id} não é uma peça (categoria: {peca.categoria}). No Supabase use categoria '{CATEGORIA_PECAS_SUPABASE}'.")
+    carro = buscar_item_por_id(carro_id)
+    if not carro:
+        raise ValueError(f"Carro {carro_id} não encontrado")
+    if (getattr(carro, 'categoria', '') or '') != 'Carros':
+        raise ValueError(f"Item {carro_id} não é um carro (categoria: {carro.categoria})")
     payload = {
         'peca_id': int(peca_id),
         'carro_id': int(carro_id),
@@ -540,6 +555,7 @@ def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, obse
     ins = sb.table('pecas_carros').insert(payload).execute()
     if not ins.data or len(ins.data) == 0:
         raise Exception("Erro ao criar associação peça-carro")
+    auditoria.registrar_auditoria('CREATE', 'Pecas_Carros', ins.data[0]['id'], valores_novos=payload)
     return buscar_peca_carro_por_id(ins.data[0]['id'])
 
 def buscar_peca_carro_por_id(associacao_id):
@@ -649,6 +665,7 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
                 'item': disp['item'],
                 'quantidade_total': disp['quantidade_total'],
                 'quantidade_comprometida': disp['quantidade_comprometida'],
+                'quantidade_instalada': disp.get('quantidade_instalada', 0),
                 'quantidade_disponivel': disp['quantidade_disponivel']
             })
     return resultados

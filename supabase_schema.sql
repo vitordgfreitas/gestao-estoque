@@ -157,12 +157,16 @@ BEGIN
 END;
 $$;
 
--- Inserir categorias padrão
+-- Inserir categorias padrão (no Supabase peças usam categoria "Pecas" e tabela pecas)
 INSERT INTO categorias_itens (nome, data_criacao)
 VALUES 
     ('Estrutura de Evento', CURRENT_DATE),
-    ('Carros', CURRENT_DATE)
+    ('Carros', CURRENT_DATE),
+    ('Pecas', CURRENT_DATE)
 ON CONFLICT (nome) DO NOTHING;
+
+-- Criar tabela da categoria Pecas (itens da categoria Pecas têm linha aqui)
+SELECT criar_tabela_categoria('pecas');
 
 -- Habilitar RLS (Row Level Security) - opcional
 -- Se quiser que apenas o backend (service_role) acesse, pode deixar RLS desabilitado

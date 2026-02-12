@@ -25,7 +25,9 @@ Este guia explica como criar um projeto no Supabase e configurar o app para usar
 5. Clique em **Run** (ou Ctrl+Enter).
 6. Confirme que a execução terminou sem erros (todas as tabelas e índices criados).
 
-As tabelas criadas são: `categorias_itens`, `itens`, `carros`, `compromissos`, `contas_receber`, `contas_pagar`, `financiamentos`, `financiamentos_itens`, `parcelas_financiamento`, `pecas_carros`.
+As tabelas criadas são: `categorias_itens`, `itens`, `carros`, `compromissos`, `contas_receber`, `contas_pagar`, `financiamentos`, `financiamentos_itens`, `parcelas_financiamento`, `pecas_carros`, e a tabela **`pecas`** (itens da categoria "Pecas").
+
+**No Supabase**, a categoria de peças chama-se **"Pecas"** (não "Peças de Carro"). Itens dessa categoria ficam na tabela `pecas`; a associação peça↔carro fica em `pecas_carros`. Se você já tinha o schema sem a categoria Pecas, rode **`supabase_migration_categoria_pecas.sql`** no SQL Editor.
 
 O schema também cria a função **`criar_tabela_categoria`**: quando você cadastra uma **nova categoria** no app (Supabase), uma tabela é criada automaticamente no SQL com o nome da categoria em minúsculas e com espaços em `_` (ex.: "Reboques" → tabela `reboques`). Se você já tinha o schema antigo, rode o arquivo **`supabase_migration_criar_tabela_categoria.sql`** no SQL Editor para adicionar essa função.
 

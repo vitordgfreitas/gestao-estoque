@@ -303,7 +303,7 @@ export default function Compromissos() {
                     className="input"
                   >
                     <option value="">Selecione uma peça</option>
-                    {itens.filter(i => i.categoria === 'Peças de Carro').map(peca => (
+                    {itens.filter(i => i.categoria === 'Peças de Carro' || i.categoria === 'Pecas').map(peca => (
                       <option key={peca.id} value={peca.id}>
                         {peca.nome}
                       </option>

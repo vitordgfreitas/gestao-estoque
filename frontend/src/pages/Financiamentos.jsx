@@ -333,6 +333,7 @@ export default function Financiamentos() {
                   <option value="Carros">Carros</option>
                   <option value="Estrutura de Evento">Estrutura de Evento</option>
                   <option value="Peças de Carro">Peças de Carro</option>
+                  <option value="Pecas">Pecas</option>
                 </select>
               </div>
 

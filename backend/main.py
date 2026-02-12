@@ -1165,6 +1165,7 @@ async def verificar_disponibilidade(request: DisponibilidadeRequest, db_module =
                         "item": item_to_dict(r['item']),
                         "quantidade_total": r['quantidade_total'],
                         "quantidade_comprometida": r['quantidade_comprometida'],
+                        "quantidade_instalada": r.get('quantidade_instalada', 0),
                         "quantidade_disponivel": r['quantidade_disponivel']
                     }
                     for r in resultados

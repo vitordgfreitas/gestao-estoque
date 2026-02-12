@@ -1306,7 +1306,8 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
         resultados.append({
             'item': item,
             'quantidade_total': item.quantidade_total,
-            'quantidade_comprometida': total_indisponivel, # Aqui unificamos o que está "fora"
+            'quantidade_comprometida': qtd_alugada,
+            'quantidade_instalada': qtd_instalada,
             'quantidade_disponivel': max(0, qtd_disponivel)
         })
     
