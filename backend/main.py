@@ -912,16 +912,30 @@ async def deletar_item(item_id: int, db_module = Depends(get_db)):
 
 @app.get("/api/compromissos", response_model=List[dict])
 async def listar_compromissos(db_module = Depends(get_db)):
-    """Lista todos os compromissos"""
     try:
-        if db_module is None:
-            raise HTTPException(status_code=500, detail="Database module not initialized")
-        compromissos = db_module.listar_compromissos()
-        return [compromisso_to_dict(comp) for comp in compromissos]
+        # 1. Busca os dados brutos (Raw) do banco com os JOINS necessários
+        # Certifique-se que o listar_compromissos() no supabase_database.py 
+        # está fazendo: .select('*, compromisso_itens(*, itens(nome))')
+        compromissos_brutos = db_module.listar_compromissos()
+        
+        resultado_final = []
+        for comp_bruto in compromissos_brutos:
+            # 2. Usa o seu tradutor original (que você não quer mexer)
+            d = compromisso_to_dict(comp_bruto)
+            
+            # 3. COMPATIBILITY PATCH (Injetamos o que o tradutor ignorou)
+            # Pegamos o valor_total_contrato direto do dado bruto, caso o tradutor tenha zerado
+            d['valor_total_contrato'] = float(comp_bruto.get('valor_total_contrato') or 0)
+            
+            # Pegamos a lista de equipamentos que o tradutor original não conhece
+            d['compromisso_itens'] = comp_bruto.get('compromisso_itens', [])
+            
+            resultado_final.append(d)
+            
+        return resultado_final
+        
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-        raise HTTPException(status_code=500, detail=error_detail)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/compromissos/buscar", response_model=dict)
 async def buscar_compromissos(

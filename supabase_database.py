@@ -229,9 +229,14 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, **kwargs):
 
 def listar_compromissos():
     sb = get_supabase()
-    r = sb.table('compromissos').select('*').order('data_inicio').execute()
-    return [_row_to_compromisso(row) for row in (r.data or [])]
-
+    # Precisamos do select estendido para preencher o patch da rota
+    r = sb.table('compromissos')\
+          .select('*, compromisso_itens(*, itens(nome))')\
+          .order('data_inicio', desc=True)\
+          .execute()
+    return r.data or []
+          
+    return r.data or []
 def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None):
     """
     Atualiza um contrato master e sincroniza sua lista de itens.
