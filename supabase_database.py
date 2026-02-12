@@ -98,6 +98,8 @@ def obter_campos_categoria(categoria):
         return ['Placa', 'Marca', 'Modelo', 'Ano', 'Chassi', 'Renavam']
     if categoria == 'Container':
         return ['Tara', 'Carga Máxima', 'Comprimento', 'Largura', 'Altura', 'Capacidade', 'Cor', 'Modelo']
+    if categoria == 'Pecas':
+        return ['Marca']
     return []
 
 def _slug_categoria(nome_categoria):
