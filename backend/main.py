@@ -832,10 +832,10 @@ async def buscar_item(item_id: int, db_module = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/itens", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def criar_item(item: ItemCreate, db_module = Depends(get_db)):
-    """Cria um novo item"""
+@app.post("/api/itens")
+async def create_item(item: ItemCreate):
     try:
+        # Garanta que o valor_compra está sendo passado aqui!
         novo_item = db_module.criar_item(
             nome=item.nome,
             quantidade_total=item.quantidade_total,
@@ -844,15 +844,11 @@ async def criar_item(item: ItemCreate, db_module = Depends(get_db)):
             cidade=item.cidade,
             uf=item.uf,
             endereco=item.endereco,
-            placa=item.placa,
-            marca=item.marca,
-            modelo=item.modelo,
-            ano=item.ano,
+            valor_compra=item.valor_compra,  # <--- ESSA LINHA É O FOCO
+            data_aquisicao=item.data_aquisicao,
             campos_categoria=item.campos_categoria
         )
         return item_to_dict(novo_item)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
