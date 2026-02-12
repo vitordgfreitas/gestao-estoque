@@ -302,8 +302,15 @@ def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None)
 
     res_final = buscar_compromisso_por_id(cid)
     
-    # Transforma em objeto antes de enviar para o tradutor no main.py
-    return SimpleNamespace(**res_final)
+    patch_data = {
+        "item_id": None,   # Valor default para o tradutor não explodir
+        "quantidade": 0,   # Valor default
+        **res_final        # Sobrescreve com os dados reais (incluindo a lista de itens)
+    }
+
+    # Transforma em objeto com os atributos esperados
+    from types import SimpleNamespace
+    return SimpleNamespace(**patch_data)
 
 def buscar_compromisso_por_id(cid):
     sb = get_supabase()
@@ -426,8 +433,15 @@ def criar_compromisso_master(dados_header, lista_itens):
     
     res_final = buscar_compromisso_por_id(contrato_id)
     
-    # Transforma em objeto antes de enviar para o tradutor no main.py
-    return SimpleNamespace(**res_final)
+    patch_data = {
+        "item_id": None,   # Valor default para o tradutor não explodir
+        "quantidade": 0,   # Valor default
+        **res_final        # Sobrescreve com os dados reais (incluindo a lista de itens)
+    }
+
+    # Transforma em objeto com os atributos esperados
+    from types import SimpleNamespace
+    return SimpleNamespace(**patch_data)
 
 def deletar_compromisso(compromisso_id):
     sb = get_supabase()
