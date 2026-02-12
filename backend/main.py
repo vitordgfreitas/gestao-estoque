@@ -2081,12 +2081,15 @@ async def obter_dashboard_financiamentos(token: str = Depends(verify_token), db_
 async def listar_parcelas(
     data_vencimento: Optional[date] = Query(None),
     status: Optional[str] = Query(None),
+    incluir_pagas: bool = Query(False),
     token: str = Depends(verify_token),
     db_module = Depends(get_db),
 ):
     """Lista parcelas do financiamento. Pode filtrar por data_vencimento e/ou status."""
     try:
         parcelas = db_module.listar_parcelas_financiamento(status=status)
+        if not incluir_pagas:
+            parcelas = [p for p in parcelas if (getattr(p, "status", None) or "") != "Paga"]
         if data_vencimento:
             parcelas = [p for p in parcelas if getattr(p, "data_vencimento", None) == data_vencimento]
         return [parcela_to_dict(p) for p in parcelas]

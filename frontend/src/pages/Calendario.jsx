@@ -41,7 +41,7 @@ export default function Calendario() {
     const dataStr = dataObj.toISOString().split('T')[0]
     setDetalhesDia({ data: dataObj, compromissos: compsDia || [], parcelas: [], loadingParcelas: true })
     try {
-      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr, status: 'Pendente' } })
+      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr } })
       setDetalhesDia((prev) => {
         if (!prev) return prev
         const prevStr = prev.data?.toISOString?.().split('T')[0]
