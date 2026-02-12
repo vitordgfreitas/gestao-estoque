@@ -303,7 +303,6 @@ def buscar_peca_carro_por_id(associacao_id):
 def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, observacoes=None):
     sb = get_supabase()
     
-    # 1. Busca a associação antiga para o log de movimentação
     r_antiga = sb.table('pecas_carros').select('*').eq('id', int(associacao_id)).execute()
     if not r_antiga.data: return None
     dados_antigos = r_antiga.data[0]
@@ -312,20 +311,17 @@ def atualizar_peca_carro(associacao_id, quantidade=None, data_instalacao=None, o
     if quantidade is not None: payload['quantidade'] = int(quantidade)
     if observacoes is not None: payload['observacoes'] = observacoes
     
-    # --- BLINDAGEM DE DATA ---
     if data_instalacao:
         dt_fix = data_instalacao
-        payload['data_installation'] = dt_fix.isoformat() if hasattr(dt_fix, 'isoformat') else str(dt_fix)
+        # CORREÇÃO AQUI: 'data_instalacao' e não 'data_installation'
+        payload['data_instalacao'] = dt_fix.isoformat() if hasattr(dt_fix, 'isoformat') else str(dt_fix)
     
-    # 2. Registra a diferença no estoque se a quantidade mudou
     if quantidade is not None:
         diff = dados_antigos['quantidade'] - int(quantidade)
         if diff != 0:
             registrar_movimentacao(dados_antigos['peca_id'], diff, 'AJUSTE_INSTALACAO', ref_id=dados_antigos['carro_id'])
     
-    # 3. Executa o Update
     r = sb.table('pecas_carros').update(payload).eq('id', int(associacao_id)).execute()
-    
     return r.data[0] if r.data else None
 
 def deletar_peca_carro(associacao_id):
