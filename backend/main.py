@@ -568,22 +568,31 @@ def item_to_dict(item: Item) -> dict:
     return result
 
 def compromisso_to_dict(comp: Compromisso) -> dict:
-    """Converte Compromisso tratando datas de início e fim"""
+    """Converte Compromisso para dict, tratando datas para o JSON"""
     if not comp: return {}
-    return {
+    
+    # Garantimos que as datas virem texto (ISO format)
+    d_inicio = comp.data_inicio.isoformat() if hasattr(comp.data_inicio, 'isoformat') else str(comp.data_inicio)
+    d_fim = comp.data_fim.isoformat() if hasattr(comp.data_fim, 'isoformat') else str(comp.data_fim)
+
+    result = {
         "id": comp.id,
         "item_id": comp.item_id,
         "quantidade": comp.quantidade,
-        # Transforma objetos de data em texto para o JSON
-        "data_inicio": comp.data_inicio.isoformat() if hasattr(comp.data_inicio, 'isoformat') else str(comp.data_inicio),
-        "data_fim": comp.data_fim.isoformat() if hasattr(comp.data_fim, 'isoformat') else str(comp.data_fim),
+        "data_inicio": d_inicio,
+        "data_fim": d_fim,
         "descricao": comp.descricao or "",
         "cidade": comp.cidade or "",
         "uf": comp.uf or "",
         "endereco": comp.endereco or "",
         "contratante": comp.contratante or "",
-        "item": item_to_dict(comp.item) if hasattr(comp, 'item') and comp.item else None
     }
+    
+    # Se o compromisso carregar o item junto, usamos o item_to_dict que já corrigimos
+    if hasattr(comp, 'item') and comp.item:
+        result["item"] = item_to_dict(comp.item)
+    
+    return result
 
 # ============= AUTENTICAÇÃO =============
 
@@ -2176,26 +2185,38 @@ class PecaCarroResponse(BaseModel):
         from_attributes = True
 
 def peca_carro_to_dict(pc):
-    """Converte PecaCarro para dict"""
+    """Converte PecaCarro para dict com suporte a dicionários e objetos"""
+    if not pc: return {}
+    
+    # Helper para extrair dados de dict ou objeto
+    def get_val(obj, key, default=None):
+        if isinstance(obj, dict): return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    # Tratamento da data de instalação
+    dt_inst = get_val(pc, 'data_instalacao')
+    if dt_inst and hasattr(dt_inst, 'isoformat'):
+        dt_inst_str = dt_inst.isoformat()
+    else:
+        dt_inst_str = str(dt_inst) if dt_inst else None
+
     result = {
-        "id": pc.id,
-        "peca_id": pc.peca_id,
-        "carro_id": pc.carro_id,
-        "quantidade": pc.quantidade,
-        "data_instalacao": pc.data_instalacao.isoformat() if pc.data_instalacao and isinstance(pc.data_instalacao, date) else None,
-        "observacoes": pc.observacoes
+        "id": get_val(pc, 'id'),
+        "peca_id": get_val(pc, 'peca_id'),
+        "carro_id": get_val(pc, 'carro_id'),
+        "quantidade": get_val(pc, 'quantidade', 1),
+        "data_instalacao": dt_inst_str,
+        "observacoes": get_val(pc, 'observacoes', '')
     }
     
-    # Adiciona informações da peça se disponível
-    if hasattr(pc, 'peca') and pc.peca:
-        result["peca"] = item_to_dict(pc.peca)
+    # Se houver dados aninhados da peça ou do carro (Joins)
+    peca_data = get_val(pc, 'peca')
+    if peca_data: result["peca"] = item_to_dict(peca_data)
     
-    # Adiciona informações do carro se disponível
-    if hasattr(pc, 'carro') and pc.carro:
-        result["carro"] = item_to_dict(pc.carro)
+    carro_data = get_val(pc, 'carro')
+    if carro_data: result["carro"] = item_to_dict(carro_data)
     
     return result
-
 @app.post("/api/pecas-carros", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     """Associa uma peça a um carro"""
