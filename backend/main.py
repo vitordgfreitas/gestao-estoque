@@ -917,36 +917,37 @@ from types import SimpleNamespace
 from typing import List
 
 @app.get("/api/compromissos", response_model=List[dict])
+@app.get("/api/compromissos", response_model=List[dict])
 async def listar_compromissos(db_module = Depends(get_db)):
-    """Lista compromissos blindando o tradutor legado contra colunas deletadas"""
+    """Lista compromissos injetando o nome real e blindando o tradutor legado"""
     try:
-        # 1. Busca dados brutos com JOIN (Certifique-se de que o select no db_module tem os itens)
+        # Busca dados brutos (Dicionários do Supabase com JOIN)
         compromissos_brutos = db_module.listar_compromissos()
         
         resultado_final = []
         for comp_raw in compromissos_brutos:
-            # 2. COMPATIBILITY PATCH: Injetamos as colunas que deletamos do banco
-            # para o tradutor não explodir ao tentar acessar obj.item_id
+            # COMPATIBILITY PATCH: Injetamos o que o tradutor espera e o que ele ignora
             patch = {
-                "item_id": None,    # Atributo fantasma esperado pelo tradutor
-                "quantidade": 0,    # Atributo fantasma esperado pelo tradutor
-                **comp_raw          # Dados reais (id, nome_contrato, valor_total_contrato, etc)
+                "item_id": None,    # Evita erro 'no attribute item_id'
+                "quantidade": 0,    # Evita erro 'no attribute quantidade'
+                **comp_raw          # Inclui nome_contrato, valor_total_contrato, etc.
             }
             
-            # 3. Converte para Objeto (SimpleNamespace) para o tradutor aceitar
+            # Converte para Objeto para o tradutor compromisso_to_dict não explodir
             comp_obj = SimpleNamespace(**patch)
-            
-            # 4. Chama o seu tradutor original (que você não quer mexer)
             d = compromisso_to_dict(comp_obj)
             
-            # 5. GARANTIA DE DADOS: O tradutor antigo ignora o faturamento e os itens.
-            # Nós injetamos eles manualmente de volta no dicionário final.
+            # GARANTIA DE DADOS REAIS: Forçamos o faturamento e o nome correto do contrato
+            d['nome_contrato'] = comp_raw.get('nome_contrato') or f"Contrato #{comp_raw.get('id')}"
             d['valor_total_contrato'] = float(comp_raw.get('valor_total_contrato') or 0)
             d['compromisso_itens'] = comp_raw.get('compromisso_itens', [])
             
             resultado_final.append(d)
             
         return resultado_final
+    except Exception as e:
+        print(f"❌ ERRO LISTAR COMPROMISSOS: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         print(f"❌ ERRO LISTAR COMPROMISSOS: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
