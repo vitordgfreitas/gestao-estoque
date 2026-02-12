@@ -854,7 +854,7 @@ async def create_item(item: ItemCreate):
 
 @app.put("/api/itens/{item_id}", response_model=dict)
 async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get_db)):
-    """Atualiza um item existente"""
+    """Atualiza um item existente com suporte a campos financeiros e dinâmicos"""
     try:
         item_atualizado = db_module.atualizar_item(
             item_id=item_id,
@@ -864,7 +864,9 @@ async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get
             descricao=item.descricao,
             cidade=item.cidade,
             uf=item.uf,
-            endereco=item.endereco,
+            endereco=item.endereco, # Crucial para evitar o erro de atributo
+            valor_compra=item.valor_compra, # NOVO: Para o Centro de Custo
+            data_aquisicao=item.data_aquisicao, # NOVO: Para o Centro de Custo
             placa=item.placa,
             marca=item.marca,
             modelo=item.modelo,
@@ -873,12 +875,16 @@ async def atualizar_item(item_id: int, item: ItemUpdate, db_module = Depends(get
         )
         if not item_atualizado:
             raise HTTPException(status_code=404, detail="Item não encontrado")
+        
         return item_to_dict(item_atualizado)
+        
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Log detalhado no console do servidor para debug
+        print(f"Erro no Update: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/itens/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
