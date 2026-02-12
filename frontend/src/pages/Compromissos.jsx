@@ -1,639 +1,269 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { compromissosAPI, itensAPI, categoriasAPI, disponibilidadeAPI } from '../services/api'
 import api from '../services/api'
-import { Calendar, Plus, Info, X } from 'lucide-react'
+import { Calendar, Plus, Info, X, Trash2, Package, Car, ClipboardList, User, MapPin, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatItemName } from '../utils/format'
 import { getCidadesPorUF, ESTADOS } from '../utils/municipios'
 
-const UFS = ESTADOS.map(e => e.sigla) // Para compatibilidade com código existente
+const UFS = ESTADOS.map(e => e.sigla)
 
 export default function Compromissos() {
   const [itens, setItens] = useState([])
   const [categorias, setCategorias] = useState([])
-  const [categoriaFiltro, setCategoriaFiltro] = useState('')
-  const [itensFiltrados, setItensFiltrados] = useState([])
-  const [itemSelecionado, setItemSelecionado] = useState(null)
-  const [quantidadeFixa, setQuantidadeFixa] = useState(false)
-  const [pecasSelecionadas, setPecasSelecionadas] = useState([])
   const [cidadesDisponiveis, setCidadesDisponiveis] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [loadingItens, setLoadingItens] = useState(true)
+
+  // Dados do Cabeçalho
   const [formData, setFormData] = useState({
     tipo_compromisso: 'itens_alugados',
-    item_id: '',
-    peca_id: '',
-    carro_id: '',
-    quantidade: 1,
+    nome_contrato: '', // Novo campo para o Master Contract
+    contratante: '',
     data_inicio: new Date().toISOString().split('T')[0],
     data_fim: new Date().toISOString().split('T')[0],
+    valor_total_contrato: '', // Novo campo para ROI
     descricao: '',
     cidade: '',
     uf: 'DF',
     endereco: '',
-    contratante: '',
+    carro_id: '', // Usado no modo Peças de Carro
   })
-  const [loading, setLoading] = useState(false)
-  const [loadingItens, setLoadingItens] = useState(true)
 
-  const [itensContrato, setItensContrato] = useState([]); // [{item_id, quantidade, nome}]
-  const [itemAtual, setItemAtual] = useState({ id: '', qtd: 1 });
+  // Carrinho de Itens (Para Aluguel)
+  const [itensContrato, setItensContrato] = useState([]) // [{item_id, nome, quantidade}]
+  const [selecaoAluguel, setSelecaoAluguel] = useState({ id: '', qtd: 1 })
 
-  const adicionarItem = () => {
-      if (!itemAtual.id) return toast.error("Selecione um item");
-      const itemInfo = itens.find(i => i.id === parseInt(itemAtual.id));
-      
-      setItensContrato([...itensContrato, { 
-          item_id: itemInfo.id, 
-          quantidade: parseInt(itemAtual.qtd),
-          nome: itemInfo.nome 
-      }]);
-      setItemAtual({ id: '', qtd: 1 }); // Limpa o seletor
-  };
+  // Carrinho de Peças (Para Manutenção de Carro)
+  const [pecasSelecionadas, setPecasSelecionadas] = useState([]) // [{peca_id, nome, quantidade}]
+  const [selecaoPeca, setSelecaoPeca] = useState({ id: '', qtd: 1 })
 
-  const removerItem = (index) => {
-      setItensContrato(itensContrato.filter((_, i) => i !== index));
-  };
   useEffect(() => {
     loadCategorias()
     loadItens()
   }, [])
 
-  // Filtra itens quando categoria muda
   useEffect(() => {
-    if (categoriaFiltro && categoriaFiltro !== 'Todas as Categorias') {
-      const filtrados = itens.filter(item => 
-        (item.categoria || '').trim() === categoriaFiltro.trim()
-      )
-      setItensFiltrados(filtrados)
-    } else {
-      setItensFiltrados(itens)
-    }
-    // Limpa item selecionado quando categoria muda
-    setFormData(prev => ({ ...prev, item_id: '' }))
-    setItemSelecionado(null)
-  }, [categoriaFiltro, itens])
-
-  // Atualiza cidades quando UF muda
-  useEffect(() => {
-    if (formData.uf) {
-      setCidadesDisponiveis(getCidadesPorUF(formData.uf))
-    } else {
-      setCidadesDisponiveis([])
-    }
+    if (formData.uf) setCidadesDisponiveis(getCidadesPorUF(formData.uf))
   }, [formData.uf])
-
-  // Atualiza quantidade fixa quando item selecionado muda
-  useEffect(() => {
-    if (formData.item_id) {
-      const item = itensFiltrados.find(i => i.id === parseInt(formData.item_id))
-      if (item) {
-        setItemSelecionado(item)
-        const dadosCat = item.dados_categoria || {}
-        const camposItemUnico = ['Placa', 'Serial', 'Código Único', 'Código', 'ID Único', 'Número de Série']
-        const temCampoItemUnico = Object.keys(dadosCat).some(campo => camposItemUnico.includes(campo))
-        const isCarros = item.categoria === 'Carros'
-        const fixa = isCarros || temCampoItemUnico
-        setQuantidadeFixa(fixa)
-        if (fixa) {
-          setFormData(prev => ({ ...prev, quantidade: 1 }))
-        }
-      }
-    } else {
-      setItemSelecionado(null)
-      setQuantidadeFixa(false)
-    }
-  }, [formData.item_id, itensFiltrados])
 
   const loadCategorias = async () => {
     try {
       const response = await categoriasAPI.listar()
-      const cats = response.data || []
-      setCategorias(cats)
-      if (cats.length > 0) {
-        setCategoriaFiltro(cats[0])
-      } else {
-        setCategoriaFiltro('Todas as Categorias')
-      }
-    } catch (error) {
-      console.error('Erro ao carregar categorias:', error)
-      setCategorias([])
-      setCategoriaFiltro('Todas as Categorias')
-    }
+      setCategorias(response.data || [])
+    } catch (error) { console.error(error) }
   }
 
   const loadItens = async () => {
     try {
       setLoadingItens(true)
       const response = await itensAPI.listar()
-      setItens(response.data)
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Erro ao carregar itens')
-    } finally {
-      setLoadingItens(false)
-    }
+      setItens(response.data || [])
+    } catch (error) { toast.error('Erro ao carregar itens') }
+    finally { setLoadingItens(false) }
   }
 
+  // --- LÓGICA DO "CARRINHO" DE ALUGUEL ---
+  const adicionarAoContrato = () => {
+    if (!selecaoAluguel.id) return toast.error("Selecione um item")
+    const itemInfo = itens.find(i => i.id === parseInt(selecaoAluguel.id))
+    
+    const existente = itensContrato.find(i => i.item_id === itemInfo.id)
+    if (existente) {
+      setItensContrato(itensContrato.map(i => i.item_id === itemInfo.id 
+        ? { ...i, quantidade: i.quantidade + parseInt(selecaoAluguel.qtd) } : i))
+    } else {
+      setItensContrato([...itensContrato, { 
+        item_id: itemInfo.id, 
+        nome: formatItemName(itemInfo), 
+        quantidade: parseInt(selecaoAluguel.qtd) 
+      }])
+    }
+    setSelecaoAluguel({ id: '', qtd: 1 })
+    toast.success("Item adicionado ao contrato")
+  }
+
+  // --- LÓGICA DO "CARRINHO" DE PEÇAS ---
+  const adicionarPecaLista = () => {
+    if (!selecaoPeca.id) return toast.error("Selecione uma peça")
+    const pecaInfo = itens.find(i => i.id === parseInt(selecaoPeca.id))
+    
+    setPecasSelecionadas([...pecasSelecionadas, {
+      peca_id: pecaInfo.id,
+      nome: pecaInfo.nome,
+      quantidade: parseInt(selecaoPeca.qtd)
+    }])
+    setSelecaoPeca({ id: '', qtd: 1 })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    const payload = {
-        ...formData,
-        itens: itensContrato.map(({item_id, quantidade}) => ({ item_id, quantidade }))
-    };
+
     try {
       if (formData.tipo_compromisso === 'pecas_carro') {
-        // Associar múltiplas peças ao carro
-        if (pecasSelecionadas.length === 0) {
-          toast.error('Adicione pelo menos uma peça antes de salvar')
-          setLoading(false)
-          return
+        if (!formData.carro_id || pecasSelecionadas.length === 0) {
+          throw new Error("Selecione o carro e pelo menos uma peça")
         }
-
-        const promises = pecasSelecionadas.map(peca =>
+        const promises = pecasSelecionadas.map(p =>
           api.post('/api/pecas-carros', {
-            peca_id: parseInt(peca.peca_id),
+            peca_id: p.peca_id,
             carro_id: parseInt(formData.carro_id),
-            quantidade: parseInt(peca.quantidade),
+            quantidade: p.quantidade,
             data_instalacao: formData.data_inicio,
-            observacoes: formData.descricao || ''
+            observacoes: formData.descricao
           })
         )
-
         await Promise.all(promises)
-        toast.success(`${pecasSelecionadas.length} peça(s) associada(s) ao carro com sucesso!`)
-        
-        setFormData({
-          tipo_compromisso: 'pecas_carro',
-          item_id: '',
-          peca_id: '',
-          carro_id: '',
-          quantidade: 1,
-          data_inicio: new Date().toISOString().split('T')[0],
-          data_fim: new Date().toISOString().split('T')[0],
-          descricao: '',
-          cidade: '',
-          uf: 'DF',
-          endereco: '',
-          contratante: '',
-        })
-        setPecasSelecionadas([])
+        toast.success('Peças vinculadas ao veículo com sucesso!')
       } else {
-        // Fluxo original para itens alugados
-        // Verifica disponibilidade antes de criar
-        const disponibilidade = await disponibilidadeAPI.verificar({
-          item_id: parseInt(formData.item_id),
-          data_consulta: formData.data_inicio,
-        })
-
-        const disponivelMinimo = disponibilidade.data.quantidade_disponivel
-        const quantidadeSolicitada = parseInt(formData.quantidade)
-
-        if (disponivelMinimo < quantidadeSolicitada) {
-          toast.error(`Quantidade insuficiente! Disponível: ${disponivelMinimo}, Solicitado: ${quantidadeSolicitada}`)
-          setLoading(false)
-          return
+        // MODO ALUGUEL (CONTRATO MASTER)
+        if (itensContrato.length === 0) throw new Error("Adicione itens ao contrato")
+        
+        const payload = {
+          nome_contrato: formData.nome_contrato,
+          contratante: formData.contratante,
+          data_inicio: formData.data_inicio,
+          data_fim: formData.data_fim,
+          valor_total_contrato: parseFloat(formData.valor_total_contrato) || 0,
+          cidade: formData.cidade,
+          uf: formData.uf,
+          endereco: formData.endereco,
+          descricao: formData.descricao,
+          itens: itensContrato.map(i => ({ item_id: i.item_id, quantidade: i.quantidade }))
         }
 
-        await compromissosAPI.criar({
-          ...formData,
-          item_id: parseInt(formData.item_id),
-          quantidade: parseInt(formData.quantidade),
-        })
-        toast.success('Compromisso registrado com sucesso!')
-        setFormData({
-          tipo_compromisso: 'itens_alugados',
-          item_id: '',
-          peca_id: '',
-          carro_id: '',
-          quantidade: 1,
-          data_inicio: new Date().toISOString().split('T')[0],
-          data_fim: new Date().toISOString().split('T')[0],
-          descricao: '',
-          cidade: '',
-          uf: 'DF',
-          endereco: '',
-          contratante: '',
-        })
-        setItemSelecionado(null)
-        setQuantidadeFixa(false)
+        await compromissosAPI.criar(payload)
+        toast.success('Contrato Master registrado!')
       }
+
+      // Reset total
+      setFormData({ ...formData, nome_contrato: '', contratante: '', valor_total_contrato: '', descricao: '', item_id: '', carro_id: '' })
+      setItensContrato([])
+      setPecasSelecionadas([])
     } catch (error) {
-      if (error.response?.status === 400 && error.response?.data?.detail?.includes('insuficiente')) {
-        toast.error(error.response.data.detail)
-      } else {
-        toast.error(error.response?.data?.detail || 'Erro ao associar peça/registrar compromisso')
-      }
-    } finally {
-      setLoading(false)
-    }
+      toast.error(error.message || error.response?.data?.detail || 'Erro ao processar')
+    } finally { setLoading(false) }
   }
 
-  const handleChange = (e) => {
-    const value = e.target.value
-    setFormData({
-      ...formData,
-      [e.target.name]: value
-    })
-
-    if (e.target.name === 'data_inicio' && value > formData.data_fim) {
-      setFormData(prev => ({ ...prev, data_fim: value }))
-    }
-  }
-
-  if (loadingItens) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
-      </div>
-    )
-  }
+  if (loadingItens) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary-500"></div></div>
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-dark-50 mb-2">Registrar Compromisso</h1>
-        <p className="text-dark-400">Registre um novo aluguel ou compromisso para um item do estoque</p>
-      </div>
+      <header>
+        <h1 className="text-3xl font-bold text-dark-50">Registrar Compromisso</h1>
+        <p className="text-dark-400">Gerencie novos contratos de aluguel ou manutenções internas</p>
+      </header>
 
-      <motion.form
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        onSubmit={handleSubmit}
-        className="card space-y-6"
-      >
-        {/* Tipo de Compromisso */}
-        <div>
-          <label className="label">Tipo de Compromisso *</label>
-          <select
-            value={formData.tipo_compromisso}
-            onChange={(e) => {
-              setFormData({ 
-                ...formData, 
-                tipo_compromisso: e.target.value,
-                item_id: '',
-                peca_id: '',
-                carro_id: ''
-              })
-              setItemSelecionado(null)
-            }}
-            className="input"
-            required
-          >
-            <option value="itens_alugados">Itens Alugados</option>
-            <option value="pecas_carro">Peças de Carro</option>
-          </select>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* SELETOR DE MODO */}
+        <div className="card grid grid-cols-2 gap-4 p-2 bg-dark-800">
+          <button type="button" onClick={() => setFormData({...formData, tipo_compromisso: 'itens_alugados'})}
+            className={`py-3 rounded-xl font-bold transition-all ${formData.tipo_compromisso === 'itens_alugados' ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'text-dark-400 hover:text-dark-200'}`}>
+            <div className="flex items-center justify-center gap-2"><ClipboardList size={18}/> Aluguel (Contrato)</div>
+          </button>
+          <button type="button" onClick={() => setFormData({...formData, tipo_compromisso: 'pecas_carro'})}
+            className={`py-3 rounded-xl font-bold transition-all ${formData.tipo_compromisso === 'pecas_carro' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-dark-400 hover:text-dark-200'}`}>
+            <div className="flex items-center justify-center gap-2"><Car size={18}/> Manutenção (Carro)</div>
+          </button>
         </div>
 
-        {formData.tipo_compromisso === 'pecas_carro' ? (
-          <>
-            {/* Interface para Peças de Carro */}
-            <div>
-              <label className="label">Carro *</label>
-              <select
-                value={formData.carro_id}
-                onChange={(e) => setFormData({ ...formData, carro_id: e.target.value })}
-                required
-                className="input"
-              >
-                <option value="">Selecione um carro</option>
-                {itens.filter(i => i.categoria === 'Carros').map(carro => {
-                  const marca = carro.dados_categoria?.Marca || carro.carro?.marca || ''
-                  const modelo = carro.dados_categoria?.Modelo || carro.carro?.modelo || ''
-                  const placa = carro.dados_categoria?.Placa || carro.carro?.placa || ''
-                  const nome = [marca, modelo].filter(Boolean).join(' ') || carro.nome
-                  return (
-                    <option key={carro.id} value={carro.id}>
-                      {nome}{placa ? ` - ${placa}` : ''}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-
-            {/* Adicionar Peças */}
-            <div className="space-y-4 p-4 bg-dark-700/30 rounded-lg border border-dark-600">
-              <h3 className="text-lg font-semibold text-dark-50">Adicionar Peças</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="label">Peça</label>
-                  <select
-                    value={formData.peca_id}
-                    onChange={(e) => setFormData({ ...formData, peca_id: e.target.value })}
-                    className="input"
-                  >
-                    <option value="">Selecione uma peça</option>
-                    {itens.filter(i => i.categoria === 'Peças de Carro' || i.categoria === 'Pecas').map(peca => (
-                      <option key={peca.id} value={peca.id}>
-                        {peca.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="label">Quantidade</label>
-                  <input
-                    type="number"
-                    value={formData.quantidade}
-                    onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
-                    min="1"
-                    className="input"
-                  />
-                </div>
-
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!formData.peca_id) {
-                        toast.error('Selecione uma peça')
-                        return
-                      }
-                      const peca = itens.find(i => i.id === parseInt(formData.peca_id))
-                      const jaAdicionada = pecasSelecionadas.find(p => p.peca_id === formData.peca_id)
-                      
-                      if (jaAdicionada) {
-                        toast.error('Peça já adicionada à lista')
-                        return
-                      }
-
-                      setPecasSelecionadas([...pecasSelecionadas, {
-                        peca_id: formData.peca_id,
-                        peca_nome: peca?.nome || '',
-                        quantidade: formData.quantidade
-                      }])
-                      setFormData({ ...formData, peca_id: '', quantidade: 1 })
-                      toast.success('Peça adicionada à lista')
-                    }}
-                    className="btn btn-primary w-full flex items-center justify-center gap-2"
-                  >
-                    <Plus size={20} />
-                    Adicionar
-                  </button>
-                </div>
-              </div>
-
-              {/* Lista de Peças Selecionadas */}
-              {pecasSelecionadas.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <h4 className="text-sm font-semibold text-dark-300">Peças a Instalar ({pecasSelecionadas.length})</h4>
-                  <div className="space-y-2">
-                    {pecasSelecionadas.map((peca, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-dark-800 rounded-lg border border-dark-600">
-                        <div>
-                          <span className="text-dark-50 font-medium">{peca.peca_nome}</span>
-                          <span className="text-dark-400 text-sm ml-2">x{peca.quantidade}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPecasSelecionadas(pecasSelecionadas.filter((_, i) => i !== index))
-                            toast.success('Peça removida da lista')
-                          }}
-                          className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
-                          title="Remover"
-                        >
-                          <X size={16} className="text-red-400" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
+        {/* MODO ALUGUEL: CABEÇALHO DO CONTRATO */}
+        {formData.tipo_compromisso === 'itens_alugados' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Data de Instalação *</label>
-                <input
-                  type="date"
-                  value={formData.data_inicio}
-                  onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
-                  required
-                  className="input"
-                />
+              <div className="md:col-span-2">
+                <label className="label">Nome/Evento do Contrato *</label>
+                <input className="input" placeholder="Ex: Feira de Agronegócio 2026" value={formData.nome_contrato} onChange={e => setFormData({...formData, nome_contrato: e.target.value})} required />
               </div>
-            </div>
-
-            <div>
-              <label className="label">Observações</label>
-              <textarea
-                value={formData.descricao}
-                onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                rows="3"
-                className="input resize-none"
-                placeholder="Ex: Peça original, instalada na revisão..."
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Interface original para itens alugados */}
-        {/* Filtro por categoria */}
-        <div>
-          <label className="label">Categoria *</label>
-          <select
-            value={categoriaFiltro}
-            onChange={(e) => setCategoriaFiltro(e.target.value)}
-            required
-            className="input"
-          >
-            <option value="Todas as Categorias">Todas as Categorias</option>
-            {categorias.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Seleção do item */}
-        <div>
-          <label className="label">Item *</label>
-          {itensFiltrados.length === 0 ? (
-            <div className="p-4 bg-yellow-600/20 border border-yellow-600/30 rounded-lg">
-              <p className="text-sm text-yellow-400">
-                ⚠️ Não há itens cadastrados na categoria selecionada.
-              </p>
-            </div>
-          ) : (
-            <select
-              name="item_id"
-              value={formData.item_id}
-              onChange={handleChange}
-              required
-              className="input"
-            >
-              <option value="">Selecione um item</option>
-              {itensFiltrados.map(item => (
-                <option key={item.id} value={item.id}>
-                  {formatItemName(item)}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Quantidade */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="label">Quantidade *</label>
-            {quantidadeFixa ? (
               <div>
-                <input
-                  type="number"
-                  name="quantidade"
-                  value={1}
-                  disabled
-                  className="input opacity-50"
-                />
-                <div className="mt-2 p-3 bg-primary-600/20 border border-primary-600/30 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <Info className="text-primary-400 mt-0.5" size={16} />
-                    <p className="text-xs text-primary-400">
-                      Para {itemSelecionado?.categoria || 'esta categoria'}, a quantidade é sempre 1 (cada item é único).
-                    </p>
-                  </div>
-                </div>
+                <label className="label">Cliente / Contratante</label>
+                <div className="relative"><User className="absolute left-3 top-3 text-dark-500" size={18}/><input className="input pl-10" value={formData.contratante} onChange={e => setFormData({...formData, contratante: e.target.value})} /></div>
               </div>
-            ) : (
-              <input
-                type="number"
-                name="quantidade"
-                value={formData.quantidade}
-                onChange={handleChange}
-                required
-                min="1"
-                max={itemSelecionado?.quantidade_total || undefined}
-                className="input"
-              />
-            )}
-          </div>
-
-          <div>
-            <label className="label">Data de Início *</label>
-            <input
-              type="date"
-              name="data_inicio"
-              value={formData.data_inicio}
-              onChange={handleChange}
-              required
-              className="input"
-            />
-          </div>
-
-          <div>
-            <label className="label">Data de Fim *</label>
-            <input
-              type="date"
-              name="data_fim"
-              value={formData.data_fim}
-              onChange={handleChange}
-              required
-              min={formData.data_inicio}
-              className="input"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="label">Descrição (opcional)</label>
-          <textarea
-            name="descricao"
-            value={formData.descricao}
-            onChange={handleChange}
-            rows="3"
-            className="input resize-none"
-            placeholder="Ex: Evento corporativo, Licitação pública..."
-          />
-        </div>
-
-        <div className="space-y-4 pt-6 border-t border-dark-700">
-          <h3 className="text-lg font-semibold text-dark-50 flex items-center gap-2">
-            <div className="w-1 h-6 bg-primary-500 rounded-full"></div>
-            Localização do Compromisso
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="label">UF *</label>
-              <select
-                name="uf"
-                value={formData.uf}
-                onChange={handleChange}
-                required
-                className="input"
-              >
-                {UFS.map(uf => (
-                  <option key={uf} value={uf}>{uf}</option>
-                ))}
-              </select>
+              <div>
+                <label className="label">Valor Total (R$)</label>
+                <div className="relative"><DollarSign className="absolute left-3 top-3 text-green-500" size={18}/><input type="number" step="0.01" className="input pl-10 text-green-400 font-bold" value={formData.valor_total_contrato} onChange={e => setFormData({...formData, valor_total_contrato: e.target.value})} /></div>
+              </div>
+              <div><label className="label">Data Início</label><input type="date" className="input" value={formData.data_inicio} onChange={e => setFormData({...formData, data_inicio: e.target.value})} /></div>
+              <div><label className="label">Data Fim</label><input type="date" className="input" value={formData.data_fim} onChange={e => setFormData({...formData, data_fim: e.target.value})} /></div>
             </div>
-
-            <div>
-              <label className="label">Cidade *</label>
-              <select
-                name="cidade"
-                value={formData.cidade}
-                onChange={handleChange}
-                required
-                className="input"
-              >
-                <option value="">Selecione uma cidade</option>
-                {cidadesDisponiveis.map(cidade => (
-                  <option key={cidade} value={cidade}>{cidade}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Endereço (opcional)</label>
-            <input
-              type="text"
-              name="endereco"
-              value={formData.endereco}
-              onChange={handleChange}
-              className="input"
-              placeholder="Ex: Rua das Flores, 123 - Centro..."
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="label">Contratante (opcional)</label>
-          <input
-            type="text"
-            name="contratante"
-            value={formData.contratante}
-            onChange={handleChange}
-            className="input"
-            placeholder="Ex: Empresa ABC, Prefeitura de Cidade..."
-          />
-        </div>
-
-          </>
+          </motion.div>
         )}
 
-        {/* Button moved outside conditional */}
-        <button
-          type="submit"
-          disabled={loading || (formData.tipo_compromisso === 'itens_alugados' && itensFiltrados.length === 0)}
-          className="btn btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {loading ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-              Salvando...
-            </>
-          ) : (
-            <>
-              <Calendar size={20} />
-              {formData.tipo_compromisso === 'pecas_carro' ? 'Associar Peça ao Carro' : 'Registrar Compromisso'}
-            </>
-          )}
+        {/* MODO MANUTENÇÃO: SELEÇÃO DO CARRO */}
+        {formData.tipo_compromisso === 'pecas_carro' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card">
+            <label className="label">Selecione o Veículo *</label>
+            <select className="input" value={formData.carro_id} onChange={e => setFormData({...formData, carro_id: e.target.value})} required>
+              <option value="">Escolha o carro...</option>
+              {itens.filter(i => i.categoria === 'Carros').map(c => <option key={c.id} value={c.id}>{formatItemName(c)}</option>)}
+            </select>
+          </motion.div>
+        )}
+
+        {/* SEÇÃO DE "CARRINHO" DE ITENS/PEÇAS */}
+        <div className="card space-y-4 border-2 border-primary-500/10">
+          <h3 className="font-bold text-dark-200 flex items-center gap-2">
+            <Package size={18} className="text-primary-400"/> 
+            {formData.tipo_compromisso === 'itens_alugados' ? 'Itens do Aluguel' : 'Peças Instaladas'}
+          </h3>
+          
+          <div className="flex flex-col md:flex-row gap-3 items-end bg-dark-700/30 p-4 rounded-xl">
+            <div className="flex-1">
+              <label className="label">Equipamento/Peça</label>
+              <select className="input" 
+                value={formData.tipo_compromisso === 'itens_alugados' ? selecaoAluguel.id : selecaoPeca.id}
+                onChange={e => formData.tipo_compromisso === 'itens_alugados' 
+                  ? setSelecaoAluguel({...selecaoAluguel, id: e.target.value}) 
+                  : setSelecaoPeca({...selecaoPeca, id: e.target.value})}>
+                <option value="">Selecionar...</option>
+                {itens.filter(i => formData.tipo_compromisso === 'itens_alugados' ? i.categoria !== 'Peças de Carro' : i.categoria === 'Peças de Carro')
+                  .map(i => <option key={i.id} value={i.id}>{formatItemName(i)} (Qtd: {i.quantidade_total})</option>)}
+              </select>
+            </div>
+            <div className="w-24">
+              <label className="label">Qtd</label>
+              <input type="number" className="input" 
+                value={formData.tipo_compromisso === 'itens_alugados' ? selecaoAluguel.qtd : selecaoPeca.qtd}
+                onChange={e => formData.tipo_compromisso === 'itens_alugados'
+                  ? setSelecaoAluguel({...selecaoAluguel, qtd: e.target.value})
+                  : setSelecaoPeca({...selecaoPeca, qtd: e.target.value})} />
+            </div>
+            <button type="button" onClick={formData.tipo_compromisso === 'itens_alugados' ? adicionarAoContrato : adicionarPecaLista} className="btn btn-secondary px-6"><Plus size={20}/></button>
+          </div>
+
+          <div className="space-y-2">
+            <AnimatePresence>
+              {(formData.tipo_compromisso === 'itens_alugados' ? itensContrato : pecasSelecionadas).map((item, idx) => (
+                <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                  className="flex items-center justify-between p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                  <div><span className="text-dark-50 font-medium">{item.nome}</span><span className="ml-3 text-primary-400 font-bold">x{item.quantidade}</span></div>
+                  <button type="button" onClick={() => formData.tipo_compromisso === 'itens_alugados' 
+                    ? setItensContrato(itensContrato.filter((_, i) => i !== idx))
+                    : setPecasSelecionadas(pecasSelecionadas.filter((_, i) => i !== idx))} 
+                    className="text-red-400 hover:bg-red-400/10 p-1 rounded"><Trash2 size={16}/></button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* LOCALIZAÇÃO E DESCRIÇÃO */}
+        <div className="card space-y-4">
+          <h3 className="font-bold text-dark-200 flex items-center gap-2"><MapPin size={18} className="text-primary-400"/> Destino / Localização</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div><label className="label">UF</label><select className="input" value={formData.uf} onChange={e => setFormData({...formData, uf: e.target.value})}>{UFS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+            <div className="md:col-span-3"><label className="label">Cidade</label><select className="input" value={formData.cidade} onChange={e => setFormData({...formData, cidade: e.target.value})}><option value="">Selecione...</option>{cidadesDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          </div>
+          <input className="input" placeholder="Endereço Completo" value={formData.endereco} onChange={e => setFormData({...formData, endereco: e.target.value})} />
+          <textarea className="input h-24" placeholder="Observações adicionais..." value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} />
+        </div>
+
+        <button type="submit" disabled={loading} className="btn btn-primary w-full py-4 text-lg font-bold shadow-xl shadow-primary-500/20">
+          {loading ? 'Processando Registro...' : 'Salvar Compromisso'}
         </button>
-      </motion.form>
+      </form>
     </div>
   )
 }

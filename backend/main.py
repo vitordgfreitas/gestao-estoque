@@ -331,17 +331,17 @@ class ItemAluguelUpdate(BaseModel):
     item_id: int
     quantidade: int
 
-class CompromissoUpdate(BaseModel):
+class CompromissoUpdateMaster(BaseModel):
     nome_contrato: Optional[str] = None
     contratante: Optional[str] = None
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    valor_total_contrato: Optional[float] = None
+    descricao: Optional[str] = None
     cidade: Optional[str] = None
     uf: Optional[str] = None
     endereco: Optional[str] = None
-    descricao: Optional[str] = None
-    # Lista opcional: se vier, substituímos os itens antigos pelos novos
+    valor_total_contrato: Optional[float] = None
+    # Se 'itens' for enviado, substituímos a lista antiga pela nova
     itens: Optional[List[ItemAluguelUpdate]] = None
 
 class CompromissoResponse(BaseModel):
@@ -1046,60 +1046,41 @@ async def criar_compromisso(compromisso: CompromissoCreate, db_module = Depends(
         print(f"❌ ERRO AO CRIAR CONTRATO: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.put("/api/compromissos/{compromisso_id}", response_model=dict)
-async def atualizar_compromisso(compromisso_id: int, compromisso: CompromissoUpdate, db_module = Depends(get_db)):
-    """Atualiza um compromisso existente"""
+@app.put("/api/compromissos/{compromisso_id}")
+async def atualizar_compromisso(
+    compromisso_id: int, 
+    compromisso: CompromissoUpdateMaster, 
+    db_module = Depends(get_db)
+):
     try:
-        # Busca compromisso atual
-        compromissos = db_module.listar_compromissos()
-        comp_atual = next((c for c in compromissos if c.id == compromisso_id), None)
-        if not comp_atual:
-            raise HTTPException(status_code=404, detail="Compromisso não encontrado")
+        # 1. Extraímos os itens se eles existirem no payload
+        lista_itens = None
+        if compromisso.itens is not None:
+            lista_itens = [item.dict() for item in compromisso.itens]
         
-        # Usa valores do compromisso atual se não fornecidos
-        item_id = compromisso.item_id or comp_atual.item_id
-        quantidade = compromisso.quantidade or comp_atual.quantidade
-        data_inicio = compromisso.data_inicio or comp_atual.data_inicio
-        data_fim = compromisso.data_fim or comp_atual.data_fim
+        # 2. Extraímos os dados do cabeçalho (apenas os campos que foram enviados)
+        # exclude_unset=True garante que não vamos sobrescrever com None o que não foi enviado
+        dados_header = compromisso.dict(exclude={'itens'}, exclude_unset=True)
         
-        # Verifica disponibilidade se mudou período ou quantidade
-        if compromisso.data_inicio or compromisso.data_fim or compromisso.quantidade:
-            disponibilidade = db_module.verificar_disponibilidade_periodo(
-                item_id,
-                data_inicio,
-                data_fim,
-                excluir_compromisso_id=compromisso_id
-            )
-            
-            if disponibilidade['disponivel_minimo'] < quantidade:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Quantidade insuficiente! Disponível: {disponibilidade['disponivel_minimo']}, Solicitado: {quantidade}"
-                )
-        
-        compromisso_atualizado = db_module.atualizar_compromisso(
+        # 3. Chamamos a lógica master no banco de dados
+        contrato_atualizado = db_module.atualizar_compromisso_master(
             compromisso_id=compromisso_id,
-            item_id=item_id,
-            quantidade=quantidade,
-            data_inicio=data_inicio,
-            data_fim=data_fim,
-            descricao=compromisso.descricao,
-            cidade=compromisso.cidade,
-            uf=compromisso.uf,
-            endereco=compromisso.endereco,
-            contratante=compromisso.contratante
+            dados_header=dados_header,
+            lista_itens=lista_itens
         )
         
-        if not compromisso_atualizado:
-            raise HTTPException(status_code=404, detail="Compromisso não encontrado")
-        
-        return compromisso_to_dict(compromisso_atualizado)
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        if not contrato_atualizado:
+            raise HTTPException(status_code=404, detail="Contrato não encontrado")
+            
+        # 4. Retornamos o contrato formatado (o compromisso_to_dict deve lidar com o novo JOIN)
+        return compromisso_to_dict(contrato_atualizado)
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ ERRO UPDATE CONTRATO: {str(e)}")
+        # Se for um erro de estoque (lançado pela nossa função no DB), retornamos 400
+        if "Estoque insuficiente" in str(e):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno ao atualizar contrato")
 
 @app.delete("/api/compromissos/{compromisso_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deletar_compromisso(compromisso_id: int, db_module = Depends(get_db)):
