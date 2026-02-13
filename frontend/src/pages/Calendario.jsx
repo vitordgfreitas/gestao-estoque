@@ -7,8 +7,7 @@ import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin, 
   Package, FileText, PlayCircle, ExternalLink, CheckCircle, 
   Clock, AlertCircle, Filter, LayoutGrid, CalendarDays, X, 
-  ArrowRight, TrendingUp, DollarSign, Receipt, Info, Tag, AlignLeft,
-  Check, UploadCloud, CreditCard, History, Search
+  ArrowRight, TrendingUp, DollarSign, Receipt, Info, Tag, AlignLeft, Check
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
@@ -29,23 +28,20 @@ export default function Calendario() {
   const [diaSelecionado, setDiaSelecionado] = useState(new Date())
   const [detalhesDia, setDetalhesDia] = useState(null)
   const [parcelasMes, setParcelasMes] = useState([])
-  
-  // Controle de Baixa de Pagamento
-  const [parcelaEmBaixa, setParcelaEmBaixa] = useState(null)
 
-  // FIX TIMEZONE: Trata data como string local para o dia 12 não virar dia 11
+  // Função para tratar data local (Brasília) e evitar o erro de aparecer no dia anterior
   const dataToStr = (d) => {
     if (!d) return ''
-    if (typeof d === 'string') return d.split('T')[0]
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
+    const date = d instanceof Date ? d : new Date(d)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
 
   useEffect(() => { loadData() }, [])
 
-  // Sincroniza Financeiro (Boletos) do mês visível
+  // Sincroniza Financeiro do mês atual para mostrar os badges no grid
   useEffect(() => {
     let active = true
     const fetchFinanceiro = async () => {
@@ -76,7 +72,7 @@ export default function Calendario() {
       comps.forEach(c => { if(c.cidade) locs.add(`${c.cidade} - ${c.uf}`) })
       setLocalizacoes(Array.from(locs).sort())
     } catch (error) {
-      toast.error('Erro de sincronização com o banco em Brasília.')
+      toast.error('Erro de sincronização com o banco.')
     } finally { setLoading(false) }
   }
 
@@ -115,27 +111,11 @@ export default function Calendario() {
     })
 
     try {
-      // Busca boletos específicos do dia com links e detalhes de pagamento
+      // Busca boletos específicos do dia com links e detalhes técnicos
       const res = await api.get('/api/parcelas', { params: { data_vencimento: dStr, incluir_pagas: true } })
       setDetalhesDia(prev => prev ? { ...prev, parcelas: res.data || [], loadingParcelas: false } : null)
     } catch (e) {
       setDetalhesDia(prev => prev ? { ...prev, loadingParcelas: false } : null)
-    }
-  }
-
-  const handleConfirmarBaixa = async (formData) => {
-    const loadId = toast.loading('Baixando pagamento no sistema...')
-    try {
-      await api.post(`/api/financiamentos/${parcelaEmBaixa.financiamento_id}/parcelas/${parcelaEmBaixa.id}/pagar`, {
-        valor_pago: parseFloat(formData.valor_pago),
-        link_comprovante: formData.link_comprovante,
-        data_pagamento: new Date().toISOString().split('T')[0]
-      })
-      toast.success('Parcela baixada com sucesso!', { id: loadId })
-      setParcelaEmBaixa(null)
-      loadData() 
-    } catch (e) {
-      toast.error('Erro ao realizar baixa.', { id: loadId })
     }
   }
 
@@ -153,11 +133,11 @@ export default function Calendario() {
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto px-4 pb-10">
-      {/* HEADER OPERACIONAL */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-end">
         <div>
-          <h1 className="text-4xl font-black text-dark-50 tracking-tighter uppercase italic">Operações Star Gestão</h1>
-          <p className="text-dark-400 font-medium tracking-widest uppercase text-[10px]">Agenda de Brasília • Logística & Financeiro Integrado</p>
+          <h1 className="text-4xl font-black text-dark-50 tracking-tighter uppercase italic">Agenda de Operações</h1>
+          <p className="text-dark-400 font-medium tracking-widest uppercase text-[10px]">Logística e Vencimentos Financeiros</p>
         </div>
         <div className="flex gap-2 p-1 bg-dark-800 rounded-xl border border-dark-700 shadow-2xl">
           <ViewBtn active={viewMode === 'mensal'} icon={<LayoutGrid size={18}/>} label="Mensal" onClick={() => setViewMode('mensal')} />
@@ -165,7 +145,7 @@ export default function Calendario() {
         </div>
       </div>
 
-      {/* FILTROS TÁTICOS */}
+      {/* FILTROS */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-2 flex gap-3">
           <FilterSelect icon={<Filter size={16}/>} value={categoriaFiltro} onChange={setCategoriaFiltro} options={['Todas as Categorias', ...categorias]} />
@@ -180,7 +160,7 @@ export default function Calendario() {
         </div>
       </div>
 
-      {/* VIEW RENDERER (MENSAL/DIÁRIO) */}
+      {/* GRID DO CALENDÁRIO */}
       <AnimatePresence mode="wait">
         {viewMode === 'mensal' ? (
           <motion.div key="mensal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-0 overflow-hidden border-dark-700 bg-dark-900/40 backdrop-blur-xl shadow-2xl">
@@ -194,12 +174,12 @@ export default function Calendario() {
         )}
       </AnimatePresence>
 
-      {/* MODAL DE DETALHES "RIQUEZA DE DADOS" (image_89ed8e.png Fix) */}
+      {/* MODAL RIQUÍSSIMO EM INFORMAÇÃO (ESPELHO DA image_89ed8e.png) */}
       {detalhesDia && (
         <Modal isOpen={true} onClose={() => setDetalhesDia(null)} title={`RELATÓRIO OPERACIONAL: ${formatDate(dataToStr(detalhesDia.data))}`}>
           <div className="space-y-8 max-h-[80vh] overflow-y-auto pr-4 custom-scrollbar">
             
-            {/* 1. SEÇÃO LOGÍSTICA (image_7af074.png) */}
+            {/* SEÇÃO LOGÍSTICA DETALHADA */}
             <Section title="Logística e Entregas" icon={<Package size={16}/>} color="text-primary-500">
               {([...detalhesDia.compromissosInicio, ...detalhesDia.compromissosAtivos]).length > 0 ? (
                 ([...detalhesDia.compromissosInicio, ...detalhesDia.compromissosAtivos]).map(c => (
@@ -212,13 +192,11 @@ export default function Calendario() {
                       <span className="text-green-400 font-black text-lg font-mono">{formatCurrency(c.valor_total_contrato)}</span>
                     </div>
 
-                    {/* Descrição e Endereço Ricos */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                        <InfoBox icon={<AlignLeft size={14}/>} label="Descrição do Contrato" value={c.descricao || 'Sem observações registradas.'} />
                        <InfoBox icon={<MapPin size={14}/>} label="Endereço da Operação" value={`${c.endereco || 'Brasília'} - ${c.cidade}/${c.uf}`} />
                     </div>
 
-                    {/* Itens com Quantidade (image_85d57b.png) */}
                     <div className="bg-dark-900/60 p-5 rounded-2xl border border-dark-700/50">
                       <p className="text-[9px] font-black text-dark-500 uppercase mb-3 flex items-center gap-2"><Tag size={12}/> Checklist de Equipamentos</p>
                       <div className="flex flex-wrap gap-2">
@@ -226,7 +204,7 @@ export default function Calendario() {
                           <span key={ci.id} className="px-3 py-1.5 bg-dark-700 text-dark-50 rounded-xl text-[11px] font-black border border-dark-600 flex items-center gap-2 shadow-inner">
                             <span className="text-primary-500 bg-primary-500/10 px-1.5 rounded-md">{ci.quantidade}x</span> {ci.itens?.nome}
                           </span>
-                        )) || <span className="text-dark-500 italic text-xs">Sem itens vinculados.</span>}
+                        ))}
                       </div>
                     </div>
 
@@ -236,26 +214,26 @@ export default function Calendario() {
                     </div>
                   </div>
                 ))
-              ) : <EmptyState icon={<Package size={40}/>} text="Nenhuma entrega programada." />}
+              ) : <EmptyState icon={<Package size={40}/>} text="Nenhuma movimentação para hoje." />}
             </Section>
 
-            {/* 2. SEÇÃO FINANCEIRA (Tabela igual à sua imagem e código de financiamentos) */}
+            {/* SEÇÃO FINANCEIRA (VENCIMENTOS IGUAL image_89ed8e.png) */}
             <Section title="Vencimentos Financeiros" icon={<DollarSign size={16}/>} color="text-green-500">
                {detalhesDia.loadingParcelas ? (
-                 <div className="py-10 text-center text-dark-400 uppercase font-black text-xs animate-pulse italic">Consultando títulos bancários...</div>
+                 <div className="py-10 text-center text-dark-400 uppercase font-black text-xs animate-pulse italic">Consultando banco de dados...</div>
                ) : detalhesDia.parcelas?.length > 0 ? (
-                 <div className="overflow-hidden rounded-[2rem] border border-dark-700 shadow-2xl">
+                 <div className="overflow-hidden rounded-[2rem] border border-dark-700 shadow-2xl bg-dark-900/20">
                    <table className="w-full text-xs text-left border-collapse">
                      <thead className="bg-dark-800 text-dark-500 uppercase font-black text-[9px] tracking-widest">
                        <tr>
                          <th className="p-5">Contrato / Parcela</th>
                          <th className="p-5 text-right">Valor Original</th>
                          <th className="p-5 text-right">Valor Pago</th>
-                         <th className="p-5 text-center">Status</th>
                          <th className="p-5 text-center">Ações</th>
+                         <th className="p-5 text-center">Status</th>
                        </tr>
                      </thead>
-                     <tbody className="divide-y divide-dark-800 bg-dark-900/40">
+                     <tbody className="divide-y divide-dark-800">
                        {detalhesDia.parcelas.map(p => {
                          const StatusIcon = p.status === 'Paga' ? CheckCircle : p.status === 'Atrasada' ? AlertCircle : Clock
                          const statusColor = p.status === 'Paga' ? 'text-green-400' : p.status === 'Atrasada' ? 'text-red-400' : 'text-yellow-400'
@@ -268,22 +246,16 @@ export default function Calendario() {
                              <td className="p-5 text-right font-mono text-dark-50 font-black">{formatCurrency(p.valor_original)}</td>
                              <td className="p-5 text-right font-mono text-green-400 font-black">{p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}</td>
                              <td className="p-5 text-center">
+                                <div className="flex justify-center gap-2">
+                                  {p.link_boleto && <a href={p.link_boleto} target="_blank" rel="noreferrer" title="Ver Boleto" className="p-2 bg-dark-700 text-primary-400 rounded-xl hover:bg-primary-500/30 transition-all shadow-lg"><FileText size={18}/></a>}
+                                  {p.link_comprovante && <a href={p.link_comprovante} target="_blank" rel="noreferrer" title="Ver Comprovante" className="p-2 bg-dark-700 text-green-400 rounded-xl hover:bg-green-500/30 transition-all shadow-lg"><Receipt size={18}/></a>}
+                                  {p.status !== 'Paga' && <button className="p-2 bg-green-500 text-white rounded-xl hover:bg-green-600 shadow-lg"><Check size={18}/></button>}
+                                </div>
+                             </td>
+                             <td className="p-5 text-center">
                                <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-black uppercase text-[8px] border shadow-sm ${statusColor} border-current/20 bg-current/5`}>
                                  <StatusIcon size={12} /> {p.status}
                                </span>
-                             </td>
-                             <td className="p-5 text-center">
-                                <div className="flex justify-center gap-2">
-                                  {p.link_boleto && (
-                                    <a href={p.link_boleto} target="_blank" rel="noreferrer" title="Ver Boleto" className="p-2 bg-dark-700 text-primary-400 rounded-xl hover:bg-primary-500/30 transition-all shadow-lg"><FileText size={18}/></a>
-                                  )}
-                                  {p.status !== 'Paga' && (
-                                    <button onClick={() => setParcelaEmBaixa(p)} className="p-2 bg-green-500 text-white rounded-xl hover:bg-green-600 shadow-lg shadow-green-500/30 transition-all" title="Baixar Pagamento"><Check size={18}/></button>
-                                  )}
-                                  {p.link_comprovante && (
-                                    <a href={p.link_comprovante} target="_blank" rel="noreferrer" title="Ver Comprovante" className="p-2 bg-dark-700 text-green-400 rounded-xl hover:bg-green-500/30 transition-all shadow-lg"><Receipt size={18}/></a>
-                                  )}
-                                </div>
                              </td>
                            </tr>
                          )
@@ -291,53 +263,22 @@ export default function Calendario() {
                      </tbody>
                    </table>
                  </div>
-               ) : <EmptyState icon={<DollarSign size={40}/>} text="Nenhum título financeiro para hoje." />}
+               ) : <EmptyState icon={<DollarSign size={40}/>} text="Agenda financeira livre para hoje." />}
             </Section>
           </div>
-        </Modal>
-      )}
-
-      {/* 5. SUB-MODAL DE BAIXA FINANCEIRA (Igual sua tela de Financiamentos) */}
-      {parcelaEmBaixa && (
-        <Modal isOpen={true} onClose={() => setParcelaEmBaixa(null)} title="Baixa de Pagamento">
-           <form onSubmit={(e) => {
-             e.preventDefault();
-             const fd = new FormData(e.target);
-             handleConfirmarBaixa(Object.fromEntries(fd));
-           }} className="space-y-6">
-              <div className="p-5 bg-dark-800 rounded-3xl border border-dark-700 flex justify-between items-center shadow-inner">
-                 <div>
-                    <p className="text-[10px] font-black text-dark-500 uppercase mb-1 tracking-widest">Valor do Título</p>
-                    <p className="text-2xl font-black text-dark-50 font-mono">{formatCurrency(parcelaEmBaixa.valor_original)}</p>
-                 </div>
-                 <CreditCard size={32} className="text-primary-500 opacity-20"/>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="label uppercase text-[10px] font-black tracking-[0.2em]">Valor Pago Efetivamente</label>
-                  <input name="valor_pago" type="number" step="0.01" className="input font-mono text-green-400 font-black text-lg" defaultValue={parcelaEmBaixa.valor_original} required />
-                </div>
-                <div>
-                  <label className="label uppercase text-[10px] font-black tracking-[0.2em]">Link do Comprovante (Drive/iCloud)</label>
-                  <div className="relative">
-                    <UploadCloud className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" size={18}/>
-                    <input name="link_comprovante" type="url" placeholder="https://..." className="input pl-10 bg-dark-900" />
-                  </div>
-                </div>
-              </div>
-              <button type="submit" className="btn btn-primary w-full py-4 font-black uppercase shadow-xl shadow-primary-500/40 text-base">Salvar Baixa Financeira</button>
-           </form>
         </Modal>
       )}
     </div>
   )
 }
 
-// --- COMPONENTES AUXILIARES (GARANTIA ZERO TELA BRANCA) ---
+// --- SUB-COMPONENTES AUXILIARES ---
 
 function ViewBtn({ active, icon, label, onClick }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black transition-all ${active ? 'bg-primary-500 text-white shadow-xl' : 'text-dark-400 hover:text-dark-100 hover:bg-dark-700'}`}>{icon} {label}</button>
+    <button onClick={onClick} className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black transition-all ${active ? 'bg-primary-500 text-white shadow-xl shadow-primary-500/30' : 'text-dark-400 hover:text-dark-100'}`}>
+      {icon} {label}
+    </button>
   )
 }
 
@@ -386,15 +327,14 @@ function renderCalendarDays(ano, mes, getEventos, onDayClick) {
 
   const hojeStr = new Date().toDateString()
   for (let d = 1; d <= end.getDate(); d++) {
-    const data = new Date(ano, mes - 1, d); const ev = getEventos(data); 
-    const isHoje = data.toDateString() === hojeStr
+    const data = new Date(ano, mes - 1, d); const ev = getEventos(data); const isHoje = data.toDateString() === hojeStr
     days.push(
       <button key={d} onClick={() => onDayClick(data)} className={`relative p-3 border border-dark-800/40 hover:bg-primary-500/5 transition-all text-left flex flex-col h-full min-h-[120px] overflow-hidden ${isHoje ? 'bg-primary-500/10 ring-1 ring-primary-500/30' : ''}`}>
-        <span className={`text-xs font-black mb-2 ${isHoje ? 'text-primary-400 underline decoration-2 underline-offset-4' : 'text-dark-500'}`}>{d < 10 ? `0${d}` : d}</span>
+        <span className={`text-xs font-black mb-2 ${isHoje ? 'text-primary-400 underline decoration-2' : 'text-dark-500'}`}>{d < 10 ? `0${d}` : d}</span>
         <div className="space-y-1.5 w-full">
           {ev.iniciam.slice(0, 1).map(c => <div key={c.id} className="text-[7px] bg-primary-600 text-white font-black px-2 py-0.5 rounded truncate uppercase shadow-lg">🚀 {c.nome_contrato}</div>)}
           {ev.ativos.length > 0 && <div className="text-[7px] text-dark-300 font-bold px-1.5 py-0.5 border border-dark-700 rounded bg-dark-800/90 truncate flex items-center gap-1"><Package size={8}/> {ev.ativos.length} Ativos</div>}
-          {ev.parcelas.length > 0 && <div className="text-[7px] bg-green-500/20 text-green-500 font-black px-1.5 py-0.5 rounded border border-green-500/20 truncate flex items-center gap-1 shadow-inner">💰 {ev.parcelas.length} Venc.</div>}
+          {ev.parcelas.length > 0 && <div className="text-[7px] bg-green-500/20 text-green-500 font-black px-1.5 py-0.5 rounded border border-green-500/20 truncate flex items-center gap-1 shadow-inner">💰 {ev.parcelas.length} Vencimentos</div>}
         </div>
       </button>
     )
