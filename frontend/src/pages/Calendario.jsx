@@ -408,3 +408,39 @@ function DailyView({ data, eventos, setDia, abrirDetalhes }) {
              <div className="h-px w-10 bg-primary-500/50" />
           </div>
         </div>
+        <button onClick={() => move('prox')} className="p-5 hover:bg-dark-700 rounded-[2rem] text-primary-400 transition-all active:scale-90"><ChevronRight size={40}/></button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <DayCard title="Cronograma Logístico" icon={<PlayCircle size={24}/>} count={eventos.iniciam.length} color="primary" items={eventos.iniciam} onClick={() => abrirDetalhes(data)} />
+        <DayCard title="Compromissos Financeiros" icon={<DollarSign size={24}/>} count={eventos.parcelas.length} color="green" items={eventos.parcelas} onClick={() => abrirDetalhes(data)} />
+      </div>
+    </div>
+  )
+}
+
+function DayCard({ title, icon, count, color, items, onClick }) {
+  const isPrimary = color === 'primary'
+  return (
+    <div className={`p-10 rounded-[3rem] border shadow-2xl ${isPrimary ? 'bg-primary-500/[0.04] border-primary-500/20' : 'bg-green-500/[0.04] border-green-500/20'}`}>
+      <div className="flex justify-between items-center mb-10">
+        <h3 className={`text-[12px] font-black uppercase tracking-[0.4em] flex items-center gap-4 ${isPrimary ? 'text-primary-500' : 'text-green-500'}`}>{icon} {title}</h3>
+        <span className={`text-xs font-black px-4 py-1.5 rounded-full text-white ${isPrimary ? 'bg-primary-500' : 'bg-green-500'} shadow-xl`}>{count}</span>
+      </div>
+      <div className="space-y-4">
+        {(items || []).slice(0, 6).map(i => (
+          <div key={i.id} onClick={onClick} className="p-6 bg-dark-800 rounded-[2rem] border border-dark-700 flex justify-between items-center cursor-pointer hover:border-primary-500/40 transition-all group shadow-lg">
+            <div>
+              <p className="font-black text-dark-50 text-base truncate">{i.nome_contrato || i.codigo_contrato || 'Operação'}</p>
+              {i.contratante && <p className="text-[11px] text-dark-500 font-bold uppercase mt-1 tracking-widest italic">{i.contratante}</p>}
+              {i.valor_original && <p className="text-green-400 font-mono text-xs font-black mt-2">{formatCurrency(i.valor_original)}</p>}
+            </div>
+            <div className="p-3 bg-dark-900 rounded-2xl group-hover:bg-primary-500 transition-colors">
+              <ArrowRight size={20} className="text-dark-400 group-hover:text-white"/>
+            </div>
+          </div>
+        ))}
+        {(!items || items.length === 0) && <p className="text-dark-600 text-[11px] font-black uppercase tracking-widest italic opacity-40 text-center py-12">Agenda livre.</p>}
+      </div>
+    </div>
+  )
+}
