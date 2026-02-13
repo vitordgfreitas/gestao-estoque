@@ -1976,28 +1976,27 @@ async def deletar_financiamento(financiamento_id: int, token: str = Depends(veri
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/financiamentos/{financiamento_id}/parcelas/{parcela_id}/pagar", response_model=dict)
+@app.post("/api/financiamentos/{financiamento_id}/parcelas/{parcela_id}/pagar")
 async def pagar_parcela_financiamento(
     financiamento_id: int,
     parcela_id: int,
-    pagamento: PagarParcelaRequest,
+    pagamento: dict = Body(...), 
     token: str = Depends(verify_token),
     db_module = Depends(get_db)
 ):
-    """Registra pagamento de uma parcela"""
     try:
+        # Garantimos que os campos cheguem como tipos básicos ao db_module
         parcela_atualizada = db_module.pagar_parcela_financiamento(
             parcela_id=parcela_id,
-            valor_pago=pagamento.valor_pago,
-            data_pagamento=pagamento.data_pagamento,
-            link_comprovante=pagamento.get('link_comprovante')
+            valor_pago=float(pagamento.get('valor_pago', 0)),
+            data_pagamento=pagamento.get('data_pagamento'),
+            link_comprovante=str(pagamento.get('link_comprovante', '')) if pagamento.get('link_comprovante') else None
         )
-        if parcela_atualizada is None:
+        if not parcela_atualizada:
             raise HTTPException(status_code=404, detail="Parcela não encontrada")
         return parcela_to_dict(parcela_atualizada)
-    except HTTPException:
-        raise
     except Exception as e:
+        # Retorna string para o React não tentar renderizar um objeto de erro
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/financiamentos/{financiamento_id}/parcelas/{parcela_id}", response_model=dict)
