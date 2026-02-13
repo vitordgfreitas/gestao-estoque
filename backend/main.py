@@ -924,21 +924,17 @@ async def listar_compromissos(db_module = Depends(get_db)):
         
         resultado_final = []
         for comp_raw in compromissos_brutos:
-            # COMPATIBILITY PATCH: Injetamos chaves que o tradutor legado exige (obj.item_id)
-            # Mas preservamos as chaves novas do seu schema (nome_contrato)
-            patch = {
-                "item_id": 0,    # Default para não quebrar obj.item_id
-                "quantidade": 0, # Default para não quebrar obj.quantidade
-                **comp_raw       # Sobrescreve com os dados REAIS do banco
-            }
-            
-            # Converte para SimpleNamespace para o tradutor compromisso_to_dict aceitar obj.campo
+            patch = {"item_id": 0, "quantidade": 0, **comp_raw}
             comp_obj = SimpleNamespace(**patch)
             d = compromisso_to_dict(comp_obj)
             
+            # 2. PRIORIDADE TOTAL: Forçamos o nome real da coluna do banco
+            # Se a coluna nome_contrato existir e tiver texto, ela MANDA.
+            nome_real = comp_raw.get('nome_contrato')
+            d['nome_contrato'] = nome_real if nome_real and str(nome_real).strip() else f"Contrato #{comp_raw.get('id')}"
+            
             # SOBREPOSIÇÃO MANUAL: Garante que os dados do seu schema novo cheguem ao front
             # O seu compromisso_to_dict ignorava essas chaves
-            d['nome_contrato'] = comp_raw.get('nome_contrato') or f"Contrato #{comp_raw.get('id')}"
             d['valor_total_contrato'] = float(comp_raw.get('valor_total_contrato') or 0)
             d['compromisso_itens'] = comp_raw.get('compromisso_itens', [])
             
@@ -1114,7 +1110,10 @@ async def atualizar_compromisso(compromisso_id: int, comp_in: CompromissoUpdateM
         
         # Retorno usando o mesmo remendo da listagem para manter o nome no front
         return {"status": "success", "id": compromisso_id}
-
+    except ValueError as e:
+        # 3. TRATAMENTO DE CONFLITO: Transforma o erro de estoque em um 400 amigável
+        # Isso faz com que o Toast no React mostre a frase "Conflito de estoque..."
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"❌ ERRO UPDATE COMPROMISSO: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
