@@ -1835,7 +1835,7 @@ def parcela_to_dict(parcela):
         "data_pagamento": parcela.data_pagamento.isoformat() if parcela.data_pagamento and isinstance(parcela.data_pagamento, date) else None,
         "status": parcela.status,
         "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
-        "link_comprovante": parcela.link_comprovante if hasattr(parcela, 'link_comprovante') else None
+        "link_comprovante": parcela.link_comprovante if hasattr(parcela, 'link_comprovante') else None,
     }
 
 @app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -2141,6 +2141,9 @@ async def listar_parcelas(
         fins_cache = {}
         for p in parcelas:
             d = parcela_to_dict(p)
+            d["link_boleto"] = getattr(p, "link_boleto", None)
+            d["link_comprovante"] = getattr(p, "link_comprovante", None)
+            d["valor_pago"] = float(getattr(p, "valor_pago", 0.0))
             fin_id = getattr(p, "financiamento_id", None)
             if fin_id is not None:
                 if fin_id not in fins_cache:
