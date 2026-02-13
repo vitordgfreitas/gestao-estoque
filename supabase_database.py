@@ -931,21 +931,24 @@ def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, l
             self.link_comprovante = row.get('link_comprovante')
     return Parcela(r.data[0])
 
-def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, juros=0.0, multa=0.0, desconto=0.0):
+def pagar_parcela_financiamento(parcela_id, valor_pago, data_pagamento=None, link_comprovante=None):
     if data_pagamento is None:
         data_pagamento = date.today()
     else:
         data_pagamento = _date_parse(data_pagamento)
     sb = get_supabase()
-    r = sb.table('parcelas_financiamento').select('*').eq('id', int(parcela_id)).execute()
-    if not r.data or len(r.data) == 0:
-        return None
-    valor_pago = round(float(valor_pago), 2)
-    sb.table('parcelas_financiamento').update({
-        'valor_pago': valor_pago,
+    # Prepara o payload de atualização
+    payload = {
+        'valor_pago': round(float(valor_pago), 2),
         'data_pagamento': data_pagamento.isoformat(),
         'status': 'Paga'
-    }).eq('id', int(parcela_id)).execute()
+    }
+    
+    # ADIÇÃO CRÍTICA: Se o link vier do front, ele entra no update do Supabase
+    if link_comprovante is not None:
+        payload['link_comprovante'] = link_comprovante
+
+    sb.table('parcelas_financiamento').update(payload).eq('id', int(parcela_id)).execute()
     r2 = sb.table('parcelas_financiamento').select('*').eq('id', int(parcela_id)).execute()
     if not r2.data or len(r2.data) == 0:
         return None

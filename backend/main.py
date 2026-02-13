@@ -1990,9 +1990,7 @@ async def pagar_parcela_financiamento(
             parcela_id=parcela_id,
             valor_pago=pagamento.valor_pago,
             data_pagamento=pagamento.data_pagamento,
-            juros=pagamento.juros,
-            multa=pagamento.multa,
-            desconto=pagamento.desconto
+            link_comprovante=pagamento.get('link_comprovante')
         )
         if parcela_atualizada is None:
             raise HTTPException(status_code=404, detail="Parcela não encontrada")
