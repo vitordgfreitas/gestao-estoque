@@ -262,6 +262,8 @@ export default function VisualizarDados() {
       {viewingItem && <ViewItemModal item={viewingItem} onClose={() => setViewingItem(null)} />}
       
       <ConfirmDialog isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} onConfirm={() => itensAPI.deletar(deletingItem.id).then(loadData)} title="Excluir Ativo" />
+      <ConfirmDialog isOpen={!!deletingCompromisso} onClose={() => setDeletingCompromisso(null)} onConfirm={handleDeleteCompromisso} title="Remover Contrato" message="Atenção: Isso removerá o contrato, os itens vinculados e o registro financeiro associado." />
+
     </div>
   )
 }
