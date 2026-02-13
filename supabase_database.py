@@ -448,11 +448,21 @@ def criar_compromisso_master(dados_header, lista_itens):
     from types import SimpleNamespace
     return SimpleNamespace(**patch_data)
 
-def deletar_compromisso(compromisso_id):
+def deletar_compromisso(compromisso_id: int):
     sb = get_supabase()
-    # O CASCADE no banco cuida dos itens em compromisso_itens
-    res = sb.table('compromissos').delete().eq('id', compromisso_id).execute()
-    return res.data
+    
+    # 1. Remove os itens vinculados (compromisso_itens)
+    sb.table('compromisso_itens').delete().eq('compromisso_id', compromisso_id).execute()
+    
+    # 2. Remove registros financeiros vinculados (contas_receber)
+    # Importante: Se você quiser manter o financeiro como histórico, 
+    # terá que desvincular o compromisso_id (set null) em vez de deletar.
+    sb.table('contas_receber').delete().eq('compromisso_id', compromisso_id).execute()
+    
+    # 3. Finalmente, remove o contrato
+    r = sb.table('compromissos').delete().eq('id', compromisso_id).execute()
+    
+    return len(r.data) > 0
 
 # --- CRUD DE PEÇAS EM CARROS (ASSOCIAÇÕES) ---
 
