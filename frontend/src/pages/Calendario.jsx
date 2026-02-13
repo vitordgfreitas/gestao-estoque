@@ -8,7 +8,7 @@ import {
   Package, FileText, PlayCircle, ExternalLink, CheckCircle, 
   Clock, AlertCircle, Filter, LayoutGrid, CalendarDays, X, 
   ArrowRight, TrendingUp, DollarSign, Receipt, Info, Tag, AlignLeft,
-  Check, UploadCloud, CreditCard, History
+  Check, UploadCloud, CreditCard, History, Search
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
@@ -19,19 +19,31 @@ export default function Calendario() {
   const [itens, setItens] = useState([])
   const [categorias, setCategorias] = useState([])
   const [localizacoes, setLocalizacoes] = useState([])
-  const [viewMode, setViewMode] = useState('mensal') 
+  const [viewMode, setViewMode] = useState('mensal') // mensal, semanal, diaria
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas as Categorias')
   const [localizacaoFiltro, setLocalizacaoFiltro] = useState('Todas as Localizações')
   const [loading, setLoading] = useState(true)
   
+  // Estados para calendário mensal
   const [mesAtual, setMesAtual] = useState(new Date().getMonth() + 1)
   const [anoAtual, setAnoAtual] = useState(new Date().getFullYear())
+  
+  // Estados para calendário semanal
+  const [semanaInicio, setSemanaInicio] = useState(() => {
+    const hoje = new Date()
+    const diasParaSegunda = hoje.getDay() === 0 ? 6 : hoje.getDay() - 1
+    const segunda = new Date(hoje)
+    segunda.setDate(hoje.getDate() - diasParaSegunda)
+    return segunda
+  })
+  
+  // Estados para calendário diário
   const [diaSelecionado, setDiaSelecionado] = useState(new Date())
   const [detalhesDia, setDetalhesDia] = useState(null)
   const [parcelasMes, setParcelasMes] = useState([])
   const [parcelaEmBaixa, setParcelaEmBaixa] = useState(null)
 
-  // 🔥 ANTI-FUSO HORÁRIO: Normaliza para string YYYY-MM-DD sem converter para Date UTC
+  // 🔥 FIX TIMEZONE: Normaliza para string YYYY-MM-DD local
   const dataToStr = (d) => {
     if (!d) return ''
     if (typeof d === 'string') return d.split('T')[0]
@@ -42,22 +54,21 @@ export default function Calendario() {
     return `${y}-${m}-${day}`
   }
 
-  useEffect(() => { loadData() }, [])
-
-  // Sincroniza parcelas do mês visível
   useEffect(() => {
-    let active = true
-    const fetchFinanceiro = async () => {
+    let cancelled = false
+    const loadFinanceiro = async () => {
       try {
-        const res = await api.get('/api/parcelas', { 
-          params: { mes: mesAtual, ano: anoAtual, incluir_pagas: true } 
-        })
-        if (active) setParcelasMes(res.data || [])
-      } catch (e) { if (active) setParcelasMes([]) }
+        const res = await api.get('/api/parcelas', { params: { mes: mesAtual, ano: anoAtual, incluir_pagas: true } })
+        if (!cancelled) setParcelasMes(res.data || [])
+      } catch (e) {
+        if (!cancelled) setParcelasMes([])
+      }
     }
-    fetchFinanceiro()
-    return () => { active = false }
+    loadFinanceiro()
+    return () => { cancelled = true }
   }, [mesAtual, anoAtual])
+
+  useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     try {
@@ -67,76 +78,74 @@ export default function Calendario() {
         itensAPI.listar().catch(() => ({ data: [] })),
         categoriasAPI.listar().catch(() => ({ data: [] }))
       ])
-      const comps = compRes.data || []
-      setCompromissos(comps)
+      setCompromissos(compRes.data || [])
       setItens(itensRes.data || [])
       setCategorias(catRes.data || [])
+      
       const locs = new Set()
-      comps.forEach(c => { if(c.cidade) locs.add(`${c.cidade} - ${c.uf}`) })
+      compRes.data?.forEach(c => { if(c.cidade) locs.add(`${c.cidade} - ${c.uf}`) })
       setLocalizacoes(Array.from(locs).sort())
     } catch (error) {
-      toast.error('Erro de sincronização com o Railway.')
-    } finally { setLoading(false) }
-  }
-
-  const filtrados = useMemo(() => {
-    return (compromissos || []).filter(c => {
-      const matchCat = categoriaFiltro === 'Todas as Categorias' || 
-                       c.compromisso_itens?.some(ci => ci.itens?.categoria === categoriaFiltro)
-      const matchLoc = localizacaoFiltro === 'Todas as Localizações' || 
-                       `${c.cidade} - ${c.uf}` === localizacaoFiltro
-      return matchCat && matchLoc
-    })
-  }, [compromissos, categoriaFiltro, localizacaoFiltro])
-
-  const getEventosNoDia = (data) => {
-    const dStr = dataToStr(data)
-    return {
-      iniciam: filtrados.filter(c => dataToStr(c.data_inicio) === dStr),
-      ativos: filtrados.filter(c => {
-        const s = dataToStr(c.data_inicio); const e = dataToStr(c.data_fim)
-        return dStr > s && dStr <= e
-      }),
-      parcelas: (parcelasMes || []).filter(p => dataToStr(p.data_vencimento) === dStr)
+      toast.error('Erro ao carregar dados.')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleDayClick = async (data) => {
-    const ev = getEventosNoDia(data)
+  const compromissosFiltrados = useMemo(() => {
+    return (compromissos || []).filter(comp => {
+      if (categoriaFiltro !== 'Todas as Categorias') {
+        const temCategoria = comp.compromisso_itens?.some(ci => ci.itens?.categoria === categoriaFiltro)
+        if (!temCategoria) return false
+      }
+      if (localizacaoFiltro !== 'Todas as Localizações') {
+        if (`${comp.cidade} - ${comp.uf}` !== localizacaoFiltro) return false
+      }
+      return true
+    })
+  }, [compromissos, categoriaFiltro, localizacaoFiltro])
+
+  const compromissosPorData = (data) => {
     const dStr = dataToStr(data)
-    
+    return compromissosFiltrados.filter(comp => {
+      const inicio = dataToStr(comp.data_inicio)
+      const fim = dataToStr(comp.data_fim)
+      return dStr >= inicio && dStr <= fim
+    })
+  }
+
+  const abrirDetalhesDia = async (data, compsInicio, compsAtivos) => {
+    const dataStr = dataToStr(data)
     setDetalhesDia({
       data: new Date(data),
-      compromissosInicio: ev.iniciam,
-      compromissosAtivos: ev.ativos,
+      compromissosInicio: compsInicio || [],
+      compromissosAtivos: compsAtivos || [],
       parcelas: [],
       loadingParcelas: true
     })
-
     try {
-      const res = await api.get('/api/parcelas', { params: { data_vencimento: dStr, incluir_pagas: true } })
-      setDetalhesDia(prev => prev ? { ...prev, parcelas: res.data || [], loadingParcelas: false } : null)
-    } catch (e) {
-      setDetalhesDia(prev => prev ? { ...prev, loadingParcelas: false } : null)
+      const res = await api.get('/api/parcelas', { params: { data_vencimento: dataStr, incluir_pagas: true } })
+      setDetalhesDia(prev => (prev && dataToStr(prev.data) === dataStr ? { ...prev, parcelas: res.data || [], loadingParcelas: false } : prev))
+    } catch (error) {
+      setDetalhesDia(prev => (prev ? { ...prev, parcelas: [], loadingParcelas: false } : prev))
     }
   }
 
   const handleSalvarBaixa = async (formData) => {
-    const loadId = toast.loading('Registrando pagamento...')
+    const loadId = toast.loading('Salvando...')
     try {
       await api.post(`/api/financiamentos/${parcelaEmBaixa.financiamento_id}/parcelas/${parcelaEmBaixa.id}/pagar`, {
         valor_pago: parseFloat(formData.valor_pago),
         link_comprovante: formData.link_comprovante,
         data_pagamento: dataToStr(new Date())
       })
-      toast.success('Baixa realizada!', { id: loadId })
-      setParcelaEmBaixa(null)
-      loadData() 
-    } catch (e) { toast.error('Erro na baixa financeira.', { id: loadId }) }
+      toast.success('Pago!', { id: loadId }); setParcelaEmBaixa(null); loadData()
+    } catch (e) { toast.error('Erro.', { id: loadId }) }
   }
 
+  // Navegação
   const navegarMes = (dir) => {
-    if (dir === 'ant') {
+    if (dir === 'anterior') {
       if (mesAtual === 1) { setMesAtual(12); setAnoAtual(anoAtual - 1) }
       else setMesAtual(mesAtual - 1)
     } else {
@@ -145,133 +154,234 @@ export default function Calendario() {
     }
   }
 
+  const navegarSemana = (dir) => {
+    const nova = new Date(semanaInicio)
+    nova.setDate(semanaInicio.getDate() + (dir === 'anterior' ? -7 : 7))
+    setSemanaInicio(nova)
+  }
+
+  const navegarDia = (dir) => {
+    const novo = new Date(diaSelecionado)
+    novo.setDate(diaSelecionado.getDate() + (dir === 'anterior' ? -1 : 1))
+    setDiaSelecionado(novo)
+  }
+
+  // --- RENDERS DAS VIEWS ---
+
+  const renderCalendarioMensal = () => {
+    const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+    const primeiroDia = new Date(anoAtual, mesAtual - 1, 1)
+    const ultimoDia = new Date(anoAtual, mesAtual, 0)
+    const diasNoMes = ultimoDia.getDate()
+    const startIdx = primeiroDia.getDay() === 0 ? 6 : primeiroDia.getDay() - 1
+    
+    const semanas = []; let semanaAtual = []
+    for (let i = 0; i < startIdx; i++) semanaAtual.push(null)
+    for (let d = 1; d <= diasNoMes; d++) {
+      semanaAtual.push(d)
+      if (semanaAtual.length === 7) { semanas.push(semanaAtual); semanaAtual = [] }
+    }
+    if (semanaAtual.length > 0) { while(semanaAtual.length < 7) semanaAtual.push(null); semanas.push(semanaAtual) }
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-dark-700">
+          <button onClick={() => navegarMes('anterior')} className="p-2 text-primary-400 hover:bg-dark-700 rounded-lg"><ChevronLeft/></button>
+          <h3 className="text-xl font-black text-dark-50 uppercase">{nomesMeses[mesAtual-1]} {anoAtual}</h3>
+          <button onClick={() => navegarMes('proximo')} className="p-2 text-primary-400 hover:bg-dark-700 rounded-lg"><ChevronRight/></button>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => <div key={d} className="text-center text-xs font-black text-dark-500 uppercase">{d}</div>)}
+          {semanas.map((sem, sIdx) => sem.map((dia, dIdx) => {
+            if (!dia) return <div key={`${sIdx}-${dIdx}`} className="aspect-square" />
+            const data = new Date(anoAtual, mesAtual - 1, dia)
+            const dStr = dataToStr(data)
+            const isHoje = data.toDateString() === new Date().toDateString()
+            const compsAtivos = compromissosPorData(data)
+            const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dStr)
+            const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dStr).length
+            const temAlgo = numBoletos > 0 || compsInicio.length > 0 || compsAtivos.length > 0
+            return (
+              <button key={`${sIdx}-${dIdx}`} onClick={() => abrirDetalhesDia(data, compsInicio, compsAtivos)} className={`aspect-square p-2 rounded-lg border text-left transition-all ${isHoje ? 'bg-primary-600 border-primary-500 text-white' : temAlgo ? 'bg-primary-600/10 border-primary-600/30' : 'bg-dark-800 border-dark-700'}`}>
+                <span className="text-sm font-black">{dia}</span>
+                <div className="mt-auto space-y-0.5">
+                  {numBoletos > 0 && <div className="text-[8px] flex items-center gap-1"><DollarSign size={8}/> {numBoletos} bol.</div>}
+                  {compsInicio.length > 0 && <div className="text-[8px] flex items-center gap-1 font-black text-primary-400">🚀 {compsInicio.length} in.</div>}
+                </div>
+              </button>
+            )
+          }))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderCalendarioSemanal = () => {
+    const semanaFim = new Date(semanaInicio); semanaFim.setDate(semanaInicio.getDate() + 6)
+    const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+    const dias = []; for (let i = 0; i < 7; i++) { const d = new Date(semanaInicio); d.setDate(semanaInicio.getDate() + i); dias.push(d) }
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-dark-700">
+          <button onClick={() => navegarSemana('anterior')} className="p-2 text-primary-400 hover:bg-dark-700 rounded-lg"><ChevronLeft/></button>
+          <h3 className="text-lg font-black text-dark-50 uppercase">{formatDate(dataToStr(semanaInicio))} - {formatDate(dataToStr(semanaFim))}</h3>
+          <button onClick={() => navegarSemana('proximo')} className="p-2 text-primary-400 hover:bg-dark-700 rounded-lg"><ChevronRight/></button>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          {dias.map((dia, idx) => {
+            const compsAtivos = compromissosPorData(dia); const dStr = dataToStr(dia)
+            const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dStr)
+            const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dStr).length
+            const isHoje = dia.toDateString() === new Date().toDateString()
+            return (
+              <div key={idx} className={`p-4 rounded-xl border ${isHoje ? 'bg-primary-600/10 border-primary-500' : 'bg-dark-800 border-dark-700'}`}>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-black text-dark-50 uppercase text-sm">{diasSemana[idx]} - {formatDate(dStr)}</h4>
+                  <div className="flex gap-3 text-[10px] font-black uppercase text-dark-400">
+                    {numBoletos > 0 && <span className="text-green-400">{numBoletos} Boletos</span>}
+                    {compsInicio.length > 0 && <span className="text-primary-400">{compsInicio.length} Inícios</span>}
+                  </div>
+                </div>
+                {(compsAtivos.length > 0 || numBoletos > 0) ? (
+                  <button onClick={() => abrirDetalhesDia(dia, compsInicio, compsAtivos)} className="text-xs text-primary-400 font-black uppercase hover:underline mb-2">Ver detalhes do dia</button>
+                ) : <p className="text-xs text-dark-600 italic">Nada para este dia.</p>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const renderCalendarioDiario = () => {
+    const dStr = dataToStr(diaSelecionado); const compsAtivos = compromissosPorData(diaSelecionado)
+    const compsInicio = compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dStr)
+    const numBoletos = parcelasMes.filter(p => dataToStr(p.data_vencimento) === dStr).length
+    const isHoje = diaSelecionado.toDateString() === new Date().toDateString()
+    const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-xl">
+          <button onClick={() => navegarDia('anterior')} className="p-3 text-primary-400 hover:bg-dark-700 rounded-xl"><ChevronLeft size={24}/></button>
+          <div className="text-center">
+            <h3 className={`text-2xl font-black uppercase ${isHoje ? 'text-primary-400' : 'text-dark-50'}`}>{diasSemana[diaSelecionado.getDay()]}</h3>
+            <p className="text-dark-400 font-bold">{formatDate(dStr)}</p>
+          </div>
+          <button onClick={() => navegarDia('proximo')} className="p-3 text-primary-400 hover:bg-dark-700 rounded-xl"><ChevronRight size={24}/></button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <DayCard title="Logística" icon={<Package size={20}/>} count={compsAtivos.length} items={compsAtivos} onClick={() => abrirDetalhesDia(diaSelecionado, compsInicio, compsAtivos)} />
+           <DayCard title="Financeiro" icon={<DollarSign size={20}/>} count={numBoletos} items={parcelasMes.filter(p => dataToStr(p.data_vencimento) === dStr)} isFin onClick={() => abrirDetalhesDia(diaSelecionado, compsInicio, compsAtivos)} />
+        </div>
+      </div>
+    )
+  }
+
   if (loading) return <div className="flex h-96 items-center justify-center"><div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary-500"></div></div>
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto px-4 pb-10">
-      <div className="flex flex-col md:flex-row gap-6 justify-between items-start md:items-end">
+      {/* HEADER E FILTROS ORIGINAIS */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-dark-50 tracking-tighter uppercase italic">Agenda Star Gestão</h1>
-          <p className="text-dark-400 font-medium tracking-widest uppercase text-[10px]">Star Gestão • Operação Integrada Brasília</p>
+          <h1 className="text-3xl font-black text-dark-50 uppercase italic tracking-tighter">Agenda Star Gestão</h1>
+          <p className="text-dark-400 text-xs font-bold uppercase tracking-widest">Controle Operacional Centralizado</p>
         </div>
-        <div className="flex gap-2 p-1 bg-dark-800 rounded-xl border border-dark-700 shadow-2xl">
-          <ViewBtn active={viewMode === 'mensal'} icon={<LayoutGrid size={18}/>} label="Mensal" onClick={() => setViewMode('mensal')} />
-          <ViewBtn active={viewMode === 'diaria'} icon={<CalendarDays size={18}/>} label="Diária" onClick={() => setViewMode('diaria')} />
+        <div className="flex gap-2 p-1 bg-dark-800 rounded-xl border border-dark-700">
+          <button onClick={() => setViewMode('mensal')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'mensal' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}>Mensal</button>
+          <button onClick={() => setViewMode('semanal')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'semanal' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}>Semanal</button>
+          <button onClick={() => setViewMode('diaria')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'diaria' ? 'bg-primary-500 text-white' : 'text-dark-400'}`}>Diária</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="lg:col-span-2 flex gap-3">
-          <FilterSelect icon={<Filter size={16}/>} value={categoriaFiltro} onChange={setCategoriaFiltro} options={['Todas as Categorias', ...categorias]} />
-          <FilterSelect icon={<MapPin size={16}/>} value={localizacaoFiltro} onChange={setLocalizacaoFiltro} options={['Todas as Localizações', ...localizacoes]} />
-        </div>
-        <div className="lg:col-span-2 flex items-center justify-between bg-dark-800 px-6 rounded-xl border border-dark-700 shadow-lg">
-          <button onClick={() => navegarMes('ant')} className="p-2 hover:bg-dark-700 rounded-lg text-primary-400"><ChevronLeft/></button>
-          <span className="text-lg font-black text-dark-50 uppercase tracking-widest">{new Date(anoAtual, mesAtual-1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-          <button onClick={() => navegarMes('prox')} className="p-2 hover:bg-dark-700 rounded-lg text-primary-400"><ChevronRight/></button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FilterSelect label="Categoria" value={categoriaFiltro} onChange={setCategoriaFiltro} options={['Todas as Categorias', ...categorias]} />
+        <FilterSelect label="Localização" value={localizacaoFiltro} onChange={setLocalizacaoFiltro} options={['Todas as Localizações', ...localizacoes]} />
       </div>
 
       <AnimatePresence mode="wait">
-        {viewMode === 'mensal' ? (
-          <motion.div key="mensal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-0 overflow-hidden border-dark-700 bg-dark-900/40 backdrop-blur-xl">
-            <div className="grid grid-cols-7 border-b border-dark-700 bg-dark-800/80">
-              {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => <div key={d} className="py-4 text-center text-[10px] font-black text-dark-500 uppercase tracking-[0.3em]">{d}</div>)}
-            </div>
-            <div className="grid grid-cols-7 min-h-[650px]">{renderCalendarDays(anoAtual, mesAtual, getEventosNoDia, handleDayClick)}</div>
-          </motion.div>
-        ) : (
-          <DailyView data={diaSelecionado} eventos={getEventosNoDia(diaSelecionado)} setDia={setDiaSelecionado} abrirDetalhes={handleDayClick} />
-        )}
+        <motion.div key={viewMode} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-6 bg-dark-900/40 border-dark-700 shadow-2xl backdrop-blur-md">
+          {viewMode === 'mensal' && renderCalendarioMensal()}
+          {viewMode === 'semanal' && renderCalendarioSemanal()}
+          {viewMode === 'diaria' && renderCalendarioDiario()}
+        </motion.div>
       </AnimatePresence>
 
+      {/* MODAL RIQUÍSSIMO (O QUE VOCÊ EXIGIU) */}
       {detalhesDia && (
-        <Modal isOpen={true} onClose={() => setDetalhesDia(null)} title={`RELATÓRIO: ${formatDate(dataToStr(detalhesDia.data))}`}>
-          <div className="space-y-8 max-h-[80vh] overflow-y-auto pr-4 custom-scrollbar">
+        <Modal isOpen={true} onClose={() => setDetalhesDia(null)} title={`DADOS DO DIA: ${formatDate(dataToStr(detalhesDia.data))}`}>
+          <div className="space-y-8 max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
             
-            {/* SEÇÃO LOGÍSTICA DETALHADA (public.compromissos) */}
-            <Section title="Logística e Entregas" icon={<Package size={16}/>} color="text-primary-500">
-              {([...detalhesDia.compromissosInicio, ...detalhesDia.compromissosAtivos]).length > 0 ? (
-                ([...detalhesDia.compromissosInicio, ...detalhesDia.compromissosAtivos]).map(c => (
-                  <div key={c.id} className="p-6 bg-dark-800 rounded-[2rem] border border-dark-700 shadow-2xl relative border-l-4 border-l-primary-500 mb-6">
-                    <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <h5 className="font-black text-dark-50 text-xl uppercase tracking-tight">{c.nome_contrato}</h5>
-                        <p className="text-primary-400 text-[10px] font-bold uppercase tracking-widest mt-1">{c.contratante}</p>
-                      </div>
-                      <span className="text-green-400 font-black text-lg font-mono">{formatCurrency(c.valor_total_contrato)}</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                       <InfoBox icon={<AlignLeft size={14}/>} label="Descrição do Contrato" value={c.descricao || 'Sem observações.'} />
-                       <InfoBox icon={<MapPin size={14}/>} label="Endereço da Operação" value={`${c.endereco || 'Brasília'} - ${c.cidade}/${c.uf}`} />
-                    </div>
-
-                    <div className="bg-dark-900/60 p-5 rounded-2xl border border-dark-700/50">
-                      <p className="text-[9px] font-black text-dark-500 uppercase mb-3 flex items-center gap-2"><Tag size={12}/> Checklist de Carga</p>
-                      <div className="flex flex-wrap gap-2">
-                        {c.compromisso_itens?.map(ci => (
-                          <span key={ci.id} className="px-3 py-1.5 bg-dark-700 text-dark-50 rounded-xl text-[11px] font-black border border-dark-600 flex items-center gap-2 shadow-inner">
-                            <span className="text-primary-500 bg-primary-500/10 px-1.5 rounded-md">{ci.quantidade}x</span> {ci.itens?.nome}
-                          </span>
-                        ))}
-                      </div>
+            <Section title="Entregas e Contratos" icon={<Package size={16}/>} color="text-primary-500">
+              {([...detalhesDia.compromissosInicio, ...detalhesDia.compromissosAtivos]).map(c => (
+                <div key={c.id} className="p-6 bg-dark-800 rounded-[2rem] border border-dark-700 border-l-4 border-l-primary-500 shadow-xl mb-6">
+                  <div className="flex justify-between items-start mb-6">
+                    <div><h5 className="font-black text-dark-50 text-xl uppercase leading-tight">{c.nome_contrato}</h5><p className="text-primary-400 text-[10px] font-bold uppercase">{c.contratante}</p></div>
+                    <span className="text-green-400 font-black text-lg font-mono">{formatCurrency(c.valor_total_contrato)}</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <InfoBox label="Descrição" value={c.descricao || 'Sem notas.'} />
+                    <InfoBox label="Local" value={`${c.endereco || ''} ${c.cidade}/${c.uf}`} />
+                  </div>
+                  <div className="bg-dark-900/60 p-5 rounded-2xl border border-dark-700/50">
+                    <p className="text-[9px] font-black text-dark-500 uppercase mb-3 flex items-center gap-2"><Tag size={12}/> Checklist de Carga (Qtd + Nome)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {c.compromisso_itens?.map(ci => (
+                        <span key={ci.id} className="px-3 py-1.5 bg-dark-700 text-dark-50 rounded-xl text-[11px] font-black border border-dark-600">
+                          <span className="text-primary-500">{ci.quantidade}x</span> {ci.itens?.nome}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                ))
-              ) : <EmptyState icon={<Package size={40}/>} text="Agenda logística livre." />}
+                </div>
+              ))}
             </Section>
 
-            {/* SEÇÃO FINANCEIRA RICA (public.parcelas_financiamento) */}
+            {/* COLUNAS FINANCEIRAS EXPLICITAS (IGUAL À SUA PEDIDO) */}
             <Section title="Vencimentos Financeiros" icon={<DollarSign size={16}/>} color="text-green-500">
-               {detalhesDia.loadingParcelas ? (
-                 <div className="py-10 text-center animate-pulse text-dark-400 font-black text-xs uppercase">Buscando banco...</div>
-               ) : detalhesDia.parcelas?.length > 0 ? (
-                 <div className="overflow-hidden rounded-[2rem] border border-dark-700 shadow-2xl bg-dark-900/40">
+              {detalhesDia.loadingParcelas ? <div className="py-10 text-center animate-pulse text-xs font-black uppercase">Buscando banco...</div> :
+               detalhesDia.parcelas?.length > 0 ? (
+                 <div className="overflow-x-auto rounded-2xl border border-dark-700 shadow-2xl">
                    <table className="w-full text-xs text-left">
-                     <thead className="bg-dark-800 text-dark-500 uppercase font-black text-[9px] tracking-widest">
+                     <thead className="bg-dark-800 text-dark-500 uppercase font-black text-[9px] tracking-widest border-b border-dark-700">
                        <tr>
-                         <th className="p-5">Contrato</th>
-                         <th className="p-5 text-right">Original</th>
-                         <th className="p-5 text-right">Pago</th>
-                         <th className="p-5 text-center">Arquivos</th>
-                         <th className="p-5 text-center">Status</th>
-                         <th className="p-5 text-right">Baixa</th>
+                         <th className="p-4">Vencimento</th>
+                         <th className="p-4">Contrato</th>
+                         <th className="p-4 text-right">Valor</th>
+                         <th className="p-4 text-right">Valor Pago</th>
+                         <th className="p-4 text-center">Status</th>
+                         <th className="p-4 text-center">Link Boleto</th>
+                         <th className="p-4 text-center">Link Comprov.</th>
+                         <th className="p-4 text-center">Ações</th>
                        </tr>
                      </thead>
-                     <tbody className="divide-y divide-dark-800">
-                       {detalhesDia.parcelas.map(p => {
-                         const StatusIcon = p.status === 'Paga' ? CheckCircle : p.status === 'Atrasada' ? AlertCircle : Clock
-                         const statusColor = p.status === 'Paga' ? 'text-green-400' : p.status === 'Atrasada' ? 'text-red-400' : 'text-yellow-400'
-                         return (
-                           <tr key={p.id} className="hover:bg-green-500/5 transition-colors">
-                             <td className="p-5">
-                               <div className="font-black text-dark-50 text-sm uppercase">{p.codigo_contrato || 'Financ.'}</div>
-                               <div className="text-[9px] text-dark-500 font-black mt-1">PARCELA Nº {p.numero_parcela}</div>
-                             </td>
-                             <td className="p-5 text-right font-mono text-dark-50 font-black">{formatCurrency(p.valor_original)}</td>
-                             <td className="p-5 text-right font-mono text-green-400 font-black">{p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}</td>
-                             <td className="p-5">
-                                <div className="flex justify-center gap-2">
-                                  {p.link_boleto ? <a href={p.link_boleto} target="_blank" rel="noreferrer" className="p-2 bg-dark-700 text-primary-400 rounded-xl hover:bg-primary-500/30"><FileText size={18}/></a> : <span className="opacity-10"><FileText size={18}/></span>}
-                                  {p.link_comprovante ? <a href={p.link_comprovante} target="_blank" rel="noreferrer" className="p-2 bg-dark-700 text-green-400 rounded-xl hover:bg-green-500/30"><Receipt size={18}/></a> : <span className="opacity-10"><Receipt size={18}/></span>}
-                                </div>
-                             </td>
-                             <td className="p-5 text-center">
-                               <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-black uppercase text-[8px] border shadow-sm ${statusColor} border-current/20 bg-current/5`}>
-                                 <StatusIcon size={12} /> {p.status}
-                               </span>
-                             </td>
-                             <td className="p-5 text-right">
-                                {p.status !== 'Paga' && <button onClick={() => setParcelaEmBaixa(p)} className="p-2 bg-green-500 text-white rounded-xl hover:bg-green-600 shadow-lg shadow-green-500/30"><Check size={18}/></button>}
-                             </td>
-                           </tr>
-                         )
-                       })}
+                     <tbody className="divide-y divide-dark-800 bg-dark-900/40">
+                       {detalhesDia.parcelas.map(p => (
+                         <tr key={p.id} className="hover:bg-green-500/5">
+                           <td className="p-4 font-bold text-dark-200">{formatDate(p.data_vencimento)}</td>
+                           <td className="p-4 font-black text-dark-50">{p.codigo_contrato}</td>
+                           <td className="p-4 text-right font-mono font-black">{formatCurrency(p.valor_original)}</td>
+                           <td className="p-4 text-right font-mono text-green-400">{p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}</td>
+                           <td className="p-4 text-center">
+                             <span className={`px-2 py-0.5 rounded-full font-black text-[8px] border ${p.status === 'Paga' ? 'text-green-400 border-green-500/20 bg-green-500/5' : 'text-yellow-400 border-yellow-500/20 bg-yellow-500/5'}`}>{p.status}</span>
+                           </td>
+                           <td className="p-4 text-center">
+                             {p.link_boleto ? <a href={p.link_boleto} target="_blank" rel="noreferrer" className="text-primary-400 hover:text-primary-300 transition-colors inline-block"><ExternalLink size={16}/></a> : '—'}
+                           </td>
+                           <td className="p-4 text-center">
+                             {p.link_comprovante ? <a href={p.link_comprovante} target="_blank" rel="noreferrer" className="text-green-400 hover:text-green-300 transition-colors inline-block"><Receipt size={16}/></a> : '—'}
+                           </td>
+                           <td className="p-4 text-center">
+                              {p.status !== 'Paga' && <button onClick={() => setParcelaEmBaixa(p)} className="p-1.5 bg-green-500 text-white rounded-lg shadow-lg hover:scale-110 transition-transform"><Check size={14}/></button>}
+                           </td>
+                         </tr>
+                       ))}
                      </tbody>
                    </table>
                  </div>
-               ) : <EmptyState icon={<DollarSign size={40}/>} text="Fluxo de caixa livre." />}
+               ) : <p className="text-dark-600 text-center py-10 italic">Nenhum vencimento hoje.</p>}
             </Section>
           </div>
         </Modal>
@@ -280,32 +390,14 @@ export default function Calendario() {
       {/* BAIXA FINANCEIRA */}
       {parcelaEmBaixa && (
         <Modal isOpen={true} onClose={() => setParcelaEmBaixa(null)} title="Baixa de Pagamento">
-           <form onSubmit={(e) => {
-             e.preventDefault();
-             const fd = new FormData(e.target);
-             handleConfirmarBaixa(Object.fromEntries(fd));
-           }} className="space-y-6">
+           <form onSubmit={(e) => { e.preventDefault(); handleSalvarBaixa(Object.fromEntries(new FormData(e.target))); }} className="space-y-6">
               <div className="p-5 bg-dark-800 rounded-3xl border border-dark-700 flex justify-between items-center shadow-inner">
-                 <div>
-                    <p className="text-[10px] font-black text-dark-500 uppercase mb-1">Título Original</p>
-                    <p className="text-2xl font-black text-dark-50 font-mono">{formatCurrency(parcelaEmBaixa.valor_original)}</p>
-                 </div>
+                 <div><p className="text-[10px] font-black text-dark-500 uppercase">Valor do Título</p><p className="text-2xl font-black text-dark-50 font-mono">{formatCurrency(parcelaEmBaixa.valor_original)}</p></div>
                  <CreditCard size={32} className="text-primary-500 opacity-20"/>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="label uppercase text-[10px] font-black">Valor Pago Efetivamente</label>
-                  <input name="valor_pago" type="number" step="0.01" className="input font-mono text-green-400 font-black text-lg" defaultValue={parcelaEmBaixa.valor_original} required />
-                </div>
-                <div>
-                  <label className="label uppercase text-[10px] font-black">Link do Comprovante (Drive/Cloud)</label>
-                  <div className="relative">
-                    <UploadCloud className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" size={18}/>
-                    <input name="link_comprovante" type="url" placeholder="https://..." className="input pl-10 bg-dark-900" />
-                  </div>
-                </div>
-              </div>
-              <button type="submit" className="btn btn-primary w-full py-4 font-black uppercase shadow-xl shadow-primary-500/40 text-base">Salvar Baixa Financeira</button>
+              <div><label className="label uppercase text-[10px] font-black">Valor Efetivamente Pago</label><input name="valor_pago" type="number" step="0.01" className="input font-mono text-green-400" defaultValue={parcelaEmBaixa.valor_original} required /></div>
+              <div><label className="label uppercase text-[10px] font-black">Link Comprovante (Drive/Cloud)</label><input name="link_comprovante" type="url" placeholder="https://..." className="input" /></div>
+              <button type="submit" className="btn btn-primary w-full py-4 font-black uppercase shadow-xl shadow-primary-500/40">Salvar Baixa</button>
            </form>
         </Modal>
       )}
@@ -313,117 +405,25 @@ export default function Calendario() {
   )
 }
 
-// --- HELPERS (RESOLVE TELA BRANCA) ---
-function ViewBtn({ active, icon, label, onClick }) {
+// --- HELPERS INTERNOS ---
+function Section({ title, icon, color, children }) { return <div className="space-y-5"><h4 className={`text-[11px] font-black ${color} uppercase flex items-center gap-3 border-b border-dark-700 pb-3`}>{icon} {title}</h4>{children}</div> }
+function InfoBox({ label, value }) { return <div className="bg-dark-900/40 p-4 rounded-2xl border border-dark-700/50 h-full"><p className="text-[9px] font-black text-dark-500 uppercase mb-2">{label}</p><p className="text-xs text-dark-200">{value}</p></div> }
+function FilterSelect({ label, value, onChange, options }) { return <div className="space-y-2"><label className="text-[10px] font-black uppercase text-dark-500 ml-2 tracking-widest">{label}</label><select value={value} onChange={e => onChange(e.target.value)} className="input h-14 bg-dark-800/50 border-dark-700 rounded-2xl">{(options || []).map(opt => <option key={opt}>{opt}</option>)}</select></div> }
+function DayCard({ title, icon, count, items, onClick, isFin }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black transition-all ${active ? 'bg-primary-500 text-white shadow-xl' : 'text-dark-400 hover:text-dark-100 hover:bg-dark-700'}`}>{icon} {label}</button>
-  )
-}
-
-function FilterSelect({ icon, value, onChange, options }) {
-  return (
-    <div className="relative flex-1 group">
-      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-500 group-focus-within:text-primary-500">{icon}</div>
-      <select value={value} onChange={e => onChange(e.target.value)} className="input pl-12 h-14 bg-dark-800/50 border-dark-700 rounded-2xl shadow-inner">
-        {(options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
-    </div>
-  )
-}
-
-function Section({ title, icon, color, children }) {
-  return (
-    <div className="space-y-5">
-      <h4 className={`text-[11px] font-black ${color} uppercase tracking-[0.3em] flex items-center gap-3 border-b border-dark-700 pb-3`}>{icon} {title}</h4>
-      {children}
-    </div>
-  )
-}
-
-function InfoBox({ icon, label, value }) {
-  return (
-    <div className="bg-dark-900/40 p-4 rounded-2xl border border-dark-700/50 h-full shadow-inner">
-      <p className="text-[9px] font-black text-dark-500 uppercase mb-2 flex items-center gap-2">{icon} {label}</p>
-      <p className="text-xs text-dark-200 leading-relaxed font-medium italic">{value}</p>
-    </div>
-  )
-}
-
-function EmptyState({ icon, text }) {
-  return (
-    <div className="py-20 text-center bg-dark-800/30 rounded-[3rem] border border-dashed border-dark-700">
-      <div className="text-dark-600 opacity-20 mb-4 flex justify-center">{icon}</div>
-      <p className="text-dark-500 text-[11px] font-bold uppercase tracking-widest italic">{text}</p>
-    </div>
-  )
-}
-
-function renderCalendarDays(ano, mes, getEventos, onDayClick) {
-  const start = new Date(ano, mes - 1, 1); const end = new Date(ano, mes, 0); const days = []
-  let startIdx = start.getDay() === 0 ? 6 : start.getDay() - 1
-  for (let i = 0; i < startIdx; i++) days.push(<div key={`blank-${i}`} className="border border-dark-800/10 bg-dark-900/5 opacity-10" />)
-
-  const hojeStr = new Date().toDateString()
-  for (let d = 1; d <= end.getDate(); d++) {
-    const data = new Date(ano, mes - 1, d); const ev = getEventos(data); const isHoje = data.toDateString() === hojeStr
-    days.push(
-      <button key={d} onClick={() => onDayClick(data)} className={`relative p-3 border border-dark-800/40 hover:bg-primary-500/5 transition-all text-left flex flex-col h-full min-h-[120px] overflow-hidden ${isHoje ? 'bg-primary-500/10 ring-1 ring-primary-500/30 shadow-[0_0_15px_rgba(139,92,246,0.2)]' : ''}`}>
-        <span className={`text-xs font-black mb-2 ${isHoje ? 'text-primary-400 underline decoration-2 underline-offset-4' : 'text-dark-500'}`}>{d < 10 ? `0${d}` : d}</span>
-        <div className="space-y-1.5 w-full">
-          {ev.iniciam.slice(0, 1).map(c => <div key={c.id} className="text-[7px] bg-primary-600 text-white font-black px-1.5 py-0.5 rounded truncate uppercase shadow-lg">🚀 {c.nome_contrato}</div>)}
-          {ev.ativos.length > 0 && <div className="text-[7px] text-dark-300 font-bold px-1.5 py-0.5 border border-dark-700 rounded bg-dark-800/90 truncate flex items-center gap-1"><Package size={8}/> {ev.ativos.length} Ativos</div>}
-          {ev.parcelas.length > 0 && <div className="text-[7px] bg-green-500/20 text-green-500 font-black px-1.5 py-0.5 rounded border border-green-500/20 truncate flex items-center gap-1 shadow-inner">💰 {ev.parcelas.length} Venc.</div>}
-        </div>
-      </button>
-    )
-  }
-  return days
-}
-
-function DailyView({ data, eventos, setDia, abrirDetalhes }) {
-  const move = (dir) => {
-    const next = new Date(data.getTime()); next.setDate(next.getDate() + (dir === 'ant' ? -1 : 1))
-    setDia(next)
-  }
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between bg-dark-800/80 p-12 rounded-[3rem] border border-dark-700 shadow-2xl backdrop-blur-2xl">
-        <button onClick={() => move('ant')} className="p-5 hover:bg-dark-700 rounded-[2rem] text-primary-400 active:scale-90 transition-all"><ChevronLeft size={40}/></button>
-        <div className="text-center">
-          <h2 className="text-6xl font-black text-dark-50 uppercase tracking-tighter mb-2 italic">{data.toLocaleDateString('pt-BR', { weekday: 'long' })}</h2>
-          <p className="text-primary-500 font-black tracking-[0.5em] uppercase text-base">{data.toLocaleDateString('pt-BR')}</p>
-        </div>
-        <button onClick={() => move('prox')} className="p-5 hover:bg-dark-700 rounded-[2rem] text-primary-400 active:scale-90 transition-all"><ChevronRight size={40}/></button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <DayCard title="Cronograma Logístico" icon={<PlayCircle size={24}/>} count={eventos.iniciam.length} color="primary" items={eventos.iniciam} onClick={() => abrirDetalhes(data)} />
-        <DayCard title="Compromissos Financeiros" icon={<DollarSign size={24}/>} count={eventos.parcelas.length} color="green" items={eventos.parcelas} onClick={() => abrirDetalhes(data)} />
-      </div>
-    </div>
-  )
-}
-
-function DayCard({ title, icon, count, color, items, onClick }) {
-  const isPrimary = color === 'primary'
-  return (
-    <div className={`p-10 rounded-[3rem] border shadow-2xl ${isPrimary ? 'bg-primary-500/[0.04] border-primary-500/20' : 'bg-green-500/[0.04] border-green-500/20'}`}>
-      <div className="flex justify-between items-center mb-10">
-        <h3 className={`text-[12px] font-black uppercase tracking-[0.4em] flex items-center gap-4 ${isPrimary ? 'text-primary-500' : 'text-green-500'}`}>{icon} {title}</h3>
-        <span className={`text-xs font-black px-4 py-1.5 rounded-full text-white ${isPrimary ? 'bg-primary-500' : 'bg-green-500'} shadow-xl`}>{count}</span>
-      </div>
-      <div className="space-y-4">
-        {(items || []).slice(0, 6).map(i => (
-          <div key={i.id} onClick={onClick} className="p-6 bg-dark-800 rounded-[2rem] border border-dark-700 flex justify-between items-center cursor-pointer hover:border-primary-500/40 transition-all group shadow-lg">
-            <div>
-              <p className="font-black text-dark-50 text-base truncate">{i.nome_contrato || i.codigo_contrato || 'Operação'}</p>
-              {i.contratante && <p className="text-[11px] text-dark-500 font-bold uppercase mt-1 tracking-widest italic">{i.contratante}</p>}
-              {i.valor_original && <p className="text-green-400 font-mono text-xs font-black mt-2">{formatCurrency(i.valor_original)}</p>}
+    <div onClick={onClick} className="p-6 bg-dark-800/80 border border-dark-700 rounded-[2rem] shadow-2xl cursor-pointer hover:border-primary-500/40 transition-all">
+       <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xs font-black uppercase flex items-center gap-3 text-dark-400">{icon} {title}</h3>
+          <span className="bg-primary-500 text-white text-[10px] font-black px-3 py-1 rounded-full">{count}</span>
+       </div>
+       <div className="space-y-3">
+          {items.slice(0, 3).map(i => (
+            <div key={i.id} className="p-4 bg-dark-900 rounded-2xl border border-dark-800 flex justify-between items-center">
+               <p className="text-xs font-black text-dark-100 truncate">{i.nome_contrato || i.codigo_contrato || 'Operação'}</p>
+               <ArrowRight size={14} className="text-dark-600"/>
             </div>
-            <ArrowRight size={20} className="text-dark-400 group-hover:text-primary-400 transition-colors"/>
-          </div>
-        ))}
-        {(!items || items.length === 0) && <p className="text-dark-600 text-[11px] font-black uppercase tracking-widest italic opacity-40 text-center py-12">Agenda livre.</p>}
-      </div>
+          ))}
+       </div>
     </div>
   )
 }
