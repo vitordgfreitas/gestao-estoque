@@ -76,6 +76,19 @@ export default function VisualizarDados() {
     } catch (e) { toast.error('Erro ao salvar item') }
   }
 
+  const handleDeleteCompromisso = async () => {
+    const loadId = toast.loading('Removendo contrato e vínculos...')
+    try {
+      await api.delete(`/api/compromissos/${deletingCompromisso.id}`)
+      toast.success('Contrato excluído permanentemente!', { id: loadId })
+      setDeletingCompromisso(null)
+      loadData()
+    } catch (e) {
+      const msg = e.response?.data?.detail || 'Erro ao excluir contrato (verifique Foreign Keys)'
+      toast.error(msg, { id: loadId })
+    }
+  }
+
   const handleSaveCompromisso = async (data) => {
     try {
       await compromissosAPI.atualizar(editingCompromisso.id, data)
