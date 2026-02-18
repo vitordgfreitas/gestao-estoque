@@ -19,7 +19,7 @@ export default function Dashboard() {
             Dashboard em Construção
           </h1>
           <p className="text-dark-400 font-medium tracking-widest uppercase text-[10px]">
-            Star Locações • Novas métricas executivas em breve
+            Novas métricas executivas em breve
           </p>
         </div>
       </motion.div>

@@ -1,5 +1,5 @@
 -- ============================================================
--- Schema Supabase para GestaoCarro (STAR Locação)
+-- Schema Supabase para GestaoCarro
 -- Execute este SQL no Supabase: SQL Editor → New query → Cole e Run
 -- ============================================================
 
