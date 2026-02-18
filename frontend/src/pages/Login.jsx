@@ -96,7 +96,7 @@ export default function Login() {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
               <img 
-                src="/star_logo.jpeg" 
+                src={import.meta.env.VITE_LOGO_BASE64}
                 alt="STAR" 
                 className="h-24 w-auto"
               />

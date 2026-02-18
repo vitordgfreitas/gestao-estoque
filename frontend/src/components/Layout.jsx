@@ -140,8 +140,8 @@ export default function Layout({ children }) {
               <div className="p-6 border-b border-dark-700">
                 <div className="flex items-center gap-3">
                   <img 
-                    src="/star_logo.jpeg" 
-                    alt="STAR Locação" 
+                    src={import.meta.env.VITE_LOGO_BASE64}
+                    alt="STAR" 
                     className="w-full h-auto"
                   />
                 </div>
