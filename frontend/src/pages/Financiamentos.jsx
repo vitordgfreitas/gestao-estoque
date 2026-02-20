@@ -689,7 +689,37 @@ export default function Financiamentos() {
                     </div>
                   )}
                   
-                  <ValorPresenteCard valorPresente={fin.valor_presente} compact />
+                  {fin.status === 'Ativo' && fin.valor_quitacao_hoje > 0 && (
+  <div className="mt-6 grid grid-cols-2 gap-4 p-4 bg-green-500/5 border border-green-500/20 rounded-2xl">
+    <div>
+      <p className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-1">
+        Quitação Líquida Hoje
+      </p>
+      <div className="flex items-baseline gap-1">
+        <span className="text-2xl font-black text-white font-mono">
+          {formatCurrency(fin.valor_quitacao_hoje)}
+        </span>
+      </div>
+    </div>
+
+    <div className="text-right flex flex-col justify-center">
+      <p className="text-[10px] font-black text-dark-500 uppercase mb-1">
+        Economia de Juros
+      </p>
+      <p className="text-lg font-black text-green-400 font-mono">
+        {/* Cálculo: (Valor Parcela * Parcelas Restantes) - Valor Quitação */}
+        {formatCurrency(
+          (fin.valor_parcela * (fin.numero_parcelas - (fin.parcelas_pagas || 0))) - fin.valor_quitacao_hoje
+        )}
+      </p>
+    </div>
+  </div>
+)}
+
+{/* O seu card original de valor presente continua aqui embaixo se você quiser manter */}
+<div className="mt-2 opacity-60">
+  <ValorPresenteCard valorPresente={fin.valor_presente} compact />
+</div>
                 </div>
                 
                 <div className="flex gap-2">
