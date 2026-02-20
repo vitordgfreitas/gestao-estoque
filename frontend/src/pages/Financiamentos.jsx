@@ -541,7 +541,7 @@ export default function Financiamentos() {
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                   placeholder="Ex: 123456 = 1,234567% ou digite 1,234567"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite números (até 6 decimais). Ex: 1234567 = 1,234567%</p>
+                <p className="text-xs text-dark-400 mt-1">Digite números (até 7 decimais). Ex: 1234567 = 1,234567%</p>
               </div>
               
               <div>
