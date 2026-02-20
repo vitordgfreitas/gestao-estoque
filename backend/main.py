@@ -1782,7 +1782,7 @@ def financiamento_to_dict(fin):
         if 'valor_parcela' in fin:
             fin['valor_parcela'] = round(float(fin['valor_parcela']), 2)
         if 'taxa_juros' in fin:
-            fin['taxa_juros'] = round(float(fin['taxa_juros']), 6)
+            fin['taxa_juros'] = round(float(fin['taxa_juros']), 7)
         if 'codigo_contrato' not in fin:
             fin['codigo_contrato'] = ''
         return fin
@@ -1792,7 +1792,7 @@ def financiamento_to_dict(fin):
     valor_total = round(float(getattr(fin, 'valor_total', 0.0)), 2)
     valor_entrada = round(float(getattr(fin, 'valor_entrada', 0.0)), 2)
     valor_parcela = round(float(getattr(fin, 'valor_parcela', 0.0)), 2)
-    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 6)  # Mais precisão para taxa
+    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 7)  # Mais precisão para taxa
     valor_financiado = round(valor_total - valor_entrada, 2)
     
     # Busca itens associados ao financiamento
