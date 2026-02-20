@@ -640,7 +640,7 @@ export default function Financiamentos() {
                   </div>
                   
                   {/* Detalhamento dos itens */}
-                  {fin.itens && fin.itens.length > 1 && (
+                  {fin.itens && fin.itens.length > 0 && (
                     <div className="mb-3 p-2 bg-dark-700/50 rounded">
                       <p className="text-xs text-dark-400 mb-1">Itens Financiados:</p>
                       {fin.itens.map((item, idx) => (
@@ -656,7 +656,7 @@ export default function Financiamentos() {
                       <p className="text-sm text-dark-400">Valor Total</p>
                       <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_total)}</p>
                     </div>
-                    {fin.valor_entrada > 0 && (
+                    {fin.valor_entrada >= 0 && (
                       <div>
                         <p className="text-sm text-dark-400">Entrada</p>
                         <p className="text-lg font-semibold text-green-400">{formatCurrency(fin.valor_entrada)}</p>
