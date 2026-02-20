@@ -723,11 +723,12 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
         raise ValueError("É necessário fornecer pelo menos um item (itens_ids)")
     valor_total = round(float(valor_total), 2)
     valor_entrada = round(float(valor_entrada), 2)
-    taxa_juros = round(float(taxa_juros), 7)
+    taxa_juros = float(taxa_juros)
     if taxa_juros >= 100:
         taxa_juros = taxa_juros / 10000
     elif taxa_juros >= 1:
         taxa_juros = taxa_juros / 100
+    taxa_juros = round(float(taxa_juros), 7)
     valor_financiado = round(valor_total - valor_entrada, 2)
     if valor_financiado <= 0:
         raise ValueError("Valor financiado deve ser maior que zero")
