@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 import Itens from './pages/Itens'
 import Compromissos from './pages/Compromissos'
 import Disponibilidade from './pages/Disponibilidade'

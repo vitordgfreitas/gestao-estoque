@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  LayoutDashboard, 
   PlusCircle, 
   CalendarCheck, 
   Search, 
@@ -55,7 +54,6 @@ export default function Layout({ children }) {
   const [supabaseAvailable, setSupabaseAvailable] = useState(false)
   const [useSupabase, setUseSupabase] = useState(() => localStorage.getItem('useSupabase') === 'true')
   const [expandedGroups, setExpandedGroups] = useState({
-    dashboard: true,
     estoque: true,
     agenda: true,
     financeiro: true
