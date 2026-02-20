@@ -686,6 +686,26 @@ export default function Financiamentos() {
                         {formatCurrency(fin.valor_quitacao_hoje || 0)}
                       </p>
                     </div>
+                    {/* Saldo Devedor Nominal (O valor bruto que falta) */}
+                    <div>
+                      <p className="text-sm text-dark-400">Saldo Devedor (Nominal)</p>
+                      <p className="text-lg font-semibold text-white">
+                        {formatCurrency(fin.saldo_devedor_nominal)}
+                      </p>
+                      <p className="text-[10px] text-dark-500 uppercase">Soma das parcelas restantes</p>
+                    </div>
+
+                    {/* Valor para Quitação (O valor com desconto que a gente já tinha) */}
+                    <div>
+                      <p className="text-sm text-green-500 font-bold">Quitação Imediata</p>
+                      <p className="text-lg font-black text-green-400 font-mono">
+                        {formatCurrency(fin.valor_quitacao_hoje)}
+                      </p>
+                      {/* Cálculo de Economia em tempo real */}
+                      <p className="text-[10px] text-green-600 font-bold uppercase">
+                        Economia: {formatCurrency(fin.saldo_devedor_nominal - fin.valor_quitacao_hoje)}
+                      </p>
+                    </div>
                   </div>
                   
                   {fin.instituicao_financeira && (

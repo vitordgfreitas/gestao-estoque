@@ -511,6 +511,7 @@ class FinanciamentoResponse(BaseModel):
     instituicao_financeira: Optional[str] = None
     observacoes: Optional[str] = None
     valor_quitacao_hoje: float = 0.0
+    saldo_devedor_nominal: float = 0.0
     
     class Config:
         from_attributes = True
@@ -1790,8 +1791,11 @@ def financiamento_to_dict(fin):
         dados_base['data_inicio'] = d.isoformat() if hasattr(d, 'isoformat') else str(d)
 
     # Tratamento para números (garante que numeric do banco vire float/0.0)
-    colunas_numericas = ['valor_total', 'valor_entrada', 'valor_parcela', 
-                         'valor_quitacao_hoje', 'taxa_juros', 'valor_financiado']
+    colunas_numericas = [
+    'valor_total', 'valor_entrada', 'valor_parcela', 
+    'valor_quitacao_hoje', 'taxa_juros', 'valor_financiado',
+    'saldo_devedor_nominal', 'parcelas_pagas' # <--- ADICIONE ESTES DOIS
+]
     
     for col in colunas_numericas:
         val = dados_base.get(col)
