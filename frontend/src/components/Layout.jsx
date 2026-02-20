@@ -28,13 +28,6 @@ const menuGroups = [
       { path: '/calendario', icon: Calendar, label: 'Calendário' }
     ]
   },
-
-  {
-    label: 'Dashboard',
-    items: [
-      { path: '/', icon: LayoutDashboard, label: 'Dashboard' }
-    ]
-  },
   {
     label: 'Estoque',
     items: [
