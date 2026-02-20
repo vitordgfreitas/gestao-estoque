@@ -21,8 +21,16 @@ import {
 import { infoAPI } from '../services/api'
 
 const menuGroups = [
+  
   {
-    label: 'Principal',
+    label: 'Agenda',
+    items: [
+      { path: '/calendario', icon: Calendar, label: 'Calendário' }
+    ]
+  },
+
+  {
+    label: 'Dashboard',
     items: [
       { path: '/', icon: LayoutDashboard, label: 'Dashboard' }
     ]
@@ -34,12 +42,6 @@ const menuGroups = [
       { path: '/compromissos', icon: CalendarCheck, label: 'Registrar Compromisso' },
       { path: '/disponibilidade', icon: Search, label: 'Verificar Disponibilidade' },
       { path: '/visualizar', icon: Table, label: 'Visualizar Dados' }
-    ]
-  },
-  {
-    label: 'Agenda',
-    items: [
-      { path: '/calendario', icon: Calendar, label: 'Calendário' }
     ]
   },
   {
