@@ -62,7 +62,7 @@ export default function Layout({ children }) {
   const [supabaseAvailable, setSupabaseAvailable] = useState(false)
   const [useSupabase, setUseSupabase] = useState(() => localStorage.getItem('useSupabase') === 'true')
   const [expandedGroups, setExpandedGroups] = useState({
-    principal: true,
+    dashboard: true,
     estoque: true,
     agenda: true,
     financeiro: true

@@ -48,7 +48,7 @@ function App() {
               <Layout>
                 <Routes>
                   <Route path="/calendario" element={<Calendario />} />
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/" element={<Calendario />} />
                   <Route path="/itens" element={<Itens />} />
                   <Route path="/compromissos" element={<Compromissos />} />
                   <Route path="/disponibilidade" element={<Disponibilidade />} />
