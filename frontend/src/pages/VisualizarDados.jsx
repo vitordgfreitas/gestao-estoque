@@ -130,49 +130,74 @@ export default function VisualizarDados() {
           
           {/* TABELA INVENTÁRIO (image_7aecd4.png) */}
           {activeTab === 'itens' && (
-            <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
-              <thead className="bg-dark-800/50 text-dark-400 text-[11px] uppercase font-black tracking-widest">
-                <tr>
-                  <th className="px-6 py-4 w-[25%]">Ativo / Especificações</th>
-                  <th className="px-6 py-4 w-[10%] text-center">Estoque</th>
-                  <th className="px-6 py-4 w-[12%]">Custo Unit.</th>
-                  <th className="px-6 py-4 w-[15%] text-green-500 font-black">Valor em Estoque</th>
-                  <th className="px-6 py-4 w-[13%]">Aquisição</th>
-                  <th className="px-6 py-4 w-[15%] hidden lg:table-cell">Base</th>
-                  <th className="px-6 py-4 w-[20%]">Descrição</th> {/* Nova Coluna */}
-                  <th className="px-6 py-4 w-[10%] text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dark-800">
-                {filteredData.itens.map(item => (
-                  <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="px-6 py-5">
-                      <div className="font-bold text-dark-50 text-base">{item.nome}</div>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-[9px] bg-primary-500/10 text-primary-400 px-1.5 py-0.5 rounded font-black border border-primary-500/20">{item.categoria}</span>
-                        {item.dados_categoria?.Placa && <span className="text-[9px] bg-dark-700 px-1.5 py-0.5 rounded font-mono text-dark-400 border border-dark-600 uppercase font-black tracking-tighter">{item.dados_categoria.Placa}</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="text-xs text-dark-400 line-clamp-2 leading-relaxed" title={item.descricao}>
-                        {item.descricao || <span className="italic opacity-20">Nenhuma descrição informada</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 font-mono text-lg font-bold text-center">{item.quantidade_total}</td>
-                    <td className="px-6 py-5 text-dark-300 font-mono">R$ {parseFloat(item.valor_compra || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-5 text-green-400 font-black font-mono">R$ {(Number(item.valor_compra || 0) * (item.quantidade_total || 0)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    <td className="px-6 py-5 text-xs text-dark-400 font-mono">{formatDate(item.data_aquisicao)}</td>
-                    <td className="px-6 py-5 text-xs text-dark-400 hidden lg:table-cell uppercase font-bold">{item.cidade}/{item.uf}</td>
-                    <td className="px-6 py-5 text-right flex gap-1 justify-end opacity-20 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setViewingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg"><Eye size={18}/></button>
-                      <button onClick={() => setEditingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg text-primary-400"><Edit size={18}/></button>
-                      <button onClick={() => setDeletingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg text-red-400"><Trash2 size={18}/></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+  <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
+    <thead className="bg-dark-800/50 text-dark-400 text-[11px] uppercase font-black tracking-widest">
+      <tr>
+        <th className="px-6 py-4 w-[20%]">Ativo / Especificações</th>
+        <th className="px-6 py-4 w-[8%] text-center">Estoque</th>
+        <th className="px-6 py-4 w-[12%]">Custo Unit.</th>
+        <th className="px-6 py-4 w-[12%] text-green-500 font-black">Valor em Estoque</th>
+        <th className="px-6 py-4 w-[10%]">Aquisição</th>
+        <th className="px-6 py-4 w-[10%] hidden lg:table-cell">Base</th> {/* 1. Aqui tem hidden */}
+        <th className="px-6 py-4 w-[20%]">Descrição</th>
+        <th className="px-6 py-4 w-[8%] text-right">Ações</th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-dark-800">
+      {filteredData.itens.map(item => (
+        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
+          {/* 1. Ativo / Especificações */}
+          <td className="px-6 py-5">
+            <div className="font-bold text-dark-50 text-base">{item.nome}</div>
+            <div className="flex gap-2 mt-1">
+              <span className="text-[9px] bg-primary-500/10 text-primary-400 px-1.5 py-0.5 rounded font-black border border-primary-500/20">{item.categoria}</span>
+              {item.dados_categoria?.Placa && <span className="text-[9px] bg-dark-700 px-1.5 py-0.5 rounded font-mono text-dark-400 border border-dark-600 uppercase font-black">{item.dados_categoria.Placa}</span>}
+            </div>
+          </td>
+
+          {/* 2. Estoque */}
+          <td className="px-6 py-5 font-mono text-lg font-bold text-center">
+            {item.quantidade_total}
+          </td>
+
+          {/* 3. Custo Unit. */}
+          <td className="px-6 py-5 text-dark-300 font-mono">
+            R$ {parseFloat(item.valor_compra || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+          </td>
+
+          {/* 4. Valor em Estoque */}
+          <td className="px-6 py-5 text-green-400 font-black font-mono">
+            R$ {(Number(item.valor_compra || 0) * (item.quantidade_total || 0)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+          </td>
+
+          {/* 5. Aquisição */}
+          <td className="px-6 py-5 text-xs text-dark-400 font-mono">
+            {formatDate(item.data_aquisicao)}
+          </td>
+
+          {/* 6. Base (MUITO IMPORTANTE: O hidden aqui deve ser igual ao do header lá em cima) */}
+          <td className="px-6 py-5 text-xs text-dark-400 hidden lg:table-cell uppercase font-bold">
+            {item.cidade}/{item.uf}
+          </td>
+
+          {/* 7. Descrição */}
+          <td className="px-6 py-5">
+            <div className="text-xs text-dark-400 line-clamp-2 leading-relaxed italic" title={item.descricao}>
+              {item.descricao || "—"}
+            </div>
+          </td>
+
+          {/* 8. Ações */}
+          <td className="px-6 py-5 text-right flex gap-1 justify-end opacity-20 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => setViewingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg"><Eye size={18}/></button>
+            <button onClick={() => setEditingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg text-primary-400"><Edit size={18}/></button>
+            <button onClick={() => setDeletingItem(item)} className="p-2 hover:bg-dark-700 rounded-lg text-red-400"><Trash2 size={18}/></button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+)}
 
           {/* TABELA CONTRATOS (image_85d57b.png) */}
           {activeTab === 'compromissos' && (
