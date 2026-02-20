@@ -139,6 +139,7 @@ export default function VisualizarDados() {
                   <th className="px-6 py-4 w-[15%] text-green-500 font-black">Valor em Estoque</th>
                   <th className="px-6 py-4 w-[13%]">Aquisição</th>
                   <th className="px-6 py-4 w-[15%] hidden lg:table-cell">Base</th>
+                  <th className="px-6 py-4 w-[20%]">Descrição</th> {/* Nova Coluna */}
                   <th className="px-6 py-4 w-[10%] text-right">Ações</th>
                 </tr>
               </thead>
@@ -150,6 +151,11 @@ export default function VisualizarDados() {
                       <div className="flex gap-2 mt-1">
                         <span className="text-[9px] bg-primary-500/10 text-primary-400 px-1.5 py-0.5 rounded font-black border border-primary-500/20">{item.categoria}</span>
                         {item.dados_categoria?.Placa && <span className="text-[9px] bg-dark-700 px-1.5 py-0.5 rounded font-mono text-dark-400 border border-dark-600 uppercase font-black tracking-tighter">{item.dados_categoria.Placa}</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="text-xs text-dark-400 line-clamp-2 leading-relaxed" title={item.descricao}>
+                        {item.descricao || <span className="italic opacity-20">Nenhuma descrição informada</span>}
                       </div>
                     </td>
                     <td className="px-6 py-5 font-mono text-lg font-bold text-center">{item.quantidade_total}</td>
@@ -407,11 +413,59 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
         })
       }} className="space-y-6 max-h-[85vh] overflow-y-auto pr-2">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2"><label className="label">Nome</label><input className="input" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} /></div>
-          <div><label className="label">Quantidade</label><input type="number" className="input" value={formData.quantidade_total} onChange={e => setFormData({...formData, quantidade_total: e.target.value})} /></div>
-          <div><label className="label">Valor Aquisição</label><input className="input" value={formData.valor_compra} onChange={e => setFormData({...formData, valor_compra: e.target.value})} /></div>
-          <div className="md:col-span-2"><label className="label">Data de Entrada no Estoque</label><input type="date" className="input" value={formData.data_aquisicao} onChange={e => setFormData({...formData, data_aquisicao: e.target.value})} /></div>
-        </div>
+  {/* Nome */}
+  <div className="md:col-span-2">
+    <label className="label">Nome</label>
+    <input 
+      className="input" 
+      value={formData.nome} 
+      onChange={e => setFormData({...formData, nome: e.target.value})} 
+    />
+  </div>
+
+  {/* NOVA: Descrição (Ocupando a largura toda) */}
+  <div className="md:col-span-2">
+    <label className="label">Descrição</label>
+    <textarea 
+      className="input min-h-[100px] py-2" 
+      value={formData.descricao || ''} 
+      onChange={e => setFormData({...formData, descricao: e.target.value})}
+      placeholder="Detalhes técnicos, estado de conservação, etc..."
+    />
+  </div>
+
+  {/* Quantidade */}
+  <div>
+    <label className="label">Quantidade</label>
+    <input 
+      type="number" 
+      className="input" 
+      value={formData.quantidade_total} 
+      onChange={e => setFormData({...formData, quantidade_total: e.target.value})} 
+    />
+  </div>
+
+  {/* Valor Aquisição */}
+  <div>
+    <label className="label">Valor Aquisição</label>
+    <input 
+      className="input" 
+      value={formData.valor_compra} 
+      onChange={e => setFormData({...formData, valor_compra: e.target.value})} 
+    />
+  </div>
+
+  {/* Data */}
+  <div className="md:col-span-2">
+    <label className="label">Data de Entrada no Estoque</label>
+    <input 
+      type="date" 
+      className="input" 
+      value={formData.data_aquisicao} 
+      onChange={e => setFormData({...formData, data_aquisicao: e.target.value})} 
+    />
+  </div>
+</div>
         {camposExtras.length > 0 && (
           <div className="p-4 bg-dark-800 rounded-2xl border border-dark-700 grid grid-cols-2 gap-3 shadow-inner">
              <div className="col-span-2 text-[10px] font-black text-blue-400 uppercase tracking-widest border-b border-blue-500/20 pb-1">Atributos JSONB</div>
