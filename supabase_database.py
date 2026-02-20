@@ -723,7 +723,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
         raise ValueError("É necessário fornecer pelo menos um item (itens_ids)")
     valor_total = round(float(valor_total), 2)
     valor_entrada = round(float(valor_entrada), 2)
-    taxa_juros = round(float(taxa_juros), 6)
+    taxa_juros = round(float(taxa_juros), 7)
     if taxa_juros >= 100:
         taxa_juros = taxa_juros / 10000
     elif taxa_juros >= 1:
@@ -819,7 +819,7 @@ def _row_to_financiamento(row, itens_list=None):
             self.valor_entrada = round(float(row.get('valor_entrada') or 0), 2)
             self.numero_parcelas = row.get('numero_parcelas') or 0
             self.valor_parcela = round(float(row.get('valor_parcela') or 0), 2)
-            self.taxa_juros = round(float(row.get('taxa_juros') or 0), 6)
+            self.taxa_juros = round(float(row.get('taxa_juros') or 0), 7)
             self.data_inicio = _date_parse(row.get('data_inicio'))
             self.status = row.get('status') or 'Ativo'
             self.instituicao_financeira = row.get('instituicao_financeira') or ''
@@ -856,7 +856,7 @@ def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None,
     if valor_total is not None:
         payload['valor_total'] = round(float(valor_total), 2)
     if taxa_juros is not None:
-        payload['taxa_juros'] = round(float(taxa_juros), 6)
+        payload['taxa_juros'] = round(float(taxa_juros), 7)
     if status is not None:
         payload['status'] = status
     if instituicao_financeira is not None:
