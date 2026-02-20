@@ -798,7 +798,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
 
 def listar_financiamentos(status=None, item_id=None):
     sb = get_supabase()
-    q = sb.table('financiamentos').select('*').order('id', desc=True)
+    q = sb.table('view_financiamentos_quitacao').select('*').order('id', desc=True)
     if status:
         q = q.eq('status', status)
     if item_id:
@@ -827,6 +827,7 @@ def _row_to_financiamento(row, itens_list=None):
             self.observacoes = row.get('observacoes') or ''
             self._itens_list = itens_list
             self.valor_presente = 0.0
+            self.valor_quitacao_hoje = round(float(row.get('valor_quitacao_hoje') or 0), 2)
         @property
         def itens(self):
             if self._itens_list is None:
@@ -846,7 +847,7 @@ def _financiamento_itens_list(financiamento_id):
 
 def buscar_financiamento_por_id(financiamento_id):
     sb = get_supabase()
-    r = sb.table('financiamentos').select('*').eq('id', int(financiamento_id)).execute()
+    r = sb.table('view_financiamentos_quitacao').select('*').eq('id', int(financiamento_id)).execute()
     if not r.data or len(r.data) == 0:
         return None
     return _row_to_financiamento(r.data[0], itens_list=_financiamento_itens_list(int(financiamento_id)))
