@@ -47,11 +47,11 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Routes>
+                  <Route path="/calendario" element={<Calendario />} />
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/itens" element={<Itens />} />
                   <Route path="/compromissos" element={<Compromissos />} />
                   <Route path="/disponibilidade" element={<Disponibilidade />} />
-                  <Route path="/calendario" element={<Calendario />} />
                   <Route path="/visualizar" element={<VisualizarDados />} />
                   <Route path="/contas-receber" element={<ContasReceber />} />
                   <Route path="/contas-pagar" element={<ContasPagar />} />
