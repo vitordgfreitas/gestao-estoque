@@ -828,6 +828,7 @@ def _row_to_financiamento(row, itens_list=None):
             self._itens_list = itens_list
             self.valor_presente = 0.0
             self.valor_quitacao_hoje = round(float(row.get('valor_quitacao_hoje') or 0), 2)
+            self.saldo_devedor_nominal = round(float(row.get('saldo_devedor_nominal') or 0), 2)
         @property
         def itens(self):
             if self._itens_list is None:

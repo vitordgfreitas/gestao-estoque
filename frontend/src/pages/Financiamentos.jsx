@@ -680,12 +680,6 @@ export default function Financiamentos() {
                         {formatPercentageDisplay(fin.taxa_juros)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-green-500 font-bold">Valor p/ Quitação</p>
-                      <p className="text-lg font-black text-green-400 font-mono">
-                        {formatCurrency(fin.valor_quitacao_hoje || 0)}
-                      </p>
-                    </div>
                     {/* Saldo Devedor Nominal (O valor bruto que falta) */}
                     <div>
                       <p className="text-sm text-dark-400">Saldo Devedor (Nominal)</p>
