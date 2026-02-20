@@ -77,8 +77,8 @@ export const formatPercentageInput = (value) => {
   
   // Formata com vírgula decimal (sem separadores de milhar para %)
   return numberValue.toLocaleString('pt-BR', {
-    minimumFractionDigits: 6,
-    maximumFractionDigits: 6
+    minimumFractionDigits: 7,
+    maximumFractionDigits: 7
   })
 }
 

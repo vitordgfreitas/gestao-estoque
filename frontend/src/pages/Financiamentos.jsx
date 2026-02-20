@@ -247,7 +247,7 @@ export default function Financiamentos() {
         numero_parcelas: finCompleto.numero_parcelas,
         // Backend retorna taxa como decimal (0.0275 = 2,75%)
         // Formata para exibir no input com 4 casas decimais
-        taxa_juros: formatDecimalInput(finCompleto.taxa_juros, 4),
+        taxa_juros: formatDecimalInput(finCompleto.taxa_juros, 7),
         data_inicio: finCompleto.data_inicio,
         instituicao_financeira: finCompleto.instituicao_financeira || '',
         observacoes: finCompleto.observacoes || ''
@@ -533,15 +533,15 @@ export default function Financiamentos() {
                   type="text"
                   value={formData.taxa_juros}
                   onChange={(e) => {
-                    // Formata tipo "caixa registradora" - sempre últimos 6 dígitos são decimais
+                    // Formata tipo "caixa registradora" - sempre últimos 7 dígitos são decimais
                     const formatted = formatPercentageInput(e.target.value)
                     setFormData({ ...formData, taxa_juros: formatted })
                   }}
                   required
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
-                  placeholder="Ex: 123456 = 1,23456% ou digite 1,23456"
+                  placeholder="Ex: 123456 = 1,234567% ou digite 1,234567"
                 />
-                <p className="text-xs text-dark-400 mt-1">Digite números (até 6 decimais). Ex: 123456 = 1,23456%</p>
+                <p className="text-xs text-dark-400 mt-1">Digite números (até 6 decimais). Ex: 1234567 = 1,234567%</p>
               </div>
               
               <div>
