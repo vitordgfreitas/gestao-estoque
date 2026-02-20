@@ -3,7 +3,7 @@ import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { itensAPI, compromissosAPI, categoriasAPI } from '../services/api'
 import api from '../services/api'
-import { Search, Edit, Trash2, Eye, Package, Calendar, Car, DollarSign, MapPin, Hash, Coins, Plus, Minus, X } from 'lucide-react'
+import { ArrowUpDown, ChevronUp, ChevronDown, Search, Edit, Trash2, Eye, Package, Calendar, Car, DollarSign, MapPin, Hash, Coins, Plus, Minus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -24,6 +24,18 @@ export default function VisualizarDados() {
   const [viewingItem, setViewingItem] = useState(null)
   const [deletingItem, setDeletingItem] = useState(null)
   const [deletingCompromisso, setDeletingCompromisso] = useState(null)
+  const [sortConfig, setSortConfig] = useState({ key: 'nome', direction: 'asc' });
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return <ArrowUpDown size={12} className="opacity-30" />;
+    return sortConfig.direction === 'asc' ? <ChevronUp size={12} className="text-primary-500" /> : <ChevronDown size={12} className="text-primary-500" />;
+  };
 
   useEffect(() => { loadData() }, [])
 
@@ -55,17 +67,43 @@ export default function VisualizarDados() {
   }, [itens, compromissos])
 
   const filteredData = useMemo(() => {
-    const term = searchTerm.toLowerCase()
-    return {
-      itens: itens.filter(i => i.nome?.toLowerCase().includes(term) || i.categoria?.toLowerCase().includes(term)),
-      compromissos: compromissos.filter(c => c.contratante?.toLowerCase().includes(term) || (c.nome_contrato || '').toLowerCase().includes(term)),
-      pecas: pecasCarros.filter(pc => {
-        const v = itens.find(i => i.id === pc.carro_id)?.nome?.toLowerCase() || ''
-        const p = itens.find(i => i.id === pc.peca_id)?.nome?.toLowerCase() || ''
-        return v.includes(term) || p.includes(term)
-      })
-    }
-  }, [searchTerm, itens, compromissos, pecasCarros])
+  const term = searchTerm.toLowerCase();
+  
+  const sortedItens = [...itens]
+    .filter(i => i.nome?.toLowerCase().includes(term) || i.categoria?.toLowerCase().includes(term))
+    .sort((a, b) => {
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
+
+      // Lógica específica para colunas calculadas ou especiais
+      if (sortConfig.key === 'valor_total_estoque') {
+        aVal = (a.valor_compra || 0) * (a.quantidade_total || 0);
+        bVal = (b.valor_compra || 0) * (b.quantidade_total || 0);
+      }
+
+      // Se for string, usa localeCompare para acentos
+      if (typeof aVal === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aVal.localeCompare(bVal) 
+          : bVal.localeCompare(aVal);
+      }
+
+      // Se for número ou data
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  return {
+    itens: sortedItens,
+    compromissos: compromissos.filter(c => c.contratante?.toLowerCase().includes(term) || (c.nome_contrato || '').toLowerCase().includes(term)),
+    pecas: pecasCarros.filter(pc => {
+      const v = itens.find(i => i.id === pc.carro_id)?.nome?.toLowerCase() || ''
+      const p = itens.find(i => i.id === pc.peca_id)?.nome?.toLowerCase() || ''
+      return v.includes(term) || p.includes(term)
+    })
+  };
+}, [searchTerm, itens, compromissos, pecasCarros, sortConfig]);
 
   // --- PERSISTÊNCIA ---
   const handleSaveItem = async (data) => {
@@ -132,17 +170,34 @@ export default function VisualizarDados() {
           {activeTab === 'itens' && (
   <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
     <thead className="bg-dark-800/50 text-dark-400 text-[11px] uppercase font-black tracking-widest">
-      <tr>
-        <th className="px-6 py-4 w-[20%]">Ativo / Especificações</th>
-        <th className="px-6 py-4 w-[8%] text-center">Estoque</th>
-        <th className="px-6 py-4 w-[12%]">Custo Unit.</th>
-        <th className="px-6 py-4 w-[12%] text-green-500 font-black">Valor em Estoque</th>
-        <th className="px-6 py-4 w-[10%]">Aquisição</th>
-        <th className="px-6 py-4 w-[10%] hidden lg:table-cell">Base</th> {/* 1. Aqui tem hidden */}
-        <th className="px-6 py-4 w-[20%]">Descrição</th>
-        <th className="px-6 py-4 w-[8%] text-right">Ações</th>
-      </tr>
-    </thead>
+  <tr>
+    <th onClick={() => requestSort('nome')} className="px-6 py-4 w-[20%] cursor-pointer hover:bg-dark-700/50 transition-colors">
+      <div className="flex items-center gap-2">Ativo {getSortIcon('nome')}</div>
+    </th>
+    
+    <th onClick={() => requestSort('quantidade_total')} className="px-6 py-4 w-[8%] text-center cursor-pointer hover:bg-dark-700/50 transition-colors">
+      <div className="flex items-center justify-center gap-2">Estoque {getSortIcon('quantidade_total')}</div>
+    </th>
+
+    <th onClick={() => requestSort('valor_compra')} className="px-6 py-4 w-[12%] cursor-pointer hover:bg-dark-700/50 transition-colors">
+      <div className="flex items-center gap-2">Custo Unit. {getSortIcon('valor_compra')}</div>
+    </th>
+
+    <th onClick={() => requestSort('valor_total_estoque')} className="px-6 py-4 w-[12%] text-green-500 font-black cursor-pointer hover:bg-dark-700/50 transition-colors">
+      <div className="flex items-center gap-2">Valor Total {getSortIcon('valor_total_estoque')}</div>
+    </th>
+
+    <th onClick={() => requestSort('data_aquisicao')} className="px-6 py-4 w-[10%] cursor-pointer hover:bg-dark-700/50 transition-colors">
+      <div className="flex items-center gap-2">Aquisição {getSortIcon('data_aquisicao')}</div>
+    </th>
+
+    <th className="px-6 py-4 w-[10%] hidden lg:table-cell">Base</th>
+    
+    <th className="px-6 py-4 w-[20%]">Descrição</th>
+    
+    <th className="px-6 py-4 w-[8%] text-right">Ações</th>
+  </tr>
+</thead>
     <tbody className="divide-y divide-dark-800">
       {filteredData.itens.map(item => (
         <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
