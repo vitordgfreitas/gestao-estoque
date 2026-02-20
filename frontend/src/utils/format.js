@@ -72,8 +72,8 @@ export const formatPercentageInput = (value) => {
   // Se está vazio, retorna vazio
   if (!onlyNumbers || onlyNumbers.length === 0) return ''
   
-  // Converte para número e divide por 1000000 (para ter 6 casas decimais)
-  const numberValue = parseInt(onlyNumbers, 10) / 1000000
+  // Converte para número e divide por 10000000 (para ter 7 casas decimais)
+  const numberValue = parseInt(onlyNumbers, 10) / 10000000
   
   // Formata com vírgula decimal (sem separadores de milhar para %)
   return numberValue.toLocaleString('pt-BR', {
@@ -92,7 +92,7 @@ export const formatPercentageDisplay = (value) => {
   
   const percentage = value * 100
   // Remove trailing zeros: 1.234500 → 1.2345
-  return percentage.toFixed(6).replace(/\.?0+$/, '') + '%'
+  return percentage.toFixed(7).replace(/\.?0+$/, '') + '%'
 }
 
 /**
