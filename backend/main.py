@@ -510,6 +510,7 @@ class FinanciamentoResponse(BaseModel):
     status: str
     instituicao_financeira: Optional[str] = None
     observacoes: Optional[str] = None
+    valor_quitacao_hoje: float = 0.0
     
     class Config:
         from_attributes = True
@@ -1772,56 +1773,39 @@ async def obter_fluxo_caixa(
 # ============= ENDPOINTS FINANCIAMENTOS =============
 
 def financiamento_to_dict(fin):
-    """Converte Financiamento para dict com formatação precisa de decimais"""
-    if isinstance(fin, dict):
-        # Se já é dict, apenas arredonda valores
-        if 'valor_total' in fin:
-            fin['valor_total'] = round(float(fin['valor_total']), 2)
-        if 'valor_entrada' in fin:
-            fin['valor_entrada'] = round(float(fin['valor_entrada']), 2)
-        if 'valor_parcela' in fin:
-            fin['valor_parcela'] = round(float(fin['valor_parcela']), 2)
-        if 'taxa_juros' in fin:
-            fin['taxa_juros'] = round(float(fin['taxa_juros']), 9)
-        if 'codigo_contrato' not in fin:
-            fin['codigo_contrato'] = ''
-        return fin
+    """Converte Financiamento para dict pegando todas as colunas existentes"""
+    if not fin: return {}
     
-    # Calcula valores com precisão de 2 casas decimais
-    codigo_contrato = getattr(fin, 'codigo_contrato', None) or ''
-    valor_total = round(float(getattr(fin, 'valor_total', 0.0)), 2)
-    valor_entrada = round(float(getattr(fin, 'valor_entrada', 0.0)), 2)
-    valor_parcela = round(float(getattr(fin, 'valor_parcela', 0.0)), 2)
-    taxa_juros = round(float(getattr(fin, 'taxa_juros', 0.0)), 9)  # Mais precisão para taxa
-    valor_financiado = round(valor_total - valor_entrada, 2)
+    # Se for um objeto de classe (como o do Supabase), pegamos o dicionário interno
+    if hasattr(fin, '__dict__'):
+        dados_base = fin.__dict__.copy()
+    elif isinstance(fin, dict):
+        dados_base = fin.copy()
+    else:
+        dados_base = vars(fin).copy()
+
+    # Tratamento para datas (evita erro no JSON)
+    if 'data_inicio' in dados_base and dados_base['data_inicio']:
+        d = dados_base['data_inicio']
+        dados_base['data_inicio'] = d.isoformat() if hasattr(d, 'isoformat') else str(d)
+
+    # Tratamento para números (garante que numeric do banco vire float/0.0)
+    colunas_numericas = ['valor_total', 'valor_entrada', 'valor_parcela', 
+                         'valor_quitacao_hoje', 'taxa_juros', 'valor_financiado']
     
-    # Busca itens associados ao financiamento
-    itens = []
+    for col in colunas_numericas:
+        val = dados_base.get(col)
+        try:
+            dados_base[col] = float(val) if val is not None else 0.0
+        except (ValueError, TypeError):
+            dados_base[col] = 0.0
+
+    # Adiciona a lista de itens se o objeto tiver o método
     if hasattr(fin, 'itens'):
-        for item_info in fin.itens:
-            itens.append({
-                "id": item_info['id'],
-                "nome": item_info['nome']
-                # Não incluímos valor individual pois não é usado
-            })
-    
-    return {
-        "id": getattr(fin, 'id', None),
-        "codigo_contrato": codigo_contrato,  # NOVO: Código do contrato
-        "itens": itens,  # NOVO: lista de itens com seus valores
-        "item_id": getattr(fin, 'item_id', None),  # Compatibilidade: primeiro item
-        "valor_total": valor_total,
-        "valor_entrada": valor_entrada,
-        "valor_financiado": valor_financiado,
-        "numero_parcelas": getattr(fin, 'numero_parcelas', 0),
-        "valor_parcela": valor_parcela,
-        "taxa_juros": taxa_juros,
-        "data_inicio": fin.data_inicio.isoformat() if hasattr(fin, 'data_inicio') and isinstance(fin.data_inicio, date) else (str(fin.data_inicio) if hasattr(fin, 'data_inicio') else None),
-        "status": getattr(fin, 'status', 'Ativo'),
-        "instituicao_financeira": getattr(fin, 'instituicao_financeira', None),
-        "observacoes": getattr(fin, 'observacoes', None),
-        "valor_presente": round(float(getattr(fin, 'valor_presente', 0.0)), 2)  # NOVO: Valor presente do Sheets
-    }
+        dados_base['itens'] = [{"id": i['id'], "nome": i['nome']} for i in fin.itens]
+
+    # Remove chaves internas do Python (_...)
+    return {k: v for k, v in dados_base.items() if not k.startswith('_')}
 
 def parcela_to_dict(parcela):
     """Converte ParcelaFinanciamento para dict com formatação precisa de decimais"""
