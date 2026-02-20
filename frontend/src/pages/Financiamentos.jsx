@@ -682,7 +682,7 @@ export default function Financiamentos() {
                     </div>
                     {/* Saldo Devedor Nominal (O valor bruto que falta) */}
                     <div>
-                      <p className="text-sm text-dark-400">Saldo Devedor (Nominal)</p>
+                      <p className="text-sm text-red-400">Saldo Devedor (Nominal)</p>
                       <p className="text-lg font-semibold text-white">
                         {formatCurrency(fin.saldo_devedor_nominal)}
                       </p>
