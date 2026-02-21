@@ -490,6 +490,8 @@ class FinanciamentoCreate(BaseModel):
     parcelas_customizadas: Optional[List[ParcelaCustomizada]] = None
 
 class FinanciamentoUpdate(BaseModel):
+    itens_ids: Optional[List[int]] = None # Fundamental para atualizar os itens
+    codigo_contrato: Optional[str] = None
     valor_total: Optional[float] = None
     valor_entrada: Optional[float] = None
     taxa_juros: Optional[float] = None
@@ -1934,21 +1936,19 @@ async def buscar_financiamento(financiamento_id: int, token: str = Depends(verif
 
 @app.put("/api/financiamentos/{financiamento_id}", response_model=dict)
 async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdate, token: str = Depends(verify_token), db_module = Depends(get_db)):
-    """Atualiza um financiamento"""
     try:
+        # Passamos todos os campos como um dicionário
+        dados_atualizacao = fin.dict(exclude_unset=True)
+        
         fin_atualizado = db_module.atualizar_financiamento(
             financiamento_id=financiamento_id,
-            valor_total=fin.valor_total,
-            taxa_juros=fin.taxa_juros,
-            status=fin.status,
-            instituicao_financeira=fin.instituicao_financeira,
-            observacoes=fin.observacoes
+            **dados_atualizacao
         )
+        
         if fin_atualizado is None:
             raise HTTPException(status_code=404, detail="Financiamento não encontrado")
+            
         return financiamento_to_dict(fin_atualizado)
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

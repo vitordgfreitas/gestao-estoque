@@ -853,22 +853,73 @@ def buscar_financiamento_por_id(financiamento_id):
         return None
     return _row_to_financiamento(r.data[0], itens_list=_financiamento_itens_list(int(financiamento_id)))
 
-def atualizar_financiamento(financiamento_id, valor_total=None, taxa_juros=None, status=None, instituicao_financeira=None, observacoes=None):
+def atualizar_financiamento(financiamento_id, **kwargs):
     sb = get_supabase()
+    fid = int(financiamento_id)
+    
+    # 1. Buscar dados atuais para caso precise recalcular parcela
+    r_atual = sb.table('financiamentos').select('*').eq('id', fid).single().execute()
+    if not r_atual.data: return None
+    dados_atuais = r_atual.data
+
+    # 2. Preparar Payload de Atualização do Cabeçalho
     payload = {}
-    if valor_total is not None:
-        payload['valor_total'] = round(float(valor_total), 2)
-    if taxa_juros is not None:
-        payload['taxa_juros'] = round(float(taxa_juros), 7)
-    if status is not None:
-        payload['status'] = status
-    if instituicao_financeira is not None:
-        payload['instituicao_financeira'] = instituicao_financeira
-    if observacoes is not None:
-        payload['observacoes'] = observacoes
+    campos_diretos = ['codigo_contrato', 'valor_total', 'valor_entrada', 'taxa_juros', 
+                      'status', 'instituicao_financeira', 'observacoes']
+    
+    for campo in campos_diretos:
+        if campo in kwargs and kwargs[campo] is not None:
+            if campo in ['valor_total', 'valor_entrada']:
+                payload[campo] = round(float(kwargs[campo]), 2)
+            elif campo == 'taxa_juros':
+                # Mesma lógica de limpeza de taxa do 'criar'
+                tj = float(kwargs[campo])
+                if tj >= 100: tj = tj / 10000
+                elif tj >= 1: tj = tj / 100
+                payload[campo] = round(tj, 9)
+            else:
+                payload[campo] = kwargs[campo]
+
+    # 3. Recalcular Valor da Parcela (se valores financeiros mudaram)
+    if any(k in payload for k in ['valor_total', 'valor_entrada', 'taxa_juros']):
+        v_tot = payload.get('valor_total', dados_atuais['valor_total'])
+        v_ent = payload.get('valor_entrada', dados_atuais['valor_entrada'])
+        taxa = payload.get('taxa_juros', dados_atuais['taxa_juros'])
+        n_parc = dados_atuais['numero_parcelas']
+        
+        v_fin = v_tot - v_ent
+        if taxa > 0:
+            # Fórmula Price
+            nova_parc = v_fin * (taxa * ((1 + taxa) ** n_parc)) / (((1 + taxa) ** n_parc) - 1)
+        else:
+            nova_parc = v_fin / n_parc
+        payload['valor_parcela'] = round(nova_parc, 2)
+
+    # Executa update no cabeçalho
     if payload:
-        sb.table('financiamentos').update(payload).eq('id', int(financiamento_id)).execute()
-    return buscar_financiamento_por_id(financiamento_id)
+        sb.table('financiamentos').update(payload).eq('id', fid).execute()
+
+    # 4. Atualizar Vínculos de Itens (Tabela financiamentos_itens)
+    if 'itens_ids' in kwargs and kwargs['itens_ids'] is not None:
+        # Primeiro remove os vínculos antigos
+        sb.table('financiamentos_itens').delete().eq('financiamento_id', fid).execute()
+        
+        # Insere os novos vínculos
+        for iid in kwargs['itens_ids']:
+            sb.table('financiamentos_itens').insert({
+                'financiamento_id': fid,
+                'item_id': int(iid),
+                'valor_proporcional': 0.0
+            }).execute()
+            
+        # Atualiza o item_id principal no cabeçalho (para compatibilidade)
+        if kwargs['itens_ids']:
+            sb.table('financiamentos').update({'item_id': int(kwargs['itens_ids'][0])}).eq('id', fid).execute()
+
+    # 5. Auditoria
+    auditoria.registrar_auditoria('UPDATE', 'Financiamentos', fid, valores_novos=kwargs)
+    
+    return buscar_financiamento_por_id(fid)
 
 def deletar_financiamento(financiamento_id):
     sb = get_supabase()
