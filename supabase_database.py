@@ -726,7 +726,7 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
     taxa_juros = float(taxa_juros)
     if taxa_juros >= 100:
         taxa_juros = taxa_juros / 10000
-    elif taxa_juros >= 1:
+    elif taxa_juros >= 0.001:
         taxa_juros = taxa_juros / 100
     taxa_juros = round(float(taxa_juros), 9)
     valor_financiado = round(valor_total - valor_entrada, 2)
@@ -876,7 +876,7 @@ def atualizar_financiamento(financiamento_id, **kwargs):
                 # Mesma lógica de limpeza de taxa do 'criar'
                 tj = float(kwargs[campo])
                 if tj >= 100: tj = tj / 10000
-                elif tj >= 1: tj = tj / 100
+                elif tj >= 0.001: tj = tj / 100
                 payload[campo] = round(tj, 9)
             else:
                 payload[campo] = kwargs[campo]
