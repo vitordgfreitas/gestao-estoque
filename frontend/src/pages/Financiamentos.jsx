@@ -704,12 +704,14 @@ export default function Financiamentos() {
                   >
                     <Eye size={18} />
                   </button>
-                  <button
-                    onClick={() => handleEdit(fin)}
-                    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
-                  >
-                    <Edit size={18} />
-                  </button>
+                  {/* BOTÃO DE EDITAR COMENTADO:
+  <button
+    onClick={() => handleEdit(fin)}
+    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+  >
+    <Edit size={18} />
+  </button>
+  */}
                   <button
                     onClick={() => handleDelete(fin.id)}
                     className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
