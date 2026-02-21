@@ -864,8 +864,9 @@ def atualizar_financiamento(financiamento_id, **kwargs):
 
     # 2. Preparar Payload de Atualização do Cabeçalho
     payload = {}
-    campos_diretos = ['codigo_contrato', 'valor_total', 'valor_entrada', 'taxa_juros', 
-                      'status', 'instituicao_financeira', 'observacoes']
+    campos_diretos = ['codigo_contrato', 'valor_total', 'valor_entrada', 
+                      'numero_parcelas', 'taxa_juros', 'status', 
+                      'instituicao_financeira', 'observacoes']
     
     for campo in campos_diretos:
         if campo in kwargs and kwargs[campo] is not None:

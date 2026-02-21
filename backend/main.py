@@ -494,6 +494,7 @@ class FinanciamentoUpdate(BaseModel):
     codigo_contrato: Optional[str] = None
     valor_total: Optional[float] = None
     valor_entrada: Optional[float] = None
+    numero_parcelas: Optional[int] = None
     taxa_juros: Optional[float] = None
     status: Optional[str] = None
     instituicao_financeira: Optional[str] = None
