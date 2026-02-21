@@ -105,11 +105,11 @@ export default function Financiamentos() {
       // Taxa: converte e garante que está em formato decimal (0.0155 = 1,55%)
       let taxaJuros = parseDecimalInput(formData.taxa_juros)
       // Se a taxa for >= 1, assume que o usuário digitou em % (ex: 1.55 = 1,55%), divide por 100
-      if (taxaJuros >= 0.001) {
+      if (taxaJuros >= 1) {
         taxaJuros = taxaJuros / 100
       }
       // Se a taxa for >= 0.1 (10%), provavelmente digitou errado, avisa
-      if (taxaJuros >= 0.0001) {
+      if (taxaJuros >= 0.1) {
         const confirmacao = window.confirm(
           `A taxa de juros está ${(taxaJuros * 100).toFixed(2)}% ao mês. Isso está correto?\n\n` +
           `Se você quis dizer ${(taxaJuros).toFixed(4)}%, clique em Cancelar e corrija.`
