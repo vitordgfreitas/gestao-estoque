@@ -2258,6 +2258,13 @@ async def buscar_peca_carro(associacao_id: int, token: str = Depends(verify_toke
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/stats/kpi") # Verifique se está exatamente assim
+async def obter_estatisticas_kpi(db_module = Depends(get_db)):
+    try:
+        return db_module.obter_estatisticas_kpi()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/pecas-carros/{associacao_id}", response_model=dict)
 async def atualizar_peca_carro(

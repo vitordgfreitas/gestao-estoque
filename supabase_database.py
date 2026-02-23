@@ -265,8 +265,14 @@ def listar_compromissos():
     """Lista compromissos usando a view que já traz os itens agregados em JSON"""
     sb = get_supabase()
     # Aponta para a view que criamos no SQL Editor
-    r = sb.table('view_compromissos_completo').select('*').order('data_inicio', desc=True).execute()
+    r = sb.table('view_compromissos_dashboard').select('*').order('data_inicio', desc=True).execute()
     return r.data or []
+
+def obter_estatisticas_kpi():
+    """Busca os números do topo da página de uma vez só"""
+    sb = get_supabase()
+    r = sb.table('view_sistema_stats').select('*').single().execute()
+    return r.data or {"patrimonio_total": 0, "receita_master": 0}
 def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None):
     """
     Atualiza um contrato master e sincroniza sua lista de itens.
