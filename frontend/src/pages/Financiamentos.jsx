@@ -28,6 +28,10 @@ export default function Financiamentos() {
   const [pagina, setPagina] = useState(1)
   const [totalRecords, setTotalRecords] = useState(0)
   const [busca, setBusca] = useState('')
+  const itensFiltradosCalculados = useMemo(() => {
+  if (categoriaFiltro === 'Todas') return itens;
+  return itens.filter(item => item.categoria === categoriaFiltro);
+}, [itens, categoriaFiltro]);
   const porPagina = 10
   const totalPaginas = Math.ceil(totalRecords / porPagina);
   const [formData, setFormData] = useState({
@@ -368,11 +372,11 @@ useEffect(() => {
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
                   <option value="">+ Adicionar item</option>
-                  {itensFiltrados.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {formatItemName(item)}
-                    </option>
-                  ))}
+                  {itensFiltradosCalculados.map(item => (
+  <option key={item.id} value={item.id}>
+    {formatItemName(item)}
+  </option>
+))}
                 </select>
                 
                 {/* Lista de itens selecionados */}
