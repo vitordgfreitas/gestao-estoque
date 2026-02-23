@@ -17,6 +17,7 @@ export default function VisualizarDados() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('itens')
   const [searchTerm, setSearchTerm] = useState('')
+  const [stats, setStats] = useState({ patrimonio_total: 0, receita_master: 0 })
 
   // Modais de Controle
   const [editingPecaCarro, setEditingPecaCarro] = useState(null)
@@ -40,33 +41,29 @@ export default function VisualizarDados() {
   };
 
   useEffect(() => { loadData() }, [])
+  
 
   const loadData = async () => {
-    try {
-      setLoading(true)
-      const [itensRes, compRes, catRes, pecasRes] = await Promise.all([
-        itensAPI.listar(),
-        compromissosAPI.listar(),
-        categoriasAPI.listar().catch(() => ({ data: [] })),
-        api.get('/api/pecas-carros').catch(() => ({ data: [] }))
-      ])
-      setItens(itensRes.data || [])
-      setCompromissos(compRes.data || [])
-      setCategorias(catRes.data || [])
-      setPecasCarros(pecasRes.data || [])
-    } catch (error) {
-      toast.error('Erro de sincronização. Verifique o servidor Railway.')
-    } finally {
-      setLoading(false)
-    }
+  try {
+    setLoading(true)
+    const [itensRes, compRes, catRes, pecasRes, statsRes] = await Promise.all([
+      itensAPI.listar(),
+      compromissosAPI.listar(),
+      categoriasAPI.listar().catch(() => ({ data: [] })),
+      api.get('/api/pecas-carros'), // Agora vem da view detalhada
+      api.get('/api/stats/kpi')     // Novos KPIs vindos do banco
+    ])
+    setItens(itensRes.data || [])
+    setCompromissos(compRes.data || [])
+    setCategorias(catRes.data || [])
+    setPecasCarros(pecasRes.data || [])
+    setStats(statsRes.data || { patrimonio_total: 0, receita_master: 0 })
+  } catch (error) {
+    toast.error('Erro ao sincronizar dados.')
+  } finally {
+    setLoading(false)
   }
-
-  // --- KPIs (image_7a87d9.png) ---
-  const stats = useMemo(() => {
-    const patrimonio = itens.reduce((acc, i) => acc + (Number(i.valor_compra || 0) * (i.quantidade_total || 0)), 0)
-    const receitaTotal = compromissos.reduce((acc, c) => acc + (Number(c.valor_total_contrato) || 0), 0)
-    return { patrimonio, receitaTotal }
-  }, [itens, compromissos])
+}
 
   const filteredData = useMemo(() => {
   const term = searchTerm.toLowerCase();
@@ -100,10 +97,13 @@ export default function VisualizarDados() {
     itens: sortedItens,
     compromissos: compromissos.filter(c => c.contratante?.toLowerCase().includes(term) || (c.nome_contrato || '').toLowerCase().includes(term)),
     pecas: pecasCarros.filter(pc => {
-      const v = itens.find(i => i.id === pc.carro_id)?.nome?.toLowerCase() || ''
-      const p = itens.find(i => i.id === pc.peca_id)?.nome?.toLowerCase() || ''
-      return v.includes(term) || p.includes(term)
-    })
+  const t = searchTerm.toLowerCase()
+  return (
+    pc.carro_nome?.toLowerCase().includes(t) || 
+    pc.peca_nome?.toLowerCase().includes(t) ||
+    pc.carro_placa?.toLowerCase().includes(t)
+  )
+})
   };
 }, [searchTerm, itens, compromissos, pecasCarros, sortConfig]);
 
@@ -160,8 +160,8 @@ export default function VisualizarDados() {
           <p className="text-dark-400 font-medium italic">Star Gestão • Operação Brasília, DF</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <StatMini label="Patrimônio Total" value={stats.patrimonio} isCurrency />
-          <StatMini label="Receita Master" value={stats.receitaTotal} isCurrency color="text-green-400" />
+          <StatMini label="Patrimônio Total" value={stats.patrimonio_total} isCurrency />
+          <StatMini label="Receita Master" value={stats.receita_master} isCurrency color="text-green-400" />
         </div>
       </div>
 

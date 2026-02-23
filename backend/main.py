@@ -921,33 +921,13 @@ from types import SimpleNamespace # Importe no topo do arquivo
 from types import SimpleNamespace
 from typing import List
 
+# Atualize a rota de listar compromissos para ser apenas um repasse
 @app.get("/api/compromissos", response_model=List[dict])
 async def listar_compromissos(db_module = Depends(get_db)):
-    """Lista compromissos injetando o nome real e blindando o tradutor legado"""
     try:
-        compromissos_brutos = db_module.listar_compromissos()
-        
-        resultado_final = []
-        for comp_raw in compromissos_brutos:
-            patch = {"item_id": 0, "quantidade": 0, **comp_raw}
-            comp_obj = SimpleNamespace(**patch)
-            d = compromisso_to_dict(comp_obj)
-            
-            # 2. PRIORIDADE TOTAL: Forçamos o nome real da coluna do banco
-            # Se a coluna nome_contrato existir e tiver texto, ela MANDA.
-            nome_real = comp_raw.get('nome_contrato')
-            d['nome_contrato'] = nome_real if nome_real and str(nome_real).strip() else f"Contrato #{comp_raw.get('id')}"
-            
-            # SOBREPOSIÇÃO MANUAL: Garante que os dados do seu schema novo cheguem ao front
-            # O seu compromisso_to_dict ignorava essas chaves
-            d['valor_total_contrato'] = float(comp_raw.get('valor_total_contrato') or 0)
-            d['compromisso_itens'] = comp_raw.get('compromisso_itens', [])
-            
-            resultado_final.append(d)
-            
-        return resultado_final
+        # A view já traz o formato que o front precisa (com compromisso_itens inclusos)
+        return db_module.listar_compromissos()
     except Exception as e:
-        print(f"❌ ERRO LISTAR COMPROMISSOS: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/compromissos/buscar", response_model=dict)
@@ -2202,38 +2182,37 @@ class PecaCarroResponse(BaseModel):
         from_attributes = True
 
 def peca_carro_to_dict(pc):
-    """Converte PecaCarro para dict com suporte a dicionários e objetos"""
+    """Converte PecaCarro (da View ou Tabela) para dict, preservando dados da View"""
     if not pc: return {}
     
-    # Helper para extrair dados de dict ou objeto
-    def get_val(obj, key, default=None):
-        if isinstance(obj, dict): return obj.get(key, default)
-        return getattr(obj, key, default)
+    # Se for um dicionário (que é o que a View do Supabase devolve)
+    if isinstance(pc, dict):
+        d = pc.copy()
+        
+        # Tratamento de data para não quebrar o JSON
+        if d.get('data_instalacao'):
+            dt = d['data_instalacao']
+            d['data_instalacao'] = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+            
+        # Garantimos que valores numéricos sejam float
+        if d.get('custo_na_data'):
+            d['custo_na_data'] = float(d['custo_na_data'])
+            
+        return d
 
-    # Tratamento da data de instalação
-    dt_inst = get_val(pc, 'data_instalacao')
-    if dt_inst and hasattr(dt_inst, 'isoformat'):
-        dt_inst_str = dt_inst.isoformat()
-    else:
-        dt_inst_str = str(dt_inst) if dt_inst else None
-
-    result = {
-        "id": get_val(pc, 'id'),
-        "peca_id": get_val(pc, 'peca_id'),
-        "carro_id": get_val(pc, 'carro_id'),
-        "quantidade": get_val(pc, 'quantidade', 1),
-        "data_instalacao": dt_inst_str,
-        "observacoes": get_val(pc, 'observacoes', '')
+    # Se ainda houver algum fallback para objeto de classe (SQLite/Legacy)
+    return {
+        "id": getattr(pc, 'id', None),
+        "peca_id": getattr(pc, 'peca_id', None),
+        "carro_id": getattr(pc, 'carro_id', None),
+        "quantidade": getattr(pc, 'quantidade', 1),
+        "data_instalacao": str(getattr(pc, 'data_instalacao', '')),
+        "observacoes": getattr(pc, 'observacoes', ''),
+        # Novos campos da View (se existirem no objeto)
+        "carro_nome": getattr(pc, 'carro_nome', None),
+        "peca_nome": getattr(pc, 'peca_nome', None),
+        "carro_placa": getattr(pc, 'carro_placa', None)
     }
-    
-    # Se houver dados aninhados da peça ou do carro (Joins)
-    peca_data = get_val(pc, 'peca')
-    if peca_data: result["peca"] = item_to_dict(peca_data)
-    
-    carro_data = get_val(pc, 'carro')
-    if carro_data: result["carro"] = item_to_dict(carro_data)
-    
-    return result
 @app.post("/api/pecas-carros", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def criar_peca_carro(peca_carro: PecaCarroCreate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     try:
@@ -2257,11 +2236,14 @@ async def listar_pecas_carros(
     token: str = Depends(verify_token),
     db_module = Depends(get_db)
 ):
-    """Lista associações de peças em carros com filtros opcionais"""
     try:
+        # Chama a função que agora olha para a view_manutencao_detalhada
         associacoes = db_module.listar_pecas_carros(carro_id=carro_id, peca_id=peca_id)
+        
+        # O helper peca_carro_to_dict agora deixa passar o carro_nome e peca_nome
         return [peca_carro_to_dict(pc) for pc in associacoes]
     except Exception as e:
+        print(f"❌ ERRO LISTAR MANUTENCAO: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/pecas-carros/{associacao_id}", response_model=dict)

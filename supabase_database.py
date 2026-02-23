@@ -262,14 +262,10 @@ def criar_compromisso(item_id, quantidade, data_inicio, data_fim, **kwargs):
     raise Exception("Erro ao criar compromisso")
 
 def listar_compromissos():
+    """Lista compromissos usando a view que já traz os itens agregados em JSON"""
     sb = get_supabase()
-    # Precisamos do select estendido para preencher o patch da rota
-    r = sb.table('compromissos')\
-          .select('*, compromisso_itens(*, itens(nome))')\
-          .order('data_inicio', desc=True)\
-          .execute()
-    return r.data or []
-          
+    # Aponta para a view que criamos no SQL Editor
+    r = sb.table('view_compromissos_completo').select('*').order('data_inicio', desc=True).execute()
     return r.data or []
 def atualizar_compromisso_master(compromisso_id, dados_header, lista_itens=None):
     """
@@ -528,16 +524,13 @@ def criar_peca_carro(peca_id, carro_id, quantidade=1, data_instalacao=None, obse
     return ins.data[0] # Retorna o dicionário criado
 
 def listar_pecas_carros(carro_id=None, peca_id=None):
-    sb = get_supabase(); q = sb.table('pecas_carros').select('*')
-    if carro_id: q = q.eq('carro_id', int(carro_id))
-    if peca_id: q = q.eq('peca_id', int(peca_id))
-    r = q.execute()
-    class Row:
-        def __init__(self, d):
-            self.id=d['id']; self.peca_id=d['peca_id']; self.carro_id=d['carro_id']
-            self.quantidade=d['quantidade']; self.data_instalacao=_date_parse(d['data_instalacao'])
-            self.observacoes=d.get('observacoes','')
-    return [Row(x) for x in (r.data or [])]
+    """Lista manutenções usando a view que já traz nomes de carros e peças"""
+    sb = get_supabase()
+    query = sb.table('view_manutencao_detalhada').select('*')
+    if carro_id: query = query.eq('carro_id', int(carro_id))
+    if peca_id: query = query.eq('peca_id', int(peca_id))
+    r = query.execute()
+    return r.data or []
 
 def buscar_peca_carro_por_id(associacao_id):
     sb = get_supabase()
