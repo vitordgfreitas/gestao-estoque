@@ -811,61 +811,33 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
     auditoria.registrar_auditoria('CREATE', 'Financiamentos', fin_id, valores_novos={'itens_ids': itens_ids})
     return buscar_financiamento_por_id(fin_id)
 
-def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pagina=10):
+def listar_financiamentos(status=None, q=None, pagina=None, por_pagina=10):
     sb = get_supabase()
     
-    # Adicionamos count='exact' para o front saber quantas páginas existem no total
-    query = sb.table('view_financiamentos_quitacao').select('*', count='exact').order('id', desc=True)
+    # Olhamos diretamente para a NOVA VIEW
+    query = sb.table('view_financiamentos_detalhada').select('*', count='exact').order('id', desc=True)
     
-    if status:
+    # Filtro de Status
+    if status and status != 'Todos':
         query = query.eq('status', status)
     
-    # BUSCA POR CÓDIGO DO CONTRATO
+    # Busca Global por Código (Ultra rápida com índice)
     if q:
         query = query.ilike('codigo_contrato', f'%{q}%')
         
-    if item_id:
-        fi = sb.table('financiamentos_itens').select('financiamento_id').eq('item_id', int(item_id)).execute()
-        fin_ids = [x['financiamento_id'] for x in (fi.data or [])]
-        if not fin_ids: return {"data": [], "total": 0}
-        query = query.in_('id', fin_ids)
-
-    # PAGINAÇÃO OPCIONAL
+    # Paginação (Se o front pedir)
     if pagina is not None:
         inicio = (int(pagina) - 1) * int(por_pagina)
         fim = inicio + int(por_pagina) - 1
         query = query.range(inicio, fim)
     
-    res_fin = query.execute()
+    res = query.execute()
     
-    if not res_fin.data: 
-        return {"data": [], "total": 0}
-
-    # Cache de itens (mesma lógica de performance anterior)
-    itens_res = sb.table('itens').select('id, nome').execute()
-    itens_map = {it['id']: it['nome'] for it in (itens_res.data or [])}
-
-    # Busca relações em lote para os IDs retornados
-    todos_fin_ids = [f['id'] for f in res_fin.data]
-    rel_res = sb.table('financiamentos_itens').select('*').in_('financiamento_id', todos_fin_ids).execute()
-    
-    relacoes_map = {}
-    for rel in (rel_res.data or []):
-        fid = rel['financiamento_id']
-        iid = rel['item_id']
-        if fid not in relacoes_map: relacoes_map[fid] = []
-        relacoes_map[fid].append({
-            'id': iid,
-            'nome': itens_map.get(iid, f"Item #{iid}"),
-            'valor': float(rel.get('valor_proporcional') or 0)
-        })
-
-    # Mapeia os resultados
-    lista_final = [_row_to_financiamento_otimizado(row, relacoes_map.get(row['id'], [])) for row in res_fin.data]
-    
+    # IMPORTANTE: Como a View já traz 'itens_json', 
+    # o Python só repassa. Zero processamento extra!
     return {
-        "data": lista_final,
-        "total": res_fin.count # Total de registros no banco (sem paginação)
+        "data": res.data, 
+        "total": res.count
     }
 
 def _row_to_financiamento_otimizado(row, itens_pre_carregados):

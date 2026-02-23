@@ -1780,6 +1780,18 @@ def financiamento_to_dict(fin):
     """Converte Financiamento para dict pegando todas as colunas existentes"""
     if not fin: return {}
     
+    # Se for o dicionário direto da View do Supabase
+    if isinstance(fin, dict):
+        d = fin.copy()
+        # Renomeia para manter compatibilidade com seu Front-end atual
+        if 'itens_json' in d:
+            d['itens'] = d.pop('itens_json')
+        
+        # Garante que campos numéricos sejam float
+        for col in ['valor_total', 'valor_entrada', 'valor_parcela', 'saldo_devedor_nominal', 'valor_quitacao_estimado']:
+            if col in d:
+                d[col] = float(d[col] or 0)
+        return d
     # Se for um objeto de classe (como o do Supabase), pegamos o dicionário interno
     if hasattr(fin, '__dict__'):
         dados_base = fin.__dict__.copy()
