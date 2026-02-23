@@ -418,7 +418,10 @@ function StatMini({ label, value, isCurrency, color = "text-dark-50" }) {
     <div className="bg-dark-800/80 border border-dark-700 px-6 py-4 rounded-3xl min-w-[170px] shadow-xl">
       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dark-500 mb-2">{label}</p>
       <p className={`text-2xl font-black ${color}`}>
-        {isCurrency ? `R$ ${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}` : value}
+        {/* Adicione (value || 0) antes do .toLocaleString */}
+        {isCurrency 
+          ? `R$ ${(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}` 
+          : (value || 0)}
       </p>
     </div>
   )
