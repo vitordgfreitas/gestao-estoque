@@ -22,6 +22,11 @@ export default function Financiamentos() {
   const [parcelasFixas, setParcelasFixas] = useState(true)
   const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
   const [selectedItens, setSelectedItens] = useState([])  // Array de {id, nome, valor}
+  const [pagina, setPagina] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [busca, setBusca] = useState('')
+  const porPagina = 10
+  const totalPaginas = Math.ceil(totalRecords / porPagina);
   const [formData, setFormData] = useState({
     item_id: '',
     codigo_contrato: '',
@@ -34,32 +39,16 @@ export default function Financiamentos() {
     observacoes: ''
   })
 
-  useEffect(() => {
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      // Carrega ambos em paralelo - muito mais rápido
-      await Promise.all([
-        loadItens(),
-        loadFinanciamentos()
-      ]);
-    } catch (error) {
-      console.error("Erro na carga inicial", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  
 
-  loadData();
-}, [filtroStatus]);
+useEffect(() => {
+    loadItens()
+  }, [])
 
+  // 2. Carrega os FINANCIAMENTOS sempre que mudar página, status ou busca
   useEffect(() => {
-    if (categoriaFiltro === 'Todas') {
-      setItensFiltrados(itens)
-    } else {
-      setItensFiltrados(itens.filter(i => i.categoria === categoriaFiltro))
-    }
-  }, [categoriaFiltro, itens])
+    loadFinanciamentos()
+  }, [pagina, filtroStatus, busca])
 
   const loadItens = async () => {
     try {
@@ -73,9 +62,17 @@ export default function Financiamentos() {
   const loadFinanciamentos = async () => {
     try {
       setLoading(true)
-      const params = filtroStatus !== 'Todos' ? { status: filtroStatus } : {}
+      const params = {
+        pagina: pagina,
+        por_pagina: porPagina,
+        q: busca, 
+        ...(filtroStatus !== 'Todos' && { status: filtroStatus })
+      }
       const response = await financiamentosAPI.listar(params)
-      setFinanciamentos(response.data || [])
+      
+      // O backend otimizado agora retorna data e total
+      setFinanciamentos(response.data.data || [])
+      setTotalRecords(response.data.total || 0)
     } catch (error) {
       toast.error('Erro ao carregar financiamentos')
     } finally {
@@ -291,22 +288,41 @@ export default function Financiamentos() {
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-        <div className="text-sm text-dark-400">Filtrar por status</div>
-        <div className="flex flex-col xs:flex-row gap-3">
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="px-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white max-w-xs"
-          >
-            <option value="Todos">Todos</option>
-            <option value="Ativo">Ativos</option>
-            <option value="Quitado">Quitados</option>
-            <option value="Cancelado">Cancelados</option>
-          </select>
-        </div>
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+  {/* Campo de Busca (Ocupa 3/4 do espaço em telas grandes) */}
+  <div className="md:col-span-3">
+    <label className="text-[10px] font-black text-dark-500 uppercase ml-2 mb-1 block tracking-widest">
+      Buscar Contrato
+    </label>
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" size={18} />
+      <input 
+        type="text" 
+        placeholder="Digite o código do contrato (Ex: CTR-2026)..."
+        className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+        value={busca}
+        onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
+      />
+    </div>
+  </div>
+
+  {/* Filtro de Status (Ocupa 1/4 do espaço) */}
+  <div>
+    <label className="text-[10px] font-black text-dark-500 uppercase ml-2 mb-1 block tracking-widest">
+      Filtrar Status
+    </label>
+    <select
+      value={filtroStatus}
+      onChange={(e) => { setFiltroStatus(e.target.value); setPagina(1); }}
+      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-primary-500"
+    >
+      <option value="Todos">Todos</option>
+      <option value="Ativo">Ativos</option>
+      <option value="Quitado">Quitados</option>
+      <option value="Cancelado">Cancelados</option>
+    </select>
+  </div>
+</div>
 
       {/* Formulário */}
       {showForm && (
@@ -738,6 +754,28 @@ export default function Financiamentos() {
           ))}
         </div>
       )}
+      {totalPaginas > 1 && (
+  <div className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-dark-700 mt-6">
+    <p className="text-sm text-dark-400">Total: {totalRecords} contratos</p>
+    <div className="flex gap-2">
+      <button 
+        disabled={pagina === 1} 
+        onClick={() => setPagina(p => p - 1)}
+        className="p-2 bg-dark-700 rounded disabled:opacity-30"
+      >
+        <ChevronLeft />
+      </button>
+      <span className="px-4 py-2 text-white font-bold">{pagina} / {totalPaginas}</span>
+      <button 
+        disabled={pagina === totalPaginas} 
+        onClick={() => setPagina(p => p + 1)}
+        className="p-2 bg-dark-700 rounded disabled:opacity-30"
+      >
+        <ChevronRight />
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Modal de Detalhes */}
       {selectedFinanciamento && !showForm && (
