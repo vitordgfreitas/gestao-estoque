@@ -177,17 +177,51 @@ def atualizar_item(item_id, nome, quantidade_total, categoria=None, **kwargs):
     return buscar_item_por_id(item_id)
 
 def listar_itens():
-    sb = get_supabase(); r = sb.table('itens').select('*').execute()
-    itens = []
-    for row in (r.data or []):
-        iid = row['id']; slug = _slug_categoria(row['categoria']); d_spec = {}
-        if slug and slug != 'itens':
-            try:
-                r_s = sb.table(slug).select('*').eq('item_id', iid).execute()
-                if r_s.data: d_spec = {_labelify_column(k): v for k, v in r_s.data[0].items() if k not in ['id', 'item_id']}
-            except: pass
-        itens.append(_row_to_item(row, dados_categoria={**row.get('dados_categoria', {}), **d_spec}))
-    return itens
+    """
+    Busca todos os itens e seus dados extras de categoria em LOTE (Batch).
+    Reduz centenas de queries para apenas 1 query por categoria.
+    """
+    sb = get_supabase()
+    # 1. Busca todos os itens base
+    r = sb.table('itens').select('*').execute()
+    if not r.data: return []
+    
+    itens_raw = r.data
+    # 2. Agrupamos os IDs por categoria para buscar extras de uma vez só
+    categorias_map = {}
+    for row in itens_raw:
+        cat = row.get('categoria')
+        if cat:
+            slug = _slug_categoria(cat)
+            if slug and slug != 'itens':
+                if slug not in categorias_map: categorias_map[slug] = []
+                categorias_map[slug].append(row['id'])
+
+    # 3. Busca dados extras de cada categoria em UMA única query por tabela
+    extras_por_item = {}
+    for slug, ids in categorias_map.items():
+        try:
+            # Em vez de 1 query por item, 1 query para TODOS os IDs da categoria
+            r_s = sb.table(slug).select('*').in_('item_id', ids).execute()
+            if r_s.data:
+                for extra_row in r_s.data:
+                    iid = extra_row.get('item_id')
+                    extras_por_item[iid] = {
+                        _labelify_column(k): v 
+                        for k, v in extra_row.items() 
+                        if k not in ['id', 'item_id']
+                    }
+        except: continue
+
+    # 4. Monta a lista final mesclando os dados na memória
+    resultado = []
+    for row in itens_raw:
+        iid = row['id']
+        meus_extras = extras_por_item.get(iid, {})
+        dados_finais = {**row.get('dados_categoria', {}), **meus_extras}
+        resultado.append(_row_to_item(row, dados_categoria=dados_finais))
+        
+    return resultado
 
 def buscar_item_por_id(item_id):
     sb = get_supabase(); r = sb.table('itens').select('*').eq('id', int(item_id)).execute()
@@ -591,6 +625,9 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
     }
 
 def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None, **kwargs):
+    """
+    Otimizado para reduzir o processamento dentro do loop de datas.
+    """
     item = buscar_item_por_id(item_id)
     if not item: return None
     
@@ -598,75 +635,57 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_co
     d_fim = _date_parse(data_fim)
     sb = get_supabase()
     
-    # CORREÇÃO: Forçamos a query a olhar APENAS para a tabela de relação.
-    # Se o erro 500 persistir, verifique se a VIEW 'view_saude_ativo' foi realmente recriada.
+    # Busca todas as relações e compromissos do item de uma vez só
     r = sb.table('compromisso_itens') \
-      .select('quantidade, compromissos(id, data_inicio, data_fim)') \
-      .eq('item_id', item_id) \
-      .execute()
-    
-    dados_relacionamento = r.data or []
+          .select('quantidade, compromissos(id, data_inicio, data_fim)') \
+          .eq('item_id', item_id) \
+          .execute()
     
     todos_comps = []
-    for rel in dados_relacionamento:
+    for rel in (r.data or []):
         raw_comp = rel.get('compromissos')
         if not raw_comp: continue
         
-        # Criamos um objeto "on-the-fly" para o motor de data funcionar
-        # sem depender de mappers antigos que podem estar buscando colunas deletadas
-        from types import SimpleNamespace
         comp_obj = SimpleNamespace(
             id=raw_comp['id'],
             data_inicio=_date_parse(raw_comp['data_inicio']),
             data_fim=_date_parse(raw_comp['data_fim']),
             quantidade=int(rel.get('quantidade', 0))
         )
-        todos_comps.append(comp_obj)
+        # Filtra logo aqui
+        if comp_obj.data_inicio <= d_fim and comp_obj.data_fim >= d_ini:
+            if not (excluir_compromisso_id and comp_obj.id == int(excluir_compromisso_id)):
+                todos_comps.append(comp_obj)
     
-    # Filtra apenas os que batem com o período
-    comps = [
-        c for c in todos_comps 
-        if c.data_inicio <= d_fim and c.data_fim >= d_ini
-    ]
-    
-    # Exclui o contrato atual em caso de edição
-    if excluir_compromisso_id:
-        comps = [c for c in comps if c.id != int(excluir_compromisso_id)]
-    
-    # 2. Busca peças instaladas (mantendo sua lógica original)
+    # Busca peças instaladas
     pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', item_id).execute()
     pecas_data = pecas_r.data or []
-    
+    for p in pecas_data:
+        p['dt_parsed'] = _date_parse(p['data_instalacao'])
+
     max_occ = 0
-    total_alugado_no_pico = 0  # <--- NOVA VARIÁVEL
-    total_instalado_no_pico = 0 # <--- NOVA VARIÁVEL
+    total_alugado_no_pico = 0
+    total_instalado_no_pico = 0
     curr = d_ini
     
-    # 3. Motor de estoque dia a dia (mantendo sua lógica original)
+    # O loop agora só faz cálculos matemáticos, sem acessar o banco
     while curr <= d_fim:
-        # Soma o que está alugado (agora pegando a quantidade correta do Master)
-        dia_alugado = sum(c.quantidade for c in comps if c.data_inicio <= curr <= c.data_fim)
-        
-        # Soma o que está instalado em carros
-        dia_instalado = sum(
-            p['quantidade'] for p in pecas_data 
-            if p['data_instalacao'] is None or _date_parse(p['data_instalacao']) <= curr
-        )
+        dia_alugado = sum(c.quantidade for c in todos_comps if c.data_inicio <= curr <= c.data_fim)
+        dia_instalado = sum(p['quantidade'] for p in pecas_data if p['dt_parsed'] is None or p['dt_parsed'] <= curr)
         
         ocupacao_hoje = dia_alugado + dia_instalado
-        if ocupacao_hoje >= max_occ:
+        if ocupacao_hoje > max_occ:
             max_occ = ocupacao_hoje
             total_alugado_no_pico = dia_alugado
             total_instalado_no_pico = dia_instalado
         curr += timedelta(days=1)
     
-    # Retorno idêntico ao original para não quebrar o Frontend
     return {
         'item': item, 
         'quantidade_total': item.quantidade_total, 
         'max_comprometido': max_occ, 
-        'qtd_alugada': total_alugado_no_pico,   # <--- RETORNO ADICIONAL
-        'qtd_instalada': total_instalado_no_pico, # <--- RETORNO ADICIONAL
+        'qtd_alugada': total_alugado_no_pico,
+        'qtd_instalada': total_instalado_no_pico,
         'disponivel_minimo': max(0, item.quantidade_total - max_occ)
     }
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
@@ -877,13 +896,26 @@ def _row_to_financiamento_otimizado(row, itens_pre_carregados):
     return Financiamento(row, itens_pre_carregados)
 
 def _financiamento_itens_list(financiamento_id):
+    """
+    Otimizado: Busca apenas os itens necessários para este financiamento específico,
+    sem carregar a lista de itens inteira do banco.
+    """
+    sb = get_supabase()
+    # Pega as relações
     fi = listar_itens_financiamento(financiamento_id)
-    todos = listar_itens()
+    if not fi: return []
+    
+    item_ids = [x['item_id'] for x in fi]
+    # Busca apenas esses itens específicos
+    res_itens = sb.table('itens').select('id, nome').in_('id', item_ids).execute()
+    
+    itens_map = {it['id']: it['nome'] for it in (res_itens.data or [])}
+    
     out = []
     for x in fi:
-        item = next((i for i in todos if i.id == x['item_id']), None)
-        if item:
-            out.append({'id': item.id, 'nome': item.nome, 'valor': x['valor_proporcional']})
+        iid = x['item_id']
+        if iid in itens_map:
+            out.append({'id': iid, 'nome': itens_map[iid], 'valor': x['valor_proporcional']})
     return out
 
 def buscar_financiamento_por_id(financiamento_id):
