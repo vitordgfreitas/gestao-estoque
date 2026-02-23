@@ -623,101 +623,54 @@ def verificar_disponibilidade(item_id, data_consulta, filtro_loc=None):
         'compromissos_ativos': comps_objetos 
     }
 
-def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim, excluir_compromisso_id=None, **kwargs):
-    """
-    Otimizado para reduzir o processamento dentro do loop de datas.
-    """
+def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim):
+    sb = get_supabase()
+    
+    # 1. Busca os dados do item para o cabeçalho
     item = buscar_item_por_id(item_id)
     if not item: return None
-    
-    d_ini = _date_parse(data_inicio)
-    d_fim = _date_parse(data_fim)
-    sb = get_supabase()
-    
-    # Busca todas as relações e compromissos do item de uma vez só
-    r = sb.table('compromisso_itens') \
-          .select('quantidade, compromissos(id, data_inicio, data_fim)') \
-          .eq('item_id', item_id) \
-          .execute()
-    
-    todos_comps = []
-    for rel in (r.data or []):
-        raw_comp = rel.get('compromissos')
-        if not raw_comp: continue
-        
-        comp_obj = SimpleNamespace(
-            id=raw_comp['id'],
-            data_inicio=_date_parse(raw_comp['data_inicio']),
-            data_fim=_date_parse(raw_comp['data_fim']),
-            quantidade=int(rel.get('quantidade', 0))
-        )
-        # Filtra logo aqui
-        if comp_obj.data_inicio <= d_fim and comp_obj.data_fim >= d_ini:
-            if not (excluir_compromisso_id and comp_obj.id == int(excluir_compromisso_id)):
-                todos_comps.append(comp_obj)
-    
-    # Busca peças instaladas
-    pecas_r = sb.table('pecas_carros').select('quantidade, data_instalacao').eq('peca_id', item_id).execute()
-    pecas_data = pecas_r.data or []
-    for p in pecas_data:
-        p['dt_parsed'] = _date_parse(p['data_instalacao'])
 
-    max_occ = 0
-    total_alugado_no_pico = 0
-    total_instalado_no_pico = 0
-    curr = d_ini
-    
-    # O loop agora só faz cálculos matemáticos, sem acessar o banco
-    while curr <= d_fim:
-        dia_alugado = sum(c.quantidade for c in todos_comps if c.data_inicio <= curr <= c.data_fim)
-        dia_instalado = sum(p['quantidade'] for p in pecas_data if p['dt_parsed'] is None or p['dt_parsed'] <= curr)
-        
-        ocupacao_hoje = dia_alugado + dia_instalado
-        if ocupacao_hoje > max_occ:
-            max_occ = ocupacao_hoje
-            total_alugado_no_pico = dia_alugado
-            total_instalado_no_pico = dia_instalado
-        curr += timedelta(days=1)
-    
+    # 2. Chama a RPC que calcula o pico de ocupação no período
+    res = sb.rpc('get_disponibilidade_periodo', {
+        'p_item_id': int(item_id),
+        'p_start_date': str(data_inicio),
+        'p_end_date': str(data_fim)
+    }).execute()
+
+    if not res.data: return None
+    dados = res.data[0]
+
+    # 3. Formata exatamente como o seu componente React espera
     return {
-        'item': item, 
-        'quantidade_total': item.quantidade_total, 
-        'max_comprometido': max_occ, 
-        'qtd_alugada': total_alugado_no_pico,
-        'qtd_instalada': total_instalado_no_pico,
-        'disponivel_minimo': max(0, item.quantidade_total - max_occ)
+        "item": item,
+        "quantidade_total": dados['quantidade_total'],
+        "max_comprometido": dados['max_alugado'], 
+        "qtd_alugada": dados['max_alugado'],
+        "qtd_instalada": dados['max_instalado'],
+        "disponivel_minimo": max(0, dados['disponivel_minimo'])
     }
+
 def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
-    """Varre todos os itens calculando disponibilidade na data via Master Contract"""
     sb = get_supabase()
     
-    # 1. Busca todos os itens (Ativos)
-    query = sb.table('itens').select('*')
+    # Chamada mágica: executa o cálculo de TODOS os itens no banco de uma vez
+    res = sb.rpc('get_disponibilidade_estoque', {'p_data_consulta': str(data_consulta)}).execute()
+    
+    dados = res.data or []
+    
+    # Filtro de localização (opcional, feito na memória do servidor para ser rápido)
     if filtro_localizacao and filtro_localizacao != 'Todas as Localizações':
         cidade, uf = filtro_localizacao.split(' - ')
-        query = query.eq('cidade', cidade).eq('uf', uf)
-    
-    res_itens = query.execute()
-    lista_itens = res_itens.data or []
-    
-    resultados = []
-    for item in lista_itens:
-        # Reutilizamos a lógica MASTER que já está corrigida
-        # Ela olha para compromisso_itens e não para a coluna deletada
-        status = verificar_disponibilidade_periodo(
-            item_id=item['id'],
-            data_inicio=data_consulta,
-            data_fim=data_consulta
-        )
-        
-        resultados.append({
-            'item': SimpleNamespace(**item), # Objeto para o tradutor
-            'quantidade_total': status['quantidade_total'],
-            'quantidade_comprometida': status['max_comprometido'],
-            'quantidade_disponivel': status['disponivel_minimo'],
-        })
-        
-    return resultados
+        dados = [r for r in dados if r['cidade'] == cidade and r['uf'] == uf]
+
+    # Formata no padrão que o seu Front-end já espera (com o objeto item aninhado)
+    return [{
+        "item": {"id": r['id'], "nome": r['nome'], "categoria": r['categoria'], "cidade": r['cidade'], "uf": r['uf']},
+        "quantidade_total": r['quantidade_total'],
+        "quantidade_comprometida": r['quantidade_comprometida'],
+        "quantidade_instalada": r['quantidade_instalada'],
+        "quantidade_disponivel": r['quantidade_disponivel']
+    } for r in dados]
 
 
 # ---------- Financiamentos ----------

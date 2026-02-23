@@ -1117,73 +1117,24 @@ from typing import Optional # Adicione no topo se não tiver
 
 @app.get("/api/disponibilidade")
 async def verificar_disponibilidade(
-    item_id: Optional[int] = None, 
-    data_consulta: Optional[str] = None, 
-    data_inicio: Optional[str] = None, 
+    data_consulta: Optional[str] = None,
+    data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
-    filtro_categoria: Optional[str] = None, 
-    filtro_localizacao: Optional[str] = None,
+    item_id: Optional[int] = None,
     db_module = Depends(get_db)
 ):
-    try:
-        # Mapeamento de Datas: 
-        # Se vier data_consulta (Dashboard), usamos ela como início e fim.
-        # Se vierem data_inicio/fim (Registro), usamos elas.
+    # Caso 1: Item específico por período (Usado no "Registrar Compromisso" ou busca detalhada)
+    if item_id and (data_inicio or data_consulta):
         inicio = data_inicio or data_consulta
         fim = data_fim or data_consulta
+        return db_module.verificar_disponibilidade_periodo(item_id, inicio, fim)
 
-        if not inicio:
-            raise HTTPException(status_code=400, detail="Data não informada")
-
-        # 1. CASO: CONSULTA DE ITEM ESPECÍFICO (Seja no Dashboard ou no Registro)
-        if item_id:
-            resultado = db_module.verificar_disponibilidade_periodo(
-                item_id=item_id,
-                data_inicio=inicio,
-                data_fim=fim
-            )
-            
-            if not resultado:
-                raise HTTPException(status_code=404, detail="Item não encontrado")
-            
-            return {
-                "item": item_to_dict(resultado['item']),
-                "quantidade_total": resultado['quantidade_total'],
-                "max_comprometido": resultado['max_comprometido'],
-                "quantidade_comprometida": resultado['qtd_alugada'], # <--- AQUI
-                "quantidade_instalada": resultado['qtd_instalada'],
-                "quantidade_disponivel": resultado['disponivel_minimo'], # Chave para o Front
-                "compromissos_ativos": [compromisso_to_dict(c) for c in resultado.get('compromissos_atuais', [])]
-            }
-            
-        # 2. CASO: DASHBOARD "VER TUDO" (item_id é None)
-        else:
-            resultados = db_module.verificar_disponibilidade_todos_itens(
-                inicio, # Usando a data tratada
-                filtro_localizacao
-            )
-            
-            if filtro_categoria and filtro_categoria != 'Todas as Categorias':
-                resultados = [
-                    r for r in resultados
-                    if getattr(r['item'], 'categoria', '') == filtro_categoria
-                ]
-            
-            return {
-                "resultados": [
-                    {
-                        "item": item_to_dict(r['item']),
-                        "quantidade_total": r['quantidade_total'],
-                        "quantidade_comprometida": r['quantidade_comprometida'],
-                        "quantidade_disponivel": r['quantidade_disponivel']
-                    } for r in resultados
-                ]
-            }
-
-    except Exception as e:
-        print(f"❌ ERRO 422/500 DISPONIBILIDADE: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    # Caso 2: Ver Tudo (Dashboard de Disponibilidade)
+    if data_consulta:
+        lista = db_module.verificar_disponibilidade_todos_itens(data_consulta)
+        return {"resultados": lista}
+        
+    raise HTTPException(status_code=400, detail="Parâmetros insuficientes")
 # ============= CATEGORIAS E CAMPOS =============
 
 @app.get("/api/categorias", response_model=List[str])
