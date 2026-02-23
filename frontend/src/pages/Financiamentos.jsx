@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { financiamentosAPI, itensAPI } from '../services/api'
-import { Plus, DollarSign, Calendar, Building2, Trash2, Edit, Eye } from 'lucide-react'
+import { 
+  Plus, DollarSign, Calendar, Building2, Trash2, Edit, Eye, 
+  Search, ChevronLeft, ChevronRight 
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
