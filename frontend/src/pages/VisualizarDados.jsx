@@ -384,7 +384,29 @@ export default function VisualizarDados() {
       
       <ConfirmDialog isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} onConfirm={() => itensAPI.deletar(deletingItem.id).then(loadData)} title="Excluir Ativo" />
       <ConfirmDialog isOpen={!!deletingCompromisso} onClose={() => setDeletingCompromisso(null)} onConfirm={handleDeleteCompromisso} title="Remover Contrato" message="Atenção: Isso removerá o contrato, os itens vinculados e o registro financeiro associado." />
+      {editingPecaCarro && (
+  <EditPecaCarroModal 
+    pc={editingPecaCarro} 
+    onClose={() => setEditingPecaCarro(null)} 
+    onSave={async (data) => {
+      try {
+        await api.put(`/api/pecas-carros/${editingPecaCarro.id}`, data);
+        toast.success('Manutenção atualizada!');
+        setEditingPecaCarro(null);
+        loadData();
+      } catch (e) { toast.error('Erro ao atualizar'); }
+    }}
+  />
+)}
 
+{/* Diálogo de Exclusão de Manutenção */}
+<ConfirmDialog 
+  isOpen={!!deletingPecaCarro} 
+  onClose={() => setDeletingPecaCarro(null)} 
+  onConfirm={handleDeletePecaCarro} 
+  title="Remover Peça Instalada" 
+  message="Deseja realmente remover esta peça? Ela voltará automaticamente para o estoque disponível." 
+/>
     </div>
   )
 }
@@ -595,6 +617,48 @@ function EditItemModal({ item, categorias, onClose, onSave }) {
   )
 }
 
+function EditPecaCarroModal({ pc, onClose, onSave }) {
+  const [qtd, setQtd] = useState(pc.quantidade);
+  const [dataInst, setDataInst] = useState(pc.data_instalacao?.split('T')[0] || '');
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title="Ajustar Instalação">
+      <div className="space-y-4">
+        <div>
+          <p className="text-[10px] font-black text-dark-500 uppercase mb-1">Veículo / Peça</p>
+          <p className="text-white font-bold">{pc.carro_nome} / {pc.peca_nome}</p>
+        </div>
+        
+        <div>
+          <label className="label">Quantidade Instalada</label>
+          <input 
+            type="number" 
+            className="input" 
+            value={qtd} 
+            onChange={e => setQtd(e.target.value)} 
+          />
+        </div>
+
+        <div>
+          <label className="label">Data da Manutenção</label>
+          <input 
+            type="date" 
+            className="input" 
+            value={dataInst} 
+            onChange={e => setDataInst(e.target.value)} 
+          />
+        </div>
+
+        <button 
+          onClick={() => onSave({ quantidade: parseInt(qtd), data_instalacao: dataInst })}
+          className="btn btn-primary w-full py-3 font-black uppercase"
+        >
+          Salvar Alterações
+        </button>
+      </div>
+    </Modal>
+  );
+}
 function ViewItemModal({ item, onClose }) {
   return (
     <Modal isOpen={true} onClose={onClose} title="Ficha Técnica Completa">
