@@ -35,9 +35,23 @@ export default function Financiamentos() {
   })
 
   useEffect(() => {
-    loadFinanciamentos()
-    loadItens()
-  }, [filtroStatus])
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      // Carrega ambos em paralelo - muito mais rápido
+      await Promise.all([
+        loadItens(),
+        loadFinanciamentos()
+      ]);
+    } catch (error) {
+      console.error("Erro na carga inicial", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadData();
+}, [filtroStatus]);
 
   useEffect(() => {
     if (categoriaFiltro === 'Todas') {
