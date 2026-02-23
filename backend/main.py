@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from types import SimpleNamespace
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 import os
@@ -148,7 +149,15 @@ app = FastAPI(
     description="API para sistema de gestão de estoque e aluguéis",
     version="1.0.0"
 )
+app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Em produção, mude para seu domínio do Railway
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Limpa cache ao iniciar (força recarregamento dos dados)
 @app.on_event("startup")
 async def startup_event():
@@ -1117,24 +1126,31 @@ from typing import Optional # Adicione no topo se não tiver
 
 @app.get("/api/disponibilidade")
 async def verificar_disponibilidade(
-    data_consulta: Optional[str] = None,
-    data_inicio: Optional[str] = None,
-    data_fim: Optional[str] = None,
+    data_consulta: str, 
     item_id: Optional[int] = None,
+    filtro_categoria: Optional[str] = None, # Nome exato do front
+    filtro_localizacao: Optional[str] = None, # Nome exato do front
     db_module = Depends(get_db)
 ):
-    # Caso 1: Item específico por período (Usado no "Registrar Compromisso" ou busca detalhada)
-    if item_id and (data_inicio or data_consulta):
-        inicio = data_inicio or data_consulta
-        fim = data_fim or data_consulta
-        return db_module.verificar_disponibilidade_periodo(item_id, inicio, fim)
-
-    # Caso 2: Ver Tudo (Dashboard de Disponibilidade)
-    if data_consulta:
-        lista = db_module.verificar_disponibilidade_todos_itens(data_consulta)
-        return {"resultados": lista}
+    try:
+        # Busca a lista completa já filtrada
+        resultados = db_module.verificar_disponibilidade_todos_itens(
+            data_consulta, filtro_localizacao, filtro_categoria
+        )
         
-    raise HTTPException(status_code=400, detail="Parâmetros insuficientes")
+        # Se o usuário pediu um item específico, filtramos na lista
+        if item_id:
+            item_unico = next((r for r in resultados if r['item']['id'] == item_id), None)
+            if not item_unico:
+                raise HTTPException(status_code=404, detail="Item não encontrado ou fora dos filtros")
+            return item_unico
+            
+        # Caso contrário, retorna a lista para o "Ver Tudo"
+        return {"resultados": resultados}
+        
+    except Exception as e:
+        print(f"❌ Erro Disponibilidade: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 # ============= CATEGORIAS E CAMPOS =============
 
 @app.get("/api/categorias", response_model=List[str])

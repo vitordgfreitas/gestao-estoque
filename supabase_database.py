@@ -650,20 +650,25 @@ def verificar_disponibilidade_periodo(item_id, data_inicio, data_fim):
         "disponivel_minimo": max(0, dados['disponivel_minimo'])
     }
 
-def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None):
+def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None, filtro_categoria=None):
     sb = get_supabase()
     
-    # Chamada mágica: executa o cálculo de TODOS os itens no banco de uma vez
+    # Chama a função SQL (RPC) que calcula tudo no banco
     res = sb.rpc('get_disponibilidade_estoque', {'p_data_consulta': str(data_consulta)}).execute()
-    
     dados = res.data or []
     
-    # Filtro de localização (opcional, feito na memória do servidor para ser rápido)
-    if filtro_localizacao and filtro_localizacao != 'Todas as Localizações':
-        cidade, uf = filtro_localizacao.split(' - ')
-        dados = [r for r in dados if r['cidade'] == cidade and r['uf'] == uf]
+    # --- FILTRO DE CATEGORIA (O QUE ESTAVA FALTANDO) ---
+    if filtro_categoria and filtro_categoria != 'Todas as Categorias':
+        dados = [r for r in dados if r['categoria'] == filtro_categoria]
 
-    # Formata no padrão que o seu Front-end já espera (com o objeto item aninhado)
+    # --- FILTRO DE LOCALIZAÇÃO ---
+    if filtro_localizacao and filtro_localizacao != 'Todas as Localizações':
+        try:
+            cidade, uf = filtro_localizacao.split(' - ')
+            dados = [r for r in dados if r['cidade'] == cidade and r['uf'] == uf]
+        except:
+            pass # Caso o formato da string esteja diferente
+
     return [{
         "item": {"id": r['id'], "nome": r['nome'], "categoria": r['categoria'], "cidade": r['cidade'], "uf": r['uf']},
         "quantidade_total": r['quantidade_total'],
@@ -671,7 +676,6 @@ def verificar_disponibilidade_todos_itens(data_consulta, filtro_localizacao=None
         "quantidade_instalada": r['quantidade_instalada'],
         "quantidade_disponivel": r['quantidade_disponivel']
     } for r in dados]
-
 
 # ---------- Financiamentos ----------
 def criar_financiamento_item(financiamento_id, item_id, valor_proporcional=0.0):
