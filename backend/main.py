@@ -1126,30 +1126,42 @@ from typing import Optional # Adicione no topo se não tiver
 
 @app.get("/api/disponibilidade")
 async def verificar_disponibilidade(
-    data_consulta: str, 
+    # Tornamos todos opcionais para o FastAPI não dar erro 422
+    data_consulta: Optional[str] = None, 
+    data_inicio: Optional[str] = None,
+    data_fim: Optional[str] = None,
     item_id: Optional[int] = None,
-    filtro_categoria: Optional[str] = None, # Nome exato do front
-    filtro_localizacao: Optional[str] = None, # Nome exato do front
+    filtro_categoria: Optional[str] = None,
+    filtro_localizacao: Optional[str] = None,
     db_module = Depends(get_db)
 ):
     try:
-        # Busca a lista completa já filtrada
-        resultados = db_module.verificar_disponibilidade_todos_itens(
-            data_consulta, filtro_localizacao, filtro_categoria
-        )
-        
-        # Se o usuário pediu um item específico, filtramos na lista
-        if item_id:
-            item_unico = next((r for r in resultados if r['item']['id'] == item_id), None)
-            if not item_unico:
-                raise HTTPException(status_code=404, detail="Item não encontrado ou fora dos filtros")
-            return item_unico
+        # CASO A: Verificação de PERÍODO (Chamada pelo botão "Adicionar" do carrinho)
+        if item_id and (data_inicio and data_fim):
+            # Chama a função que criamos para o pior cenário do período
+            return db_module.verificar_disponibilidade_periodo(item_id, data_inicio, data_fim)
+
+        # CASO B: Verificação de DATA ÚNICA (Chamada pelo Dashboard/Visualizar)
+        if data_consulta:
+            resultados = db_module.verificar_disponibilidade_todos_itens(
+                data_consulta, filtro_localizacao, filtro_categoria
+            )
             
-        # Caso contrário, retorna a lista para o "Ver Tudo"
-        return {"resultados": resultados}
-        
+            # Se for um item específico na data única
+            if item_id:
+                item_unico = next((r for r in resultados if r['item']['id'] == item_id), None)
+                if not item_unico:
+                    raise HTTPException(status_code=404, detail="Item não encontrado")
+                return item_unico
+            
+            # Se for a lista completa
+            return {"resultados": resultados}
+            
+        # Se não mandou nem data_consulta nem o par inicio/fim
+        raise HTTPException(status_code=400, detail="Faltam parâmetros de data (data_consulta ou data_inicio/fim)")
+
     except Exception as e:
-        print(f"❌ Erro Disponibilidade: {str(e)}")
+        print(f"❌ Erro na API de Disponibilidade: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 # ============= CATEGORIAS E CAMPOS =============
 
