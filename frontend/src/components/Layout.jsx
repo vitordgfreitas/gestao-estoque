@@ -106,7 +106,7 @@ export default function Layout({ children }) {
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 flex">
+    <div className="h-screen bg-dark-900 flex overflow-hidden">
       {/* Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -127,7 +127,7 @@ export default function Layout({ children }) {
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed md:static h-screen w-[280px] bg-dark-800 border-r border-dark-700 flex flex-col z-50"
+              className="fixed md:static h-full w-[280px] bg-dark-800 border-r border-dark-700 flex flex-col z-50 overflow-y-auto"
             >
               {/* Logo */}
               <div className="p-6 border-b border-dark-700">
@@ -258,7 +258,7 @@ export default function Layout({ children }) {
       </AnimatePresence>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Topbar */}
         <header className="sticky top-0 z-30 bg-dark-800/80 backdrop-blur-lg border-b border-dark-700 px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-3">
@@ -276,14 +276,14 @@ export default function Layout({ children }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {children}
-          </motion.div>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {children}
+    </motion.div>
         </main>
       </div>
     </div>
