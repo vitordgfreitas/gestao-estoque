@@ -811,21 +811,33 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
     auditoria.registrar_auditoria('CREATE', 'Financiamentos', fin_id, valores_novos={'itens_ids': itens_ids})
     return buscar_financiamento_por_id(fin_id)
 
-def listar_financiamentos(status=None, q=None, pagina=None, por_pagina=10):
+def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pagina=10):
     sb = get_supabase()
     
-    # Olhamos diretamente para a NOVA VIEW
+    # 1. Iniciamos a query olhando para a VIEW otimizada
     query = sb.table('view_financiamentos_detalhada').select('*', count='exact').order('id', desc=True)
     
-    # Filtro de Status
+    # 2. Filtro por STATUS
     if status and status != 'Todos':
         query = query.eq('status', status)
     
-    # Busca Global por Código (Ultra rápida com índice)
+    # 3. FILTRO POR ITEM_ID (O que estava faltando e causou o erro)
+    if item_id:
+        # Buscamos na tabela de relação quais financiamentos pertencem a esse item
+        fi_res = sb.table('financiamentos_itens').select('financiamento_id').eq('item_id', int(item_id)).execute()
+        fin_ids = [x['financiamento_id'] for x in (fi_res.data or [])]
+        
+        if not fin_ids:
+            return {"data": [], "total": 0}
+        
+        # Filtra a View para mostrar apenas esses IDs
+        query = query.in_('id', fin_ids)
+
+    # 4. BUSCA GLOBAL por código de contrato
     if q:
         query = query.ilike('codigo_contrato', f'%{q}%')
-        
-    # Paginação (Se o front pedir)
+
+    # 5. PAGINAÇÃO
     if pagina is not None:
         inicio = (int(pagina) - 1) * int(por_pagina)
         fim = inicio + int(por_pagina) - 1
@@ -833,11 +845,10 @@ def listar_financiamentos(status=None, q=None, pagina=None, por_pagina=10):
     
     res = query.execute()
     
-    # IMPORTANTE: Como a View já traz 'itens_json', 
-    # o Python só repassa. Zero processamento extra!
+    # Retornamos os dados prontos da View (que já calculou itens e quitação)
     return {
-        "data": res.data, 
-        "total": res.count
+        "data": res.data or [], 
+        "total": res.count or 0
     }
 
 def _row_to_financiamento_otimizado(row, itens_pre_carregados):
