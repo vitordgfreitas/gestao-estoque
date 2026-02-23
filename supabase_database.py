@@ -794,43 +794,78 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
 
 def listar_financiamentos(status=None, item_id=None):
     sb = get_supabase()
+    
+    # 1. Busca os financiamentos (view de quitação)
     q = sb.table('view_financiamentos_quitacao').select('*').order('id', desc=True)
     if status:
         q = q.eq('status', status)
+    
+    # Se filtrar por item, buscamos os IDs de financiamento primeiro
     if item_id:
         fi = sb.table('financiamentos_itens').select('financiamento_id').eq('item_id', int(item_id)).execute()
         fin_ids = [x['financiamento_id'] for x in (fi.data or [])]
-        if not fin_ids:
-            return []
+        if not fin_ids: return []
         q = q.in_('id', fin_ids)
-    r = q.execute()
-    return [_row_to_financiamento(row) for row in (r.data or [])]
+    
+    res_fin = q.execute()
+    if not res_fin.data: return []
 
-def _row_to_financiamento(row, itens_list=None):
+    # --- O PULO DO GATO: PRE-LOAD DE ITENS ---
+    # Pegamos todos os itens do sistema de UMA VEZ SÓ
+    todos_itens_obj = listar_itens() 
+    # Criamos um dicionário {ID: Nome} para busca instantânea (O(1))
+    itens_map = {item.id: item.nome for item in todos_itens_obj}
+    # ----------------------------------------
+
+    # 2. Mapeia os resultados passando o dicionário de itens como cache
+    return [_row_to_financiamento(row, itens_cache=itens_map) for row in res_fin.data]
+def _row_to_financiamento(row, itens_cache=None):
+    """
+    Converte a linha do banco em objeto, usando um cache de itens 
+    para evitar centenas de queries N+1.
+    """
     class Financiamento:
-        def __init__(self):
-            self.id = row.get('id')
-            self.codigo_contrato = row.get('codigo_contrato') or ''
-            self.item_id = row.get('item_id')
-            self.valor_total = round(float(row.get('valor_total') or 0), 2)
-            self.valor_entrada = round(float(row.get('valor_entrada') or 0), 2)
-            self.numero_parcelas = row.get('numero_parcelas') or 0
-            self.valor_parcela = round(float(row.get('valor_parcela') or 0), 2)
-            self.taxa_juros = round(float(row.get('taxa_juros') or 0), 9)
-            self.data_inicio = _date_parse(row.get('data_inicio'))
-            self.status = row.get('status') or 'Ativo'
-            self.instituicao_financeira = row.get('instituicao_financeira') or ''
-            self.observacoes = row.get('observacoes') or ''
-            self._itens_list = itens_list
-            self.valor_presente = 0.0
-            self.valor_quitacao_hoje = round(float(row.get('valor_quitacao_hoje') or 0), 2)
-            self.saldo_devedor_nominal = round(float(row.get('saldo_devedor_nominal') or 0), 2)
+        def __init__(self, data, cache):
+            self.id = data.get('id')
+            self.codigo_contrato = data.get('codigo_contrato') or ''
+            self.item_id = data.get('item_id')
+            self.valor_total = round(float(data.get('valor_total') or 0), 2)
+            self.valor_entrada = round(float(data.get('valor_entrada') or 0), 2)
+            self.numero_parcelas = data.get('numero_parcelas') or 0
+            self.valor_parcela = round(float(data.get('valor_parcela') or 0), 2)
+            self.taxa_juros = round(float(data.get('taxa_juros') or 0), 9)
+            self.data_inicio = _date_parse(data.get('data_inicio'))
+            self.status = data.get('status') or 'Ativo'
+            self.instituicao_financeira = data.get('instituicao_financeira') or ''
+            self.observacoes = data.get('observacoes') or ''
+            self.valor_quitacao_hoje = round(float(data.get('valor_quitacao_hoje') or 0), 2)
+            self.saldo_devedor_nominal = round(float(data.get('saldo_devedor_nominal') or 0), 2)
+            
+            # Guardamos o cache de itens (ID -> Nome) para o property
+            self._itens_cache = cache 
+
         @property
         def itens(self):
-            if self._itens_list is None:
-                self._itens_list = _financiamento_itens_list(self.id)
-            return self._itens_list
-    return Financiamento()
+            """Retorna a lista de itens vinculados usando o cache pré-carregado."""
+            relacoes = _financiamento_itens_ids_only(self.id)
+            out = []
+            for rel in relacoes:
+                iid = rel['item_id']
+                # Se o item existe no nosso "dicionário de itens", pegamos o nome sem ir no banco
+                if self._itens_cache and iid in self._itens_cache:
+                    out.append({
+                        'id': iid, 
+                        'nome': self._itens_cache[iid], 
+                        'valor': rel.get('valor_proporcional', 0)
+                    })
+                else:
+                    # Fallback caso o item não esteja no cache (segurança)
+                    item_bruto = buscar_item_por_id(iid)
+                    if item_bruto:
+                        out.append({'id': iid, 'nome': item_bruto.nome, 'valor': 0})
+            return out
+
+    return Financiamento(row, itens_cache)
 
 def _financiamento_itens_list(financiamento_id):
     fi = listar_itens_financiamento(financiamento_id)
@@ -848,6 +883,12 @@ def buscar_financiamento_por_id(financiamento_id):
     if not r.data or len(r.data) == 0:
         return None
     return _row_to_financiamento(r.data[0], itens_list=_financiamento_itens_list(int(financiamento_id)))
+
+def _financiamento_itens_ids_only(financiamento_id):
+    """Busca apenas as relações de IDs, sem carregar objetos pesados."""
+    sb = get_supabase()
+    r = sb.table('financiamentos_itens').select('item_id, valor_proporcional').eq('financiamento_id', int(financiamento_id)).execute()
+    return r.data or []
 
 def atualizar_financiamento(financiamento_id, **kwargs):
     sb = get_supabase()
