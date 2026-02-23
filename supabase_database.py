@@ -814,30 +814,21 @@ def criar_financiamento(item_id=None, valor_total=None, numero_parcelas=None, ta
 def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pagina=10):
     sb = get_supabase()
     
-    # 1. Iniciamos a query olhando para a VIEW otimizada
-    query = sb.table('view_financiamentos_detalhada').select('*', count='exact').order('id', desc=True)
+    # Agora apontamos para a view_financiamentos_quitacao
+    query = sb.table('view_financiamentos_quitacao').select('*', count='exact').order('id', desc=True)
     
-    # 2. Filtro por STATUS
     if status and status != 'Todos':
         query = query.eq('status', status)
     
-    # 3. FILTRO POR ITEM_ID (O que estava faltando e causou o erro)
     if item_id:
-        # Buscamos na tabela de relação quais financiamentos pertencem a esse item
         fi_res = sb.table('financiamentos_itens').select('financiamento_id').eq('item_id', int(item_id)).execute()
         fin_ids = [x['financiamento_id'] for x in (fi_res.data or [])]
-        
-        if not fin_ids:
-            return {"data": [], "total": 0}
-        
-        # Filtra a View para mostrar apenas esses IDs
+        if not fin_ids: return {"data": [], "total": 0}
         query = query.in_('id', fin_ids)
 
-    # 4. BUSCA GLOBAL por código de contrato
     if q:
         query = query.ilike('codigo_contrato', f'%{q}%')
 
-    # 5. PAGINAÇÃO
     if pagina is not None:
         inicio = (int(pagina) - 1) * int(por_pagina)
         fim = inicio + int(por_pagina) - 1
@@ -845,7 +836,7 @@ def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pa
     
     res = query.execute()
     
-    # Retornamos os dados prontos da View (que já calculou itens e quitação)
+    # Retorno limpo: a View já fez todo o trabalho de nomes e cálculos
     return {
         "data": res.data or [], 
         "total": res.count or 0
