@@ -19,6 +19,8 @@ export default function VisualizarDados() {
   const [searchTerm, setSearchTerm] = useState('')
 
   // Modais de Controle
+  const [editingPecaCarro, setEditingPecaCarro] = useState(null)
+  const [deletingPecaCarro, setDeletingPecaCarro] = useState(null)
   const [editingItem, setEditingItem] = useState(null)
   const [editingCompromisso, setEditingCompromisso] = useState(null)
   const [viewingItem, setViewingItem] = useState(null)
@@ -127,6 +129,18 @@ export default function VisualizarDados() {
     }
   }
 
+  const handleDeletePecaCarro = async () => {
+  const loadId = toast.loading('Removendo peça do veículo...')
+  try {
+    // Chamada direta para a tabela original usando o ID que veio da View
+    await api.delete(`/api/pecas-carros/${deletingPecaCarro.id}`)
+    toast.success('Peça removida e estoque ajustado!', { id: loadId })
+    setDeletingPecaCarro(null)
+    loadData() // Recarrega a View com os dados novos
+  } catch (e) {
+    toast.error('Erro ao remover peça.', { id: loadId })
+  }
+}
   const handleSaveCompromisso = async (data) => {
     try {
       await compromissosAPI.atualizar(editingCompromisso.id, data)
@@ -301,27 +315,48 @@ export default function VisualizarDados() {
 
           {/* TABELA MANUTENÇÃO */}
           {activeTab === 'pecas-carros' && (
-            <table className="w-full text-left border-collapse min-w-[1000px] table-fixed">
-              <thead className="bg-dark-800/50 text-dark-400 text-[11px] uppercase font-black tracking-widest">
-                <tr><th className="px-6 py-4 w-[30%]">Veículo Alvo</th><th className="px-6 py-4 w-[30%]">Peça Instalada</th><th className="px-6 py-4 w-[10%] text-center">Qtd</th><th className="px-6 py-4 w-[20%]">Data Instalação</th><th className="px-6 py-4 w-[10%] text-right">Ações</th></tr>
-              </thead>
-              <tbody className="divide-y divide-dark-800">
-                {pecasCarros.map(pc => {
-                  const v = itens.find(i => i.id === pc.carro_id);
-                  const p = itens.find(i => i.id === pc.peca_id);
-                  return (
-                    <tr key={pc.id} className="hover:bg-blue-500/[0.02] transition-colors group">
-                      <td className="px-6 py-5 font-bold text-dark-50">{v?.nome} <span className="text-[10px] text-blue-400 block uppercase font-black">{v?.dados_categoria?.Placa}</span></td>
-                      <td className="px-6 py-5 font-bold text-primary-400 uppercase text-xs">{p?.nome}</td>
-                      <td className="px-6 py-5 font-black text-lg text-blue-400 text-center">{pc.quantidade}</td>
-                      <td className="px-6 py-5 text-xs text-dark-400 font-mono font-bold tracking-widest">{formatDate(pc.data_instalacao)}</td>
-                      <td className="px-6 py-5 text-right"><button className="p-2 hover:bg-dark-700 rounded-lg opacity-20 group-hover:opacity-100 transition-opacity"><Edit size={18}/></button></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+  <table className="w-full text-left border-collapse min-w-[1000px] table-fixed">
+    <thead className="bg-dark-800/50 text-dark-400 text-[11px] uppercase font-black tracking-widest">
+      <tr>
+        <th className="px-6 py-4 w-[30%]">Veículo Alvo</th>
+        <th className="px-6 py-4 w-[30%]">Peça Instalada</th>
+        <th className="px-6 py-4 w-[10%] text-center">Qtd</th>
+        <th className="px-6 py-4 w-[20%]">Data Instalação</th>
+        <th className="px-6 py-4 w-[10%] text-right">Ações</th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-dark-800">
+      {filteredData.pecas.map(pc => (
+        <tr key={pc.id} className="hover:bg-blue-500/[0.02] transition-colors group">
+          <td className="px-6 py-5 font-bold text-dark-50">
+            {pc.carro_nome} 
+            <span className="text-[10px] text-blue-400 block uppercase font-black">{pc.carro_placa}</span>
+          </td>
+          <td className="px-6 py-5 font-bold text-primary-400 uppercase text-xs">{pc.peca_nome}</td>
+          <td className="px-6 py-5 font-black text-lg text-blue-400 text-center">{pc.quantidade}</td>
+          <td className="px-6 py-5 text-xs text-dark-400 font-mono font-bold tracking-widest">
+            {formatDate(pc.data_instalacao)}
+          </td>
+          <td className="px-6 py-5 text-right flex gap-2 justify-end">
+            {/* BOTÕES ATIVADOS */}
+            <button 
+              onClick={() => setEditingPecaCarro(pc)} 
+              className="p-2 hover:bg-dark-700 rounded-lg text-primary-400 opacity-20 group-hover:opacity-100 transition-opacity"
+            >
+              <Edit size={18}/>
+            </button>
+            <button 
+              onClick={() => setDeletingPecaCarro(pc)} 
+              className="p-2 hover:bg-dark-700 rounded-lg text-red-400 opacity-20 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 size={18}/>
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+)}
         </div>
       </div>
 
