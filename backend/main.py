@@ -1889,23 +1889,39 @@ async def criar_financiamento(fin: FinanciamentoCreate, token: str = Depends(ver
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/financiamentos", response_model=List[dict])
+@app.get("/api/financiamentos", response_model=dict) # Mudamos para dict por causa do count
 async def listar_financiamentos(
     status: Optional[str] = None,
     item_id: Optional[int] = None,
-    token: str = Depends(verify_token),
+    q: Optional[str] = None, # Parâmetro de busca
+    pagina: Optional[int] = Query(None, ge=1), # Página começando em 1
+    por_pagina: int = Query(10, ge=1, le=100),
     db_module = Depends(get_db)
 ):
-    """Lista financiamentos com filtros opcionais"""
+    """Lista financiamentos com busca e paginação opcional"""
     try:
-        print("[DEBUG] listar_financiamentos endpoint chamado")
-        financiamentos = db_module.listar_financiamentos(status=status, item_id=item_id)
-        print(f"[DEBUG] {len(financiamentos)} financiamentos retornados")
-        return [financiamento_to_dict(f) for f in financiamentos]
+        # Se for Supabase, ele já retorna o dict formatado. 
+        # Se for Sheets/SQLite e não tiver suporte, devolvemos formato compatível.
+        resultado = db_module.listar_financiamentos(
+            status=status, 
+            item_id=item_id, 
+            q=q, 
+            pagina=pagina, 
+            por_pagina=por_pagina
+        )
+        
+        # Se o db_module retornar apenas uma lista (caso do SQLite/Sheets antigo), 
+        # envelopamos para não quebrar o front
+        if isinstance(resultado, list):
+            return {"data": [financiamento_to_dict(f) for f in resultado], "total": len(resultado)}
+            
+        # Caso do Supabase otimizado: converte os objetos da lista "data" em dicts
+        return {
+            "data": [financiamento_to_dict(f) for f in resultado["data"]],
+            "total": resultado["total"]
+        }
     except Exception as e:
-        print(f"[ERROR] Erro em listar_financiamentos: {type(e).__name__} - {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"[ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/financiamentos/{financiamento_id}", response_model=dict)
