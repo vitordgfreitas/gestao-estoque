@@ -180,10 +180,18 @@ export default function Calendario() {
             return (
               <button key={`${sIdx}-${dIdx}`} onClick={() => abrirDetalhesDia(data)} className={`aspect-square p-2 rounded-lg border text-left flex flex-col transition-all ${isHoje ? 'bg-primary-600 border-primary-500 text-white' : (ev.parcelas.length > 0 || ev.ativos.length > 0) ? 'bg-primary-600/10 border-primary-600/30' : 'bg-dark-800 border-dark-700'}`}>
                 <span className="text-sm font-black">{dia}</span>
-                <div className="mt-auto space-y-0.5 w-full overflow-hidden">
-                   {ev.parcelas.length > 0 && <div className="text-[7px] font-black flex items-center gap-1 text-green-400 bg-green-400/10 rounded px-1 w-fit">💰 {ev.parcelas.length}</div>}
-                   {ev.iniciam.length > 0 && <div className="text-[7px] font-black flex items-center gap-1 text-primary-400 bg-primary-400/10 rounded px-1 w-fit">🚀 {ev.iniciam.length}</div>}
-                </div>
+                <div className="mt-auto space-y-1 w-full overflow-hidden">
+  {ev.parcelas.length > 0 && (
+    <div className="text-[10px] font-black flex items-center gap-1.5 text-green-400 bg-green-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-green-500/20">
+      <span className="text-sm">💰</span> {ev.parcelas.length}
+    </div>
+  )}
+  {ev.iniciam.length > 0 && (
+    <div className="text-[10px] font-black flex items-center gap-1.5 text-primary-400 bg-primary-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-primary-500/20">
+      <span className="text-sm">🚀</span> {ev.iniciam.length}
+    </div>
+  )}
+</div>
               </button>
             )
           }))}
