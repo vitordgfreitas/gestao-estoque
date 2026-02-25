@@ -783,8 +783,8 @@ def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pa
         query = query.in_('id', fin_ids)
 
     if q:
-        filtro_hibrido = f"codigo_contrato.ilike.%{q}%, financiamentos_itens.itens.nome.ilike.%{q}%"
-        query = query.or_(filtro_hibrido)
+        filtro = f"codigo_contrato.ilike.%{q}%, busca_itens.ilike.%{q}%"
+        query = query.or_(filtro)
 
     if pagina is not None:
         inicio = (int(pagina) - 1) * int(por_pagina)
