@@ -708,12 +708,12 @@ useEffect(() => {
                       <p className="text-lg font-semibold text-white">
                         {formatCurrency(fin.saldo_devedor_nominal)}
                       </p>
-                      <p className="text-[10px] text-dark-500 uppercase">Saldo Devedor Aproximado</p>
+                      <p className="text-[10px] text-dark-500 uppercase">Soma das parcelas restantes</p>
                     </div>
 
                     {/* Valor para Quitação (O valor com desconto que a gente já tinha) */}
                     <div>
-                      <p className="text-sm text-green-500 font-bold">Quitação Imediata</p>
+                      <p className="text-sm text-green-500 font-bold">Saldo Devedor Aproximado</p>
                       <p className="text-lg font-black text-green-400 font-mono">
                         {formatCurrency(fin.valor_quitacao_hoje)}
                       </p>
