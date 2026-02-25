@@ -950,14 +950,33 @@ def deletar_financiamento(financiamento_id):
     r = sb.table('financiamentos').delete().eq('id', int(financiamento_id)).execute()
     return r.data is not None and len(r.data) > 0
 
-def listar_parcelas_financiamento(financiamento_id=None, status=None):
+def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, ano=None):
     sb = get_supabase()
     q = sb.table('parcelas_financiamento').select('*')
+    
+    # Mantém a compatibilidade: se passar ID, filtra por ID
     if financiamento_id is not None:
         q = q.eq('financiamento_id', int(financiamento_id))
+    
+    # Filtro de Status
     if status:
         q = q.eq('status', status)
-    r = q.order('numero_parcela').execute()
+        
+    # 🔥 NOVO: Filtro de Mês e Ano direto na Query do Banco
+    if mes is not None and ano is not None:
+        import calendar
+        # Define o primeiro e último dia do mês para o filtro
+        primeiro_dia = f"{ano}-{str(mes).zfill(2)}-01"
+        ultimo_dia_num = calendar.monthrange(int(ano), int(mes))[1]
+        ultimo_dia = f"{ano}-{str(mes).zfill(2)}-{ultimo_dia_num}"
+        
+        # Filtra no Postgres: data_vencimento >= primeiro AND <= último
+        q = q.gte('data_vencimento', primeiro_dia).lte('data_vencimento', ultimo_dia)
+    
+    # Aumentamos o limite para garantir, mas o filtro acima já resolve o grosso
+    r = q.order('data_vencimento').limit(2000).execute()
+    
+    # Mapeamento para o seu objeto de classe interna (mantendo sua estrutura)
     class Parcela:
         def __init__(self, row):
             self.id = row.get('id')
@@ -973,6 +992,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None):
             self.juros = 0.0
             self.multa = 0.0
             self.desconto = 0.0
+            
     return [Parcela(x) for x in (r.data or [])]
 
 def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, link_comprovante=None, valor_original=None, data_vencimento=None):
