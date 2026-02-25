@@ -87,16 +87,18 @@ export default function Calendario() {
   }, [compromissos, categoriaFiltro, localizacaoFiltro])
 
   const getEventosNoDia = (data) => {
-    const dStr = dataToStr(data)
-    return {
-      iniciam: compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dStr),
-      ativos: compromissosFiltrados.filter(c => {
-        const s = dataToStr(c.data_inicio); const e = dataToStr(c.data_fim)
-        return dStr >= s && dStr <= e
-      }),
-      parcelas: (parcelasMes || []).filter(p => dataToStr(p.data_vencimento) === dStr)
-    }
+  const dStr = dataToStr(data)
+  return {
+    iniciam: compromissosFiltrados.filter(c => dataToStr(c.data_inicio) === dStr),
+    // 🔥 Adicionamos esta linha:
+    terminam: compromissosFiltrados.filter(c => dataToStr(c.data_fim) === dStr),
+    ativos: compromissosFiltrados.filter(c => {
+      const s = dataToStr(c.data_inicio); const e = dataToStr(c.data_fim)
+      return dStr >= s && dStr <= e
+    }),
+    parcelas: (parcelasMes || []).filter(p => dataToStr(p.data_vencimento) === dStr)
   }
+}
 
   const getContratosUnicos = (iniciam, ativos) => {
     const misturados = [...iniciam, ...ativos]
@@ -189,6 +191,12 @@ export default function Calendario() {
   {ev.iniciam.length > 0 && (
     <div className="text-[10px] font-black flex items-center gap-1.5 text-primary-400 bg-primary-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-primary-500/20">
       <span className="text-sm">🚀</span> {ev.iniciam.length}
+    </div>
+  )}
+  {/* 🔥 Fim de Compromisso (ADICIONADO) */}
+  {ev.terminam.length > 0 && (
+    <div className="text-[10px] font-black flex items-center gap-1.5 text-red-400 bg-red-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-red-500/20">
+      <span className="text-sm">🏁</span> {ev.terminam.length}
     </div>
   )}
 </div>
