@@ -704,11 +704,11 @@ useEffect(() => {
                     </div>
                     {/* Saldo Devedor Nominal (O valor bruto que falta) */}
                     <div>
-                      <p className="text-sm text-red-400">Saldo Devedor (Nominal)</p>
+                      <p className="text-sm text-red-400">Saldo Vencendo</p>
                       <p className="text-lg font-semibold text-white">
                         {formatCurrency(fin.saldo_devedor_nominal)}
                       </p>
-                      <p className="text-[10px] text-dark-500 uppercase">Soma das parcelas restantes</p>
+                      <p className="text-[10px] text-dark-500 uppercase">Saldo Devedor Aproximado</p>
                     </div>
 
                     {/* Valor para Quitação (O valor com desconto que a gente já tinha) */}
