@@ -2098,25 +2098,20 @@ async def listar_parcelas(
 ):
     try:
         # 🔥 CHAMADA OTIMIZADA: Passamos mes e ano para o banco
-        parcelas = db_module.listar_parcelas_financiamento(
-            status=status, 
-            mes=mes, 
-            ano=ano
-        )
+        parcelas = db_module.listar_parcelas_financiamento(status=status, mes=mes, ano=ano)
         
-        # O filtro de incluir_pagas e data_vencimento específica pode continuar aqui
-        if not incluir_pagas:
-            parcelas = [p for p in parcelas if (getattr(p, "status", None) or "") != "Paga"]
-        
-        if data_vencimento:
-            parcelas = [p for p in parcelas if _parcela_data_vencimento(p) == data_vencimento]
-
-        # Resto do seu código de enriquecimento (codigo_contrato, etc) continua igual...
         resultado = []
-        fins_cache = {}
         for p in parcelas:
-            d = parcela_to_dict(p)
-            # ... (todo o seu código de cache de contratos permanece intacto)
+            d = parcela_to_dict(p) # Transforma em dicionário
+            
+            # 🔥 Em vez de fazer 10 linhas de código com cache e busca manual,
+            # apenas pegamos o dado que o banco já nos deu:
+            d["codigo_contrato"] = getattr(p, "codigo_contrato", "Sem Contrato")
+            
+            # Mantemos os seus filtros de exibição
+            if not incluir_pagas and d.get("status") == "Paga":
+                continue
+            
             resultado.append(d)
             
         return resultado

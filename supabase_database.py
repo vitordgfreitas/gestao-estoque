@@ -953,7 +953,7 @@ def deletar_financiamento(financiamento_id):
 
 def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, ano=None):
     sb = get_supabase()
-    q = sb.table('parcelas_financiamento').select('*')
+    q = sb.table('parcelas_financiamento').select('*, financiamentos(codigo_contrato)')
     
     # Mantém a compatibilidade: se passar ID, filtra por ID
     if financiamento_id is not None:
