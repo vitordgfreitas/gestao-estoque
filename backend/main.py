@@ -2102,18 +2102,18 @@ async def listar_parcelas(
         
         resultado = []
         for p in parcelas:
-            d = parcela_to_dict(p) # Transforma em dicionário
+            # Transforma o objeto em dicionário usando o helper
+            d = parcela_to_dict(p)
             
-            # 🔥 Em vez de fazer 10 linhas de código com cache e busca manual,
-            # apenas pegamos o dado que o banco já nos deu:
-            d["codigo_contrato"] = getattr(p, "codigo_contrato", "Sem Contrato")
+            # 🔥 REFORÇO: Garante que o status e o código do contrato subam pro front
+            d["status"] = getattr(p, "status", "Pendente")
+            d["codigo_contrato"] = getattr(p, "codigo_contrato", f"ID: {p.financiamento_id}")
             
-            # Mantemos os seus filtros de exibição
-            if not incluir_pagas and d.get("status") == "Paga":
+            # Filtros de visualização
+            if not incluir_pagas and d["status"] == "Paga":
                 continue
-            
+                
             resultado.append(d)
-            
         return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
