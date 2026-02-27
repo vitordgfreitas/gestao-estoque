@@ -2097,25 +2097,32 @@ async def listar_parcelas(
     db_module = Depends(get_db),
 ):
     try:
-        # 🔥 CHAMADA OTIMIZADA: Passamos mes e ano para o banco
-        parcelas = db_module.listar_parcelas_financiamento(status=status, mes=mes, ano=ano)
+        # 🔥 ENVIAMOS data_vencimento PARA O BANCO FILTRAR LÁ
+        parcelas = db_module.listar_parcelas_financiamento(
+            status=status, 
+            mes=mes, 
+            ano=ano,
+            data_vencimento=data_vencimento
+        )
         
         resultado = []
         for p in parcelas:
-            # Transforma o objeto em dicionário usando o helper
+            # Transforma em dicionário
             d = parcela_to_dict(p)
             
-            # 🔥 REFORÇO: Garante que o status e o código do contrato subam pro front
+            # 🔥 REFORÇO DE DADOS PARA O FRONT
+            d["codigo_contrato"] = getattr(p, "codigo_contrato", "")
             d["status"] = getattr(p, "status", "Pendente")
-            d["codigo_contrato"] = getattr(p, "codigo_contrato", f"ID: {p.financiamento_id}")
             
-            # Filtros de visualização
+            # Filtro final de segurança
             if not incluir_pagas and d["status"] == "Paga":
                 continue
                 
             resultado.append(d)
+            
         return resultado
     except Exception as e:
+        print(f"❌ ERRO NO FILTRO DE PARCELAS: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 # ============= ENDPOINTS PEÇAS EM CARROS =============
 

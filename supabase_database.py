@@ -951,64 +951,64 @@ def deletar_financiamento(financiamento_id):
     r = sb.table('financiamentos').delete().eq('id', int(financiamento_id)).execute()
     return r.data is not None and len(r.data) > 0
 
-def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, ano=None):
+# No seu supabase.py, substitua a função listar_parcelas_financiamento
+
+def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, ano=None, data_vencimento=None):
     sb = get_supabase()
-    q = sb.table('parcelas_financiamento').select('*, financiamentos(codigo_contrato)')
     
-    # Mantém a compatibilidade: se passar ID, filtra por ID
+    # JOIN para trazer o código do contrato
+    q = sb.table('parcelas_financiamento').select('*, financiamentos!inner(codigo_contrato)')
+    
     if financiamento_id is not None:
         q = q.eq('financiamento_id', int(financiamento_id))
     
-    # Filtro de Status
     if status:
         q = q.eq('status', status)
+
+    # 🔥 NOVO: Se o calendário mandar uma data específica (clique no dia)
+    if data_vencimento:
+        # Garante formato YYYY-MM-DD
+        d_str = data_vencimento.isoformat() if hasattr(data_vencimento, 'isoformat') else str(data_vencimento)
+        q = q.eq('data_vencimento', d_str)
         
-    # 🔥 NOVO: Filtro de Mês e Ano direto na Query do Banco
-    if mes is not None and ano is not None:
+    # Se for a visão mensal
+    elif mes is not None and ano is not None:
         import calendar
-        # Define o primeiro e último dia do mês para o filtro
-        primeiro_dia = f"{ano}-{str(mes).zfill(2)}-01"
-        ultimo_dia_num = calendar.monthrange(int(ano), int(mes))[1]
-        ultimo_dia = f"{ano}-{str(mes).zfill(2)}-{ultimo_dia_num}"
-        
-        # Filtra no Postgres: data_vencimento >= primeiro AND <= último
-        q = q.gte('data_vencimento', primeiro_dia).lte('data_vencimento', ultimo_dia)
+        p_dia = f"{ano}-{str(mes).zfill(2)}-01"
+        u_dia = f"{ano}-{str(mes).zfill(2)}-{calendar.monthrange(int(ano), int(mes))[1]}"
+        q = q.gte('data_vencimento', p_dia).lte('data_vencimento', u_dia)
     
-    # Aumentamos o limite para garantir, mas o filtro acima já resolve o grosso
-    r = q.order('data_vencimento').limit(2000).execute()
-    
-    # Mapeamento para o seu objeto de classe interna (mantendo sua estrutura)
+    r = q.order('data_vencimento').execute()
+    data_rows = r.data or []
+
     class Parcela:
         def __init__(self, row):
-            # Campos básicos
             self.id = row.get('id')
             self.financiamento_id = row.get('financiamento_id')
             self.numero_parcela = row.get('numero_parcela')
+            # 🔥 CRÍTICO: Garante que o status nunca seja nulo
             self.status = row.get('status') or 'Pendente'
-            
-            # Valores numéricos
             self.valor_original = round(float(row.get('valor_original') or 0), 2)
             self.valor_pago = round(float(row.get('valor_pago') or 0), 2)
             
-            # Datas (O pulo do gato: incluímos a data_pagamento)
+            # 🔥 CRÍTICO: Garante que as datas existam para o helper do main.py
             self.data_vencimento = _date_parse(row.get('data_vencimento'))
             self.data_pagamento = _date_parse(row.get('data_pagamento'))
             
-            # Links e Extras
             self.link_boleto = row.get('link_boleto')
             self.link_comprovante = row.get('link_comprovante')
             
-            # Captura do JOIN do Contrato
-            relacao = row.get('financiamentos')
-            codigo = None
-            if isinstance(relacao, dict):
-                codigo = relacao.get('codigo_contrato')
-            elif isinstance(relacao, list) and len(relacao) > 0:
-                codigo = relacao[0].get('codigo_contrato')
+            # Captura do Contrato
+            fin = row.get('financiamentos')
+            c = fin.get('codigo_contrato') if isinstance(fin, dict) else None
+            self.codigo_contrato = str(c).strip() if c else f"Contrato #{self.financiamento_id}"
             
-            self.codigo_contrato = str(codigo).strip() if codigo else f"Contrato #{self.financiamento_id}"
-            
-    return [Parcela(x) for x in (r.data or [])]
+            # Placeholders para evitar AttributeError no main.py
+            self.juros = 0.0
+            self.multa = 0.0
+            self.desconto = 0.0
+
+    return [Parcela(x) for x in data_rows]
 
 def atualizar_parcela_financiamento(parcela_id, status=None, link_boleto=None, link_comprovante=None, valor_original=None, data_vencimento=None):
     sb = get_supabase()
