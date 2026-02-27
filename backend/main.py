@@ -1787,16 +1787,19 @@ def financiamento_to_dict(fin):
 def parcela_to_dict(parcela):
     """Converte ParcelaFinanciamento para dict com formatação precisa de decimais"""
     return {
-        "id": parcela.id,
-        "financiamento_id": parcela.financiamento_id,
-        "numero_parcela": parcela.numero_parcela,
-        "valor_original": round(float(parcela.valor_original), 2),
-        "valor_pago": round(float(parcela.valor_pago), 2),
-        "data_vencimento": parcela.data_vencimento.isoformat() if isinstance(parcela.data_vencimento, date) else str(parcela.data_vencimento),
-        "data_pagamento": parcela.data_pagamento.isoformat() if parcela.data_pagamento and isinstance(parcela.data_pagamento, date) else None,
-        "status": parcela.status,
-        "link_boleto": parcela.link_boleto if hasattr(parcela, 'link_boleto') else None,
-        "link_comprovante": parcela.link_comprovante if hasattr(parcela, 'link_comprovante') else None,
+        "id": getattr(parcela, 'id', None),
+        "financiamento_id": getattr(parcela, 'financiamento_id', None),
+        "numero_parcela": getattr(parcela, 'numero_parcela', 0),
+        "valor_original": round(float(getattr(parcela, 'valor_original', 0) or 0), 2),
+        "valor_pago": round(float(getattr(parcela, 'valor_pago', 0) or 0), 2),
+        "data_vencimento": getattr(parcela, 'data_vencimento').isoformat() if hasattr(getattr(parcela, 'data_vencimento', None), 'isoformat') else str(getattr(parcela, 'data_vencimento', '')),
+        "data_pagamento": getattr(parcela, 'data_pagamento').isoformat() if hasattr(getattr(parcela, 'data_pagamento', None), 'isoformat') else None,
+        "status": getattr(parcela, 'status', 'Pendente'),
+        # 🔥 GARANTIA DOS LINKS:
+        "link_boleto": getattr(parcela, 'link_boleto', None),
+        "link_comprovante": getattr(parcela, 'link_comprovante', None),
+        # 🔥 GARANTIA DO CÓDIGO DO CONTRATO:
+        "codigo_contrato": getattr(parcela, 'codigo_contrato', "")
     }
 
 @app.post("/api/financiamentos", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -2112,7 +2115,12 @@ async def listar_parcelas(
             
             # 🔥 REFORÇO DE DADOS PARA O FRONT
             d["codigo_contrato"] = getattr(p, "codigo_contrato", "")
+            d["link_comprovante"] = getattr(p, "link_comprovante", None)
+            d["link_boleto"] = getattr(p, "link_boleto", None)
             d["status"] = getattr(p, "status", "Pendente")
+            
+            # Garante que o valor pago seja numérico
+            d["valor_pago"] = float(getattr(p, "valor_pago", 0) or 0)
             
             # Filtro final de segurança
             if not incluir_pagas and d["status"] == "Paga":
