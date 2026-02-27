@@ -231,10 +231,6 @@ export default function Calendario() {
           <h1 className="text-3xl font-black text-dark-50 uppercase italic tracking-tighter">Agenda Star Gestão</h1>
           <p className="text-dark-400 text-xs font-bold uppercase tracking-widest">Controle Central Brasília/DF</p>
         </div>
-        <div className="flex gap-2 p-1 bg-dark-800 rounded-xl border border-dark-700 shadow-2xl">
-          <button onClick={() => setViewMode('mensal')} className={`px-5 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'mensal' ? 'bg-primary-500 text-white shadow-xl' : 'text-dark-400'}`}><LayoutGrid size={16}/></button>
-          <button onClick={() => setViewMode('diaria')} className={`px-5 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'diaria' ? 'bg-primary-500 text-white shadow-xl' : 'text-dark-400'}`}><CalendarDays size={16}/></button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
