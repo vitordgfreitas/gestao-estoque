@@ -175,13 +175,28 @@ export default function Calendario() {
         <div className="grid grid-cols-7 gap-2">
           {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => <div key={d} className="text-center text-[10px] font-black text-dark-500 uppercase">{d}</div>)}
           {semanas.map((sem, sIdx) => sem.map((dia, dIdx) => {
-            if (!dia) return <div key={`${sIdx}-${dIdx}`} className="aspect-square" />
-            const data = new Date(anoAtual, mesAtual - 1, dia)
-            const ev = getEventosNoDia(data)
-            const isHoje = data.toDateString() === new Date().toDateString()
-            return (
-              <button key={`${sIdx}-${dIdx}`} onClick={() => abrirDetalhesDia(data)} className={`aspect-square p-2 rounded-lg border text-left flex flex-col transition-all ${isHoje ? 'bg-primary-600 border-primary-500 text-white' : (ev.parcelas.length > 0 || ev.ativos.length > 0) ? 'bg-primary-600/10 border-primary-600/30' : 'bg-dark-800 border-dark-700'}`}>
-                <span className="text-sm font-black">{dia}</span>
+  if (!dia) return <div key={`${sIdx}-${dIdx}`} className="aspect-square" />
+  
+  const data = new Date(anoAtual, mesAtual - 1, dia)
+  const ev = getEventosNoDia(data)
+  const isHoje = data.toDateString() === new Date().toDateString()
+
+  // 🟢 ADICIONE ESTA LINHA (Cálculo do valor do dia)
+  const totalFinanceiroDia = ev.parcelas.reduce((acc, p) => acc + (p.valor_original || 0), 0)
+
+  return (
+    <button key={`${sIdx}-${dIdx}`} onClick={() => abrirDetalhesDia(data)} className="...">
+      {/* Cabeçalho do dia */}
+      <div className="flex justify-between items-center w-full mb-1">
+        <span className="text-sm font-black">{dia}</span>
+        
+        {/* 🟢 ADICIONE ESTE BLOCO (Exibição do total) */}
+        {totalFinanceiroDia > 0 && (
+          <span className="text-[8px] font-black text-green-400 bg-green-500/10 px-1 py-0.5 rounded border border-green-500/20">
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(totalFinanceiroDia)}
+          </span>
+        )}
+      </div>
                 <div className="mt-auto space-y-1 w-full overflow-hidden">
   {ev.parcelas.length > 0 && (
     <div className="text-[10px] font-black flex items-center gap-1.5 text-green-400 bg-green-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-green-500/20">
@@ -270,58 +285,75 @@ export default function Calendario() {
             </Section>
 
             <Section title="Vencimentos Financeiros" icon={<DollarSign size={16}/>} color="text-green-500">
-              {detalhesDia.loadingParcelas ? <div className="py-10 text-center animate-pulse text-xs font-black uppercase tracking-widest text-dark-500">Buscando banco...</div> :
-               detalhesDia.parcelas?.length > 0 ? (
-                 <div className="overflow-x-auto rounded-2xl border border-dark-700 shadow-2xl bg-dark-900/20">
-                   <table className="w-full text-xs text-left">
-                     <thead className="bg-dark-800 text-dark-500 uppercase font-black text-[9px] tracking-widest border-b border-dark-700">
-                       <tr>
-                         <th className="p-4">Vencimento</th>
-                         <th className="p-4">Contrato</th>
-                         <th className="p-4 text-right">Original</th>
-                         <th className="p-4 text-right">Pago</th>
-                         <th className="p-4 text-center">Status</th>
-                         <th className="p-4 text-center">Boletos / Recibos</th>
-                         <th className="p-4 text-center">Ações</th>
-                       </tr>
-                     </thead>
-                     <tbody className="divide-y divide-dark-800">
-                       {detalhesDia.parcelas.map(p => {
-                         const statusColor = p.status === 'Paga' ? 'text-green-400 border-green-500/20 bg-green-500/5' : 'text-yellow-400 border-yellow-500/20 bg-yellow-500/5'
-                         return (
-                           <tr key={p.id} className="hover:bg-green-500/5 transition-colors group">
-                             <td className="p-4 font-bold text-dark-200">{formatDate(p.data_vencimento)}</td>
-                             <td className="p-4 font-black text-dark-50 uppercase truncate max-w-[120px]">{p.codigo_contrato}</td>
-                             <td className="p-4 text-right font-mono text-dark-50 font-black">{formatCurrency(p.valor_original)}</td>
-                             <td className="p-4 text-right font-mono text-green-400 font-black">{p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}</td>
-                             <td className="p-4 text-center"><span className={`px-2.5 py-0.5 rounded-full font-black text-[8px] border shadow-sm ${statusColor}`}>{p.status}</span></td>
-                             <td className="p-4 text-center"><div className="flex justify-center gap-2">
-                               {p.link_boleto && <a href={p.link_boleto} target="_blank" rel="noreferrer" title="Boleto" className="p-2 bg-dark-700 text-primary-400 rounded-lg hover:bg-primary-500/20 shadow-lg"><FileText size={16}/></a>}
-                               {p.link_comprovante && <a href={p.link_comprovante} target="_blank" rel="noreferrer" title="Comprovante" className="p-2 bg-dark-700 text-green-400 rounded-lg hover:bg-green-500/20 shadow-lg"><Receipt size={16}/></a>}
-                             </div></td>
-                             <td className="p-4 text-center">
-  {/* Removida a trava: agora o botão aparece SEMPRE */}
-  <button 
-    onClick={() => setParcelaEmBaixa(p)} 
-    className={`p-2 rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all ${
-      p.status === 'Paga' 
-        ? 'bg-blue-500 text-white' // Azul se for edição/ajuste
-        : 'bg-green-500 text-white' // Verde se for novo pagamento
-    }`}
-    title={p.status === 'Paga' ? 'Editar Pagamento' : 'Registrar Baixa'}
-  >
-    {/* Se estiver paga, mostra um ícone de editar, se não, o check */}
-    {p.status === 'Paga' ? <Edit size={16}/> : <Check size={16}/>}
-  </button>
-</td>
-                           </tr>
-                         )
-                       })}
-                     </tbody>
-                   </table>
-                 </div>
-               ) : <p className="text-dark-600 text-center py-10 italic">Sem boletos hoje.</p>}
-            </Section>
+  {detalhesDia.loadingParcelas ? (
+    <div className="py-10 text-center animate-pulse text-xs font-black uppercase tracking-widest text-dark-500">
+      Buscando banco...
+    </div>
+  ) : detalhesDia.parcelas?.length > 0 ? (
+    /* 🔥 A DIV ABAIXO É O SEGREDO: Ela embrulha o card e a tabela para o React não reclamar */
+    <div className="space-y-6"> 
+      
+      {/* CARD DE RESUMO FINANCEIRO */}
+      <div className="flex justify-between items-center p-6 bg-green-500/10 border border-green-500/20 rounded-[2rem] shadow-inner">
+        <div>
+          <p className="text-[9px] font-black text-green-500/60 uppercase tracking-[0.2em]">Total Previsto no Dia</p>
+          <p className="text-3xl font-black text-green-400 font-mono">
+            {formatCurrency(detalhesDia.parcelas.reduce((acc, p) => acc + (p.valor_original || 0), 0))}
+          </p>
+        </div>
+        <TrendingUp size={32} className="text-green-500 opacity-20" />
+      </div>
+
+      {/* SUA TABELA EXISTENTE (Mantida igual) */}
+      <div className="overflow-x-auto rounded-2xl border border-dark-700 shadow-2xl bg-dark-900/20">
+        <table className="w-full text-xs text-left">
+          <thead className="bg-dark-800 text-dark-500 uppercase font-black text-[9px] tracking-widest border-b border-dark-700">
+            <tr>
+              <th className="p-4">Vencimento</th>
+              <th className="p-4">Contrato</th>
+              <th className="p-4 text-right">Original</th>
+              <th className="p-4 text-right">Pago</th>
+              <th className="p-4 text-center">Status</th>
+              <th className="p-4 text-center">Boletos / Recibos</th>
+              <th className="p-4 text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dark-800">
+            {detalhesDia.parcelas.map(p => {
+              const statusColor = p.status === 'Paga' ? 'text-green-400 border-green-500/20 bg-green-500/5' : 'text-yellow-400 border-yellow-500/20 bg-yellow-500/5'
+              return (
+                <tr key={p.id} className="hover:bg-green-500/5 transition-colors group">
+                  <td className="p-4 font-bold text-dark-200">{formatDate(p.data_vencimento)}</td>
+                  <td className="p-4 font-black text-dark-50 uppercase truncate max-w-[120px]">{p.codigo_contrato}</td>
+                  <td className="p-4 text-right font-mono text-dark-50 font-black">{formatCurrency(p.valor_original)}</td>
+                  <td className="p-4 text-right font-mono text-green-400 font-black">{p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}</td>
+                  <td className="p-4 text-center"><span className={`px-2.5 py-0.5 rounded-full font-black text-[8px] border shadow-sm ${statusColor}`}>{p.status}</span></td>
+                  <td className="p-4 text-center">
+                    <div className="flex justify-center gap-2">
+                      {p.link_boleto && <a href={p.link_boleto} target="_blank" rel="noreferrer" title="Boleto" className="p-2 bg-dark-700 text-primary-400 rounded-lg hover:bg-primary-500/20 shadow-lg"><FileText size={16}/></a>}
+                      {p.link_comprovante && <a href={p.link_comprovante} target="_blank" rel="noreferrer" title="Comprovante" className="p-2 bg-dark-700 text-green-400 rounded-lg hover:bg-green-500/20 shadow-lg"><Receipt size={16}/></a>}
+                    </div>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => setParcelaEmBaixa(p)} 
+                      className={`p-2 rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all ${p.status === 'Paga' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'}`}
+                      title={p.status === 'Paga' ? 'Editar Pagamento' : 'Registrar Baixa'}
+                    >
+                      {p.status === 'Paga' ? <Edit size={16}/> : <Check size={16}/>}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div> /* Fim da div embrulhadora */
+  ) : (
+    <p className="text-dark-600 text-center py-10 italic">Sem boletos hoje.</p>
+  )}
+</Section>
           </div>
         </Modal>
       )}
