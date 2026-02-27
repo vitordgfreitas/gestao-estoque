@@ -1006,7 +1006,7 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, 
             elif isinstance(relacao, list) and len(relacao) > 0:
                 codigo = relacao[0].get('codigo_contrato')
             
-            self.codigo_contrato = st
+            self.codigo_contrato = str(codigo).strip() if codigo else f"Contrato #{self.financiamento_id}"
             
     return [Parcela(x) for x in (r.data or [])]
 
