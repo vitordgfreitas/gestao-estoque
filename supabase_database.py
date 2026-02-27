@@ -980,24 +980,33 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, 
     # Mapeamento para o seu objeto de classe interna (mantendo sua estrutura)
     class Parcela:
         def __init__(self, row):
+            # Campos básicos
             self.id = row.get('id')
             self.financiamento_id = row.get('financiamento_id')
             self.numero_parcela = row.get('numero_parcela')
+            self.status = row.get('status') or 'Pendente'
+            
+            # Valores numéricos
             self.valor_original = round(float(row.get('valor_original') or 0), 2)
             self.valor_pago = round(float(row.get('valor_pago') or 0), 2)
+            
+            # Datas (O pulo do gato: incluímos a data_pagamento)
             self.data_vencimento = _date_parse(row.get('data_vencimento'))
             self.data_pagamento = _date_parse(row.get('data_pagamento'))
-            self.status = row.get('status') or 'Pendente'
+            
+            # Links e Extras
             self.link_boleto = row.get('link_boleto')
             self.link_comprovante = row.get('link_comprovante')
-            fin_data = row.get('financiamentos')
-            if isinstance(fin_data, dict):
-                self.codigo_contrato = fin_data.get('codigo_contrato') or f"Fin. #{self.financiamento_id}"
-            else:
-                self.codigo_contrato = f"Fin. #{self.financiamento_id}"
-            self.juros = 0.0
-            self.multa = 0.0
-            self.desconto = 0.0
+            
+            # Captura do JOIN do Contrato
+            relacao = row.get('financiamentos')
+            codigo = None
+            if isinstance(relacao, dict):
+                codigo = relacao.get('codigo_contrato')
+            elif isinstance(relacao, list) and len(relacao) > 0:
+                codigo = relacao[0].get('codigo_contrato')
+            
+            self.codigo_contrato = st
             
     return [Parcela(x) for x in (r.data or [])]
 
