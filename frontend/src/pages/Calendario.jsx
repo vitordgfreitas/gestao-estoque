@@ -300,8 +300,20 @@ export default function Calendario() {
                                {p.link_comprovante && <a href={p.link_comprovante} target="_blank" rel="noreferrer" title="Comprovante" className="p-2 bg-dark-700 text-green-400 rounded-lg hover:bg-green-500/20 shadow-lg"><Receipt size={16}/></a>}
                              </div></td>
                              <td className="p-4 text-center">
-                                {p.status !== 'Paga' && <button onClick={() => setParcelaEmBaixa(p)} className="p-2 bg-green-500 text-white rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all"><Check size={16}/></button>}
-                             </td>
+  {/* Removida a trava: agora o botão aparece SEMPRE */}
+  <button 
+    onClick={() => setParcelaEmBaixa(p)} 
+    className={`p-2 rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all ${
+      p.status === 'Paga' 
+        ? 'bg-blue-500 text-white' // Azul se for edição/ajuste
+        : 'bg-green-500 text-white' // Verde se for novo pagamento
+    }`}
+    title={p.status === 'Paga' ? 'Editar Pagamento' : 'Registrar Baixa'}
+  >
+    {/* Se estiver paga, mostra um ícone de editar, se não, o check */}
+    {p.status === 'Paga' ? <Edit size={16}/> : <Check size={16}/>}
+  </button>
+</td>
                            </tr>
                          )
                        })}
