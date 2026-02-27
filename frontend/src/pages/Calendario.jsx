@@ -8,7 +8,7 @@ import {
   Package, FileText, PlayCircle, ExternalLink, CheckCircle, 
   Clock, AlertCircle, Filter, LayoutGrid, CalendarDays, X, 
   ArrowRight, TrendingUp, DollarSign, Receipt, Tag, AlignLeft,
-  Check, UploadCloud, CreditCard, History, Search
+  Check, UploadCloud, CreditCard, History, Search,Edit
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
