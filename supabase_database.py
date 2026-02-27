@@ -990,6 +990,11 @@ def listar_parcelas_financiamento(financiamento_id=None, status=None, mes=None, 
             self.status = row.get('status') or 'Pendente'
             self.link_boleto = row.get('link_boleto')
             self.link_comprovante = row.get('link_comprovante')
+            fin_data = row.get('financiamentos')
+            if isinstance(fin_data, dict):
+                self.codigo_contrato = fin_data.get('codigo_contrato') or f"Fin. #{self.financiamento_id}"
+            else:
+                self.codigo_contrato = f"Fin. #{self.financiamento_id}"
             self.juros = 0.0
             self.multa = 0.0
             self.desconto = 0.0
