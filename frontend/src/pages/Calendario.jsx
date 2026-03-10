@@ -197,19 +197,19 @@ export default function Calendario() {
       </div>
                 <div className="mt-auto space-y-1 w-full overflow-hidden">
   {ev.parcelas.length > 0 && (
-    <div className="text-[10px] font-black flex items-center gap-1.5 text-green-400 bg-green-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-green-500/20">
-      <span className="text-sm">💰</span> {ev.parcelas.length}
+    <div className="text-xs font-black flex items-center gap-1.5 text-green-400 bg-green-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-green-500/20">
+      <span className="text-base">💰</span> {ev.parcelas.length}
     </div>
   )}
   {ev.iniciam.length > 0 && (
-    <div className="text-[10px] font-black flex items-center gap-1.5 text-primary-400 bg-primary-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-primary-500/20">
-      <span className="text-sm">🚀</span> {ev.iniciam.length}
+    <div className="text-xs font-black flex items-center gap-1.5 text-primary-400 bg-primary-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-primary-500/20">
+      <span className="text-base">🚀</span> {ev.iniciam.length}
     </div>
   )}
   {/* 🔥 Fim de Compromisso (ADICIONADO) */}
   {ev.terminam.length > 0 && (
-    <div className="text-[10px] font-black flex items-center gap-1.5 text-red-400 bg-red-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-red-500/20">
-      <span className="text-sm">🏁</span> {ev.terminam.length}
+    <div className="text-xs font-black flex items-center gap-1.5 text-red-400 bg-red-400/20 rounded-md px-2 py-0.5 w-fit shadow-sm border border-red-500/20">
+      <span className="text-base">🏁</span> {ev.terminam.length}
     </div>
   )}
 </div>

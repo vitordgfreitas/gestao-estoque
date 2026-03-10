@@ -10,14 +10,12 @@ import {
   Menu,
   X,
   LogOut,
-  ExternalLink,
   DollarSign,
   TrendingUp,
   TrendingDown,
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
-import { infoAPI } from '../services/api'
 
 const menuGroups = [
   
@@ -50,9 +48,6 @@ const menuGroups = [
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [sheetsUrl, setSheetsUrl] = useState(null)
-  const [supabaseAvailable, setSupabaseAvailable] = useState(false)
-  const [useSupabase, setUseSupabase] = useState(() => localStorage.getItem('useSupabase') === 'true')
   const [expandedGroups, setExpandedGroups] = useState({
     estoque: true,
     agenda: true,
@@ -81,29 +76,6 @@ export default function Layout({ children }) {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
-
-  useEffect(() => {
-    // Carrega informações do backend (Sheets URL e se Supabase está disponível)
-    infoAPI.obter()
-      .then(res => {
-        if (res.data?.spreadsheet_url) {
-          setSheetsUrl(res.data.spreadsheet_url)
-        }
-        if (res.data?.supabase_available === true) {
-          setSupabaseAvailable(true)
-        }
-      })
-      .catch(() => {
-        // Ignora erro silenciosamente
-      })
-  }, [])
-
-  const handleToggleSupabase = () => {
-    const next = !useSupabase
-    setUseSupabase(next)
-    localStorage.setItem('useSupabase', next ? 'true' : 'false')
-    window.location.reload()
-  }
 
   return (
     <div className="h-screen bg-dark-900 flex overflow-hidden">
@@ -198,40 +170,6 @@ export default function Layout({ children }) {
 
               {/* Footer */}
               <div className="p-4 border-t border-dark-700 space-y-2">
-                {supabaseAvailable && (
-                  <div className="flex items-center justify-between gap-2 px-4 py-2 rounded-lg bg-dark-700/50">
-                    <span className="text-sm text-dark-300">Usar Supabase</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={useSupabase}
-                      onClick={handleToggleSupabase}
-                      className={`
-                        relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
-                        transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-dark-800
-                        ${useSupabase ? 'bg-primary-600' : 'bg-dark-600'}
-                      `}
-                    >
-                      <span
-                        className={`
-                          pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
-                          ${useSupabase ? 'translate-x-5' : 'translate-x-1'}
-                        `}
-                      />
-                    </button>
-                  </div>
-                )}
-                {sheetsUrl && !useSupabase && (
-                  <a
-                    href={sheetsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-400 hover:text-green-300 hover:bg-green-600/10 rounded-lg transition-colors border border-green-600/20"
-                  >
-                    <ExternalLink size={16} />
-                    <span>Google Sheets</span>
-                  </a>
-                )}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold">
