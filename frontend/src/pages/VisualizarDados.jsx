@@ -3,11 +3,11 @@ import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { itensAPI, compromissosAPI, categoriasAPI } from '../services/api'
 import api from '../services/api'
-import { ArrowUpDown, ChevronUp, ChevronDown, Search, Edit, Trash2, Eye, Package, Calendar, Car, DollarSign, MapPin, Hash, Coins, Plus, Minus, X } from 'lucide-react'
+import { ArrowUpDown, ChevronUp, ChevronDown, Search, Edit, Trash2, Eye, Package, Calendar, Car, DollarSign, MapPin, Hash, Coins, Plus, Minus, X, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { formatDate } from '../utils/format'
+import { formatDate, formatCurrency } from '../utils/format'
 
 /** Na coluna Descrição do inventário: para veículos, prioriza chassi e renavam (tabela carros → dados_categoria). */
 function getDescricaoInventario(item) {
@@ -38,6 +38,115 @@ function itemMatchesSearch(item, term) {
   const renavam = String(dc.Renavam ?? dc.renavam ?? '').toLowerCase()
   if (chassi.includes(t) || renavam.includes(t)) return true
   return false
+}
+
+function VisualizarDadosPrint({ activeTab, filteredData, searchTerm, categoriaFiltro }) {
+  const geradoEm = new Date().toLocaleString('pt-BR')
+  const tabLabel =
+    activeTab === 'itens' ? 'Inventário' : activeTab === 'compromissos' ? 'Contratos' : 'Manutenção (peças × veículos)'
+  const filtros = []
+  if (searchTerm.trim()) filtros.push(`Busca: "${searchTerm.trim()}"`)
+  if (activeTab === 'itens' && categoriaFiltro !== 'Todas') filtros.push(`Categoria: ${categoriaFiltro}`)
+
+  return (
+    <div className="text-slate-900">
+      <header className="border-b-2 border-slate-200 pb-4 mb-6">
+        <p className="text-[9px] font-bold uppercase tracking-[0.35em] text-slate-500 mb-1">Star Gestão · Brasília/DF</p>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">Visualizar dados</h1>
+        <p className="mt-2 text-sm font-semibold text-slate-700">Aba: {tabLabel}</p>
+        {filtros.length > 0 && <p className="mt-1 text-xs text-slate-600">{filtros.join(' · ')}</p>}
+      </header>
+
+      {activeTab === 'itens' && (
+        <table className="w-full border-collapse text-[9px]">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-left font-black uppercase text-slate-600">
+              <th className="py-2 pr-2">Ativo</th>
+              <th className="py-2 pr-2 text-center">Qtd</th>
+              <th className="py-2 pr-2 text-right">Custo unit.</th>
+              <th className="py-2 pr-2 text-right">Valor em estoque</th>
+              <th className="py-2 pr-2">Aquisição</th>
+              <th className="py-2 pr-2">Base</th>
+              <th className="py-2">Descrição</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.itens.map((item) => (
+              <tr key={item.id} className="border-b border-slate-200">
+                <td className="py-2 pr-2 align-top">
+                  <span className="font-bold">{item.nome}</span>
+                  <span className="block text-[8px] text-slate-500">{item.categoria}</span>
+                </td>
+                <td className="py-2 pr-2 text-center font-mono">{item.quantidade_total}</td>
+                <td className="py-2 pr-2 text-right font-mono">{formatCurrency(item.valor_compra)}</td>
+                <td className="py-2 pr-2 text-right font-mono font-semibold text-emerald-800">
+                  {formatCurrency((Number(item.valor_compra) || 0) * (Number(item.quantidade_total) || 0))}
+                </td>
+                <td className="py-2 pr-2 font-mono">{formatDate(item.data_aquisicao)}</td>
+                <td className="py-2 pr-2 uppercase text-[8px]">{item.cidade}/{item.uf}</td>
+                <td className="py-2 text-[8px] leading-snug">{getDescricaoInventario(item)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {activeTab === 'compromissos' && (
+        <table className="w-full border-collapse text-[9px]">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-left font-black uppercase text-slate-600">
+              <th className="py-2 pr-2">Contrato</th>
+              <th className="py-2 pr-2">Cliente</th>
+              <th className="py-2 pr-2">Vigência</th>
+              <th className="py-2 text-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.compromissos.map((c) => (
+              <tr key={c.id} className="border-b border-slate-200">
+                <td className="py-2 pr-2 font-bold">{c.nome_contrato}</td>
+                <td className="py-2 pr-2">{c.contratante}</td>
+                <td className="py-2 pr-2 font-mono text-[8px]">
+                  {formatDate(c.data_inicio)} — {formatDate(c.data_fim)}
+                </td>
+                <td className="py-2 text-right font-mono font-semibold">{formatCurrency(c.valor_total_contrato)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {activeTab === 'pecas-carros' && (
+        <table className="w-full border-collapse text-[9px]">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-left font-black uppercase text-slate-600">
+              <th className="py-2 pr-2">Veículo</th>
+              <th className="py-2 pr-2">Peça</th>
+              <th className="py-2 pr-2 text-center">Qtd</th>
+              <th className="py-2">Instalação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.pecas.map((pc) => (
+              <tr key={pc.id} className="border-b border-slate-200">
+                <td className="py-2 pr-2 font-bold">
+                  {pc.carro_nome}
+                  <span className="block text-[8px] text-slate-500 uppercase">{pc.carro_placa}</span>
+                </td>
+                <td className="py-2 pr-2">{pc.peca_nome}</td>
+                <td className="py-2 pr-2 text-center font-mono">{pc.quantidade}</td>
+                <td className="py-2 font-mono">{formatDate(pc.data_instalacao)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <footer className="mt-8 pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+        Documento gerado em {geradoEm}. Reflete filtros e aba atuais na tela.
+      </footer>
+    </div>
+  )
 }
 
 export default function VisualizarDados() {
@@ -183,6 +292,10 @@ export default function VisualizarDados() {
     } catch (e) { toast.error('Erro ao atualizar contrato') }
   }
 
+  const imprimirRelatorio = () => {
+    window.setTimeout(() => window.print(), 50)
+  }
+
   if (loading) return <div className="flex h-96 items-center justify-center"><div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary-500"></div></div>
 
   return (
@@ -193,7 +306,15 @@ export default function VisualizarDados() {
           <h1 className="text-4xl font-black text-dark-50 tracking-tighter uppercase">Visualizar Dados</h1>
           <p className="text-dark-400 font-medium italic">Star Gestão • Operação Brasília, DF</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={imprimirRelatorio}
+            className="inline-flex items-center gap-2 rounded-xl border border-dark-600 bg-dark-800 px-4 py-3 text-xs font-black uppercase tracking-widest text-dark-100 hover:bg-dark-700 hover:border-primary-500/40"
+          >
+            <Printer size={18} className="text-primary-400" />
+            Imprimir
+          </button>
           <StatMini label="Patrimônio Total" value={stats.patrimonio_total} isCurrency />
           <StatMini label="Receita Master" value={stats.receita_master} isCurrency color="text-green-400" />
         </div>
@@ -461,6 +582,15 @@ export default function VisualizarDados() {
   title="Remover Peça Instalada" 
   message="Deseja realmente remover esta peça? Ela voltará automaticamente para o estoque disponível." 
 />
+
+      <div className="app-print-sheet" aria-hidden="true">
+        <VisualizarDadosPrint
+          activeTab={activeTab}
+          filteredData={filteredData}
+          searchTerm={searchTerm}
+          categoriaFiltro={categoriaFiltro}
+        />
+      </div>
     </div>
   )
 }

@@ -3,13 +3,71 @@ import { motion } from 'framer-motion'
 import { financiamentosAPI, itensAPI } from '../services/api'
 import { 
   Plus, DollarSign, Calendar, Building2, Trash2, Edit, Eye, 
-  Search, ChevronLeft, ChevronRight 
+  Search, ChevronLeft, ChevronRight, Printer
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import TabelaParcelas from '../components/TabelaParcelas'
 import CalculadoraNPV from '../components/CalculadoraNPV'
 import ValorPresenteCard from '../components/ValorPresenteCard'
 import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput, formatPercentageInput, formatPercentageDisplay } from '../utils/format'
+
+function FinanciamentosPrint({ financiamentos, busca, filtroStatus, pagina, totalPaginas, totalRecords }) {
+  const geradoEm = new Date().toLocaleString('pt-BR')
+  const filtros = []
+  if (busca.trim()) filtros.push(`Busca: "${busca.trim()}"`)
+  if (filtroStatus !== 'Todos') filtros.push(`Status: ${filtroStatus}`)
+
+  return (
+    <div className="text-slate-900">
+      <header className="border-b-2 border-slate-200 pb-4 mb-6">
+        <p className="text-[9px] font-bold uppercase tracking-[0.35em] text-slate-500 mb-1">Star Gestão · Brasília/DF</p>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">Financiamentos</h1>
+        <p className="mt-2 text-sm text-slate-700">
+          Página {pagina} de {totalPaginas} · {totalRecords} contrato(s) no total
+          {filtros.length > 0 ? ` · ${filtros.join(' · ')}` : ''}
+        </p>
+      </header>
+
+      <table className="w-full border-collapse text-[9px]">
+        <thead>
+          <tr className="border-b-2 border-slate-300 text-left font-black uppercase text-slate-600">
+            <th className="py-2 pr-2">Contrato</th>
+            <th className="py-2 pr-2">Itens</th>
+            <th className="py-2 pr-2 text-center">Status</th>
+            <th className="py-2 pr-2 text-right">Valor total</th>
+            <th className="py-2 pr-2 text-center">Parc.</th>
+            <th className="py-2 pr-2 text-right">Vlr parcela</th>
+            <th className="py-2">Instituição</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(financiamentos || []).map((fin) => {
+            const itensNomes = fin.itens?.length
+              ? fin.itens.map((i) => i.nome).join(', ')
+              : '—'
+            return (
+              <tr key={fin.id} className="border-b border-slate-200">
+                <td className="py-2 pr-2 align-top font-bold">
+                  {fin.codigo_contrato || `#${fin.id}`}
+                </td>
+                <td className="py-2 pr-2 align-top text-[8px] leading-snug max-w-[200px]">{itensNomes}</td>
+                <td className="py-2 pr-2 text-center">{fin.status}</td>
+                <td className="py-2 pr-2 text-right font-mono">{formatCurrency(fin.valor_total)}</td>
+                <td className="py-2 pr-2 text-center font-mono">{fin.numero_parcelas}</td>
+                <td className="py-2 pr-2 text-right font-mono">{formatCurrency(fin.valor_parcela)}</td>
+                <td className="py-2 align-top text-[8px]">{fin.instituicao_financeira || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <footer className="mt-8 pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+        Lista da página atual (até {financiamentos?.length || 0} contratos nesta folha). Gerado em {geradoEm}.
+      </footer>
+    </div>
+  )
+}
 
 export default function Financiamentos() {
   const [financiamentos, setFinanciamentos] = useState([])
@@ -290,6 +348,10 @@ useEffect(() => {
     }
   }
 
+  const imprimirListaFinanciamentos = () => {
+    window.setTimeout(() => window.print(), 50)
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
@@ -310,30 +372,40 @@ useEffect(() => {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setShowForm(true)
-            setShowMetaEdit(false)
-            setSelectedFinanciamento(null)
-            setParcelasFixas(true)
-            setParcelasCustomizadas([])
-            setFormData({
-              item_id: '',
-              codigo_contrato: '',
-              valor_total: '',
-              valor_entrada: '',
-              numero_parcelas: '',
-              taxa_juros: '',
-              data_inicio: '',
-              instituicao_financeira: '',
-              observacoes: ''
-            })
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
-        >
-          <Plus size={20} />
-          Novo Financiamento
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={imprimirListaFinanciamentos}
+            className="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-primary-500/50 text-white rounded-lg transition-colors"
+          >
+            <Printer size={20} />
+            Imprimir
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true)
+              setShowMetaEdit(false)
+              setSelectedFinanciamento(null)
+              setParcelasFixas(true)
+              setParcelasCustomizadas([])
+              setFormData({
+                item_id: '',
+                codigo_contrato: '',
+                valor_total: '',
+                valor_entrada: '',
+                numero_parcelas: '',
+                taxa_juros: '',
+                data_inicio: '',
+                instituicao_financeira: '',
+                observacoes: ''
+              })
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+          >
+            <Plus size={20} />
+            Novo Financiamento
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
@@ -1076,6 +1148,17 @@ useEffect(() => {
           </motion.div>
         </motion.div>
       )}
+
+      <div className="app-print-sheet" aria-hidden="true">
+        <FinanciamentosPrint
+          financiamentos={financiamentos}
+          busca={busca}
+          filtroStatus={filtroStatus}
+          pagina={pagina}
+          totalPaginas={Math.max(1, totalPaginas)}
+          totalRecords={totalRecords}
+        />
+      </div>
     </div>
   )
 }

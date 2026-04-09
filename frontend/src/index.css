@@ -80,8 +80,8 @@
   @apply bg-dark-600;
 }
 
-/* Relatório do dia (Calendário) — impressão / PDF */
-.calendario-print-sheet {
+/* Relatórios (Calendário, Visualizar Dados, Financiamentos) — só impressão */
+.app-print-sheet {
   position: fixed;
   left: -9999px;
   top: 0;
@@ -101,11 +101,11 @@
   body * {
     visibility: hidden;
   }
-  #calendario-dia-print,
-  #calendario-dia-print * {
+  .app-print-sheet,
+  .app-print-sheet * {
     visibility: visible;
   }
-  #calendario-dia-print {
+  .app-print-sheet {
     left: 0 !important;
     top: 0 !important;
     position: absolute !important;
@@ -119,7 +119,7 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  #calendario-dia-print table tr {
+  .app-print-sheet table tr {
     break-inside: avoid;
     page-break-inside: avoid;
   }

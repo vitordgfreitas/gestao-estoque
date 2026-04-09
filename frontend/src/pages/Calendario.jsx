@@ -8,11 +8,11 @@ import {
   Package, FileText, PlayCircle, ExternalLink, CheckCircle, 
   Clock, AlertCircle, Filter, LayoutGrid, CalendarDays, X, 
   ArrowRight, TrendingUp, DollarSign, Receipt, Tag, AlignLeft,
-  Check, UploadCloud, CreditCard, History, Search, Edit, Printer, FileDown
+  Check, UploadCloud, CreditCard, History, Search, Edit, Printer
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
-import { formatItemName, formatDate, formatCurrency } from '../utils/format'
+import { formatDate, formatCurrency } from '../utils/format'
 
 export default function Calendario() {
   const [compromissos, setCompromissos] = useState([])
@@ -121,16 +121,12 @@ export default function Calendario() {
     } catch (e) { setDetalhesDia(prev => prev ? { ...prev, loadingParcelas: false } : null) }
   }
 
-  const imprimirRelatorioDia = (dicaPdf) => {
+  const imprimirRelatorioDia = () => {
     if (detalhesDia?.loadingParcelas) {
       toast.error('Aguarde o carregamento das parcelas.')
       return
     }
-    if (dicaPdf) {
-      toast('Na janela de impressão, escolha "Salvar como PDF" como destino.', { duration: 4500 })
-    }
-    const delay = dicaPdf ? 350 : 50
-    window.setTimeout(() => window.print(), delay)
+    window.setTimeout(() => window.print(), 50)
   }
 
   const handleSalvarBaixa = async (formData) => {
@@ -265,21 +261,12 @@ export default function Calendario() {
             <div className="no-print flex flex-wrap items-center justify-end gap-2 -mt-1 mb-2 pb-4 border-b border-dark-700/80">
               <button
                 type="button"
-                onClick={() => imprimirRelatorioDia(false)}
+                onClick={imprimirRelatorioDia}
                 disabled={detalhesDia.loadingParcelas}
                 className="inline-flex items-center gap-2 rounded-xl border border-dark-600 bg-dark-800 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-dark-100 hover:bg-dark-700 hover:border-primary-500/40 disabled:opacity-40"
               >
                 <Printer size={16} className="text-primary-400" />
                 Imprimir
-              </button>
-              <button
-                type="button"
-                onClick={() => imprimirRelatorioDia(true)}
-                disabled={detalhesDia.loadingParcelas}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40"
-              >
-                <FileDown size={16} />
-                Salvar PDF
               </button>
             </div>
 
@@ -384,7 +371,7 @@ export default function Calendario() {
       )}
 
       {detalhesDia && (
-        <div id="calendario-dia-print" className="calendario-print-sheet" aria-hidden="true">
+        <div id="calendario-dia-print" className="app-print-sheet" aria-hidden="true">
           <DiaRelatorioImpressao detalhesDia={detalhesDia} getContratosUnicos={getContratosUnicos} />
         </div>
       )}
