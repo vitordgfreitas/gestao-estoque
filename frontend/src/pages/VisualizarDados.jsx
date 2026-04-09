@@ -7,7 +7,38 @@ import { ArrowUpDown, ChevronUp, ChevronDown, Search, Edit, Trash2, Eye, Package
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { formatItemName, formatDate } from '../utils/format'
+import { formatDate } from '../utils/format'
+
+/** Na coluna Descrição do inventário: para veículos, prioriza chassi e renavam (tabela carros → dados_categoria). */
+function getDescricaoInventario(item) {
+  const cat = (item.categoria || '').trim().toLowerCase()
+  if (cat === 'carros') {
+    const dc = item.dados_categoria || {}
+    const chassi = String(dc.Chassi ?? dc.chassi ?? '').trim()
+    const renavam = String(dc.Renavam ?? dc.renavam ?? '').trim()
+    if (chassi || renavam) {
+      const parts = []
+      if (chassi) parts.push(`Chassi ${chassi}`)
+      if (renavam) parts.push(`Renavam ${renavam}`)
+      return parts.join(' · ')
+    }
+  }
+  const d = (item.descricao || '').trim()
+  return d || '—'
+}
+
+function itemMatchesSearch(item, term) {
+  if (!term) return true
+  const t = term.toLowerCase()
+  if (item.nome?.toLowerCase().includes(t)) return true
+  if (item.categoria?.toLowerCase().includes(t)) return true
+  if (item.descricao?.toLowerCase().includes(t)) return true
+  const dc = item.dados_categoria || {}
+  const chassi = String(dc.Chassi ?? dc.chassi ?? '').toLowerCase()
+  const renavam = String(dc.Renavam ?? dc.renavam ?? '').toLowerCase()
+  if (chassi.includes(t) || renavam.includes(t)) return true
+  return false
+}
 
 export default function VisualizarDados() {
   const [itens, setItens] = useState([])
@@ -17,6 +48,7 @@ export default function VisualizarDados() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('itens')
   const [searchTerm, setSearchTerm] = useState('')
+  const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [stats, setStats] = useState({ patrimonio_total: 0, receita_master: 0 })
 
   // Modais de Controle
@@ -66,10 +98,11 @@ export default function VisualizarDados() {
 }
 
   const filteredData = useMemo(() => {
-  const term = searchTerm.toLowerCase();
+  const term = searchTerm.trim().toLowerCase();
   
   const sortedItens = [...itens]
-    .filter(i => i.nome?.toLowerCase().includes(term) || i.categoria?.toLowerCase().includes(term))
+    .filter(i => categoriaFiltro === 'Todas' || i.categoria === categoriaFiltro)
+    .filter(i => itemMatchesSearch(i, term))
     .sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
@@ -97,7 +130,8 @@ export default function VisualizarDados() {
     itens: sortedItens,
     compromissos: compromissos.filter(c => c.contratante?.toLowerCase().includes(term) || (c.nome_contrato || '').toLowerCase().includes(term)),
     pecas: pecasCarros.filter(pc => {
-  const t = searchTerm.toLowerCase()
+  const t = searchTerm.trim().toLowerCase()
+  if (!t) return true
   return (
     pc.carro_nome?.toLowerCase().includes(t) || 
     pc.peca_nome?.toLowerCase().includes(t) ||
@@ -105,7 +139,7 @@ export default function VisualizarDados() {
   )
 })
   };
-}, [searchTerm, itens, compromissos, pecasCarros, sortConfig]);
+}, [searchTerm, categoriaFiltro, itens, compromissos, pecasCarros, sortConfig]);
 
   // --- PERSISTÊNCIA ---
   const handleSaveItem = async (data) => {
@@ -165,15 +199,32 @@ export default function VisualizarDados() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-dark-500" size={24} />
-        <input type="text" placeholder="Pesquisar em tudo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="input w-full pl-14 h-16 text-xl border-dark-700 bg-dark-800/60 backdrop-blur-md rounded-2xl" />
+      <div className="flex flex-col md:flex-row gap-3 md:items-stretch">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-dark-500" size={24} />
+          <input type="text" placeholder="Pesquisar em tudo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="input w-full pl-14 h-16 text-xl border-dark-700 bg-dark-800/60 backdrop-blur-md rounded-2xl" />
+        </div>
+        {activeTab === 'itens' && (
+          <div className="flex flex-col justify-center gap-1 md:min-w-[220px]">
+            <label className="text-[10px] font-black uppercase tracking-widest text-dark-500 px-1">Categoria</label>
+            <select
+              value={categoriaFiltro}
+              onChange={e => setCategoriaFiltro(e.target.value)}
+              className="input h-16 rounded-2xl border-dark-700 bg-dark-800/60 backdrop-blur-md text-dark-100 font-medium"
+            >
+              <option value="Todas">Todas as categorias</option>
+              {categorias.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 p-1.5 bg-dark-800 rounded-2xl border border-dark-700 w-fit">
-        <TabItem active={activeTab === 'itens'} label="Inventário" count={itens.length} icon={<Package size={18}/>} onClick={() => setActiveTab('itens')} />
-        <TabItem active={activeTab === 'compromissos'} label="Contratos" count={compromissos.length} icon={<DollarSign size={18}/>} onClick={() => setActiveTab('compromissos')} />
-        <TabItem active={activeTab === 'pecas-carros'} label="Manutenção" count={pecasCarros.length} icon={<Car size={18}/>} onClick={() => setActiveTab('pecas-carros')} />
+        <TabItem active={activeTab === 'itens'} label="Inventário" count={filteredData.itens.length} icon={<Package size={18}/>} onClick={() => setActiveTab('itens')} />
+        <TabItem active={activeTab === 'compromissos'} label="Contratos" count={filteredData.compromissos.length} icon={<DollarSign size={18}/>} onClick={() => setActiveTab('compromissos')} />
+        <TabItem active={activeTab === 'pecas-carros'} label="Manutenção" count={filteredData.pecas.length} icon={<Car size={18}/>} onClick={() => setActiveTab('pecas-carros')} />
       </div>
 
       {/* ÁREA DE TABELAS (GRID TRAVADO) */}
@@ -249,10 +300,13 @@ export default function VisualizarDados() {
             {item.cidade}/{item.uf}
           </td>
 
-          {/* 7. Descrição */}
+          {/* 7. Descrição (carros: chassi + renavam) */}
           <td className="px-6 py-5">
-            <div className="text-xs text-dark-400 line-clamp-2 leading-relaxed italic" title={item.descricao}>
-              {item.descricao || "—"}
+            <div
+              className="text-xs text-dark-400 line-clamp-2 leading-relaxed italic"
+              title={getDescricaoInventario(item)}
+            >
+              {getDescricaoInventario(item)}
             </div>
           </td>
 
