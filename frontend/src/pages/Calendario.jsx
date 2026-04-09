@@ -8,7 +8,7 @@ import {
   Package, FileText, PlayCircle, ExternalLink, CheckCircle, 
   Clock, AlertCircle, Filter, LayoutGrid, CalendarDays, X, 
   ArrowRight, TrendingUp, DollarSign, Receipt, Tag, AlignLeft,
-  Check, UploadCloud, CreditCard, History, Search,Edit
+  Check, UploadCloud, CreditCard, History, Search, Edit, Printer, FileDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../components/Modal'
@@ -119,6 +119,18 @@ export default function Calendario() {
       const res = await api.get('/api/parcelas', { params: { data_vencimento: dStr, incluir_pagas: true } })
       setDetalhesDia(prev => (prev && dataToStr(prev.data) === dStr ? { ...prev, parcelas: res.data || [], loadingParcelas: false } : prev))
     } catch (e) { setDetalhesDia(prev => prev ? { ...prev, loadingParcelas: false } : null) }
+  }
+
+  const imprimirRelatorioDia = (dicaPdf) => {
+    if (detalhesDia?.loadingParcelas) {
+      toast.error('Aguarde o carregamento das parcelas.')
+      return
+    }
+    if (dicaPdf) {
+      toast('Na janela de impressão, escolha "Salvar como PDF" como destino.', { duration: 4500 })
+    }
+    const delay = dicaPdf ? 350 : 50
+    window.setTimeout(() => window.print(), delay)
   }
 
   const handleSalvarBaixa = async (formData) => {
@@ -250,7 +262,27 @@ export default function Calendario() {
       {detalhesDia && (
         <Modal isOpen={true} onClose={() => setDetalhesDia(null)} title={`DADOS DO DIA: ${formatDate(dataToStr(detalhesDia.data))}`}>
           <div className="space-y-8 max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
-            
+            <div className="no-print flex flex-wrap items-center justify-end gap-2 -mt-1 mb-2 pb-4 border-b border-dark-700/80">
+              <button
+                type="button"
+                onClick={() => imprimirRelatorioDia(false)}
+                disabled={detalhesDia.loadingParcelas}
+                className="inline-flex items-center gap-2 rounded-xl border border-dark-600 bg-dark-800 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-dark-100 hover:bg-dark-700 hover:border-primary-500/40 disabled:opacity-40"
+              >
+                <Printer size={16} className="text-primary-400" />
+                Imprimir
+              </button>
+              <button
+                type="button"
+                onClick={() => imprimirRelatorioDia(true)}
+                disabled={detalhesDia.loadingParcelas}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40"
+              >
+                <FileDown size={16} />
+                Salvar PDF
+              </button>
+            </div>
+
             <Section title="Logística e Entregas" icon={<Package size={16}/>} color="text-primary-500">
               {getContratosUnicos(detalhesDia.compromissosInicio, detalhesDia.compromissosAtivos).length > 0 ? (
                 getContratosUnicos(detalhesDia.compromissosInicio, detalhesDia.compromissosAtivos).map(c => (
@@ -351,6 +383,12 @@ export default function Calendario() {
         </Modal>
       )}
 
+      {detalhesDia && (
+        <div id="calendario-dia-print" className="calendario-print-sheet" aria-hidden="true">
+          <DiaRelatorioImpressao detalhesDia={detalhesDia} getContratosUnicos={getContratosUnicos} />
+        </div>
+      )}
+
       {/* MODAL BAIXA FINANCEIRA */}
       {parcelaEmBaixa && (
         <Modal isOpen={true} onClose={() => setParcelaEmBaixa(null)} title="Registrar Baixa">
@@ -367,6 +405,92 @@ export default function Calendario() {
            </form>
         </Modal>
       )}
+    </div>
+  )
+}
+
+// --- Relatório para impressão / PDF (só aparece na impressão via CSS) ---
+function DiaRelatorioImpressao({ detalhesDia, getContratosUnicos }) {
+  const d = detalhesDia?.data
+  const dataStr = d
+    ? new Date(d).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : ''
+  const contratos = getContratosUnicos(detalhesDia.compromissosInicio || [], detalhesDia.compromissosAtivos || [])
+  const parcelas = detalhesDia.parcelas || []
+  const totalParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor_original) || 0), 0)
+  const geradoEm = new Date().toLocaleString('pt-BR')
+
+  return (
+    <div className="text-slate-900">
+      <header className="border-b-2 border-slate-200 pb-4 mb-6">
+        <p className="text-[9px] font-bold uppercase tracking-[0.35em] text-slate-500 mb-1">Star Gestão · Brasília/DF</p>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">Relatório do dia</h1>
+        <p className="mt-2 text-sm font-semibold capitalize text-slate-700">{dataStr}</p>
+      </header>
+
+      <section className="mb-8">
+        <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-600 mb-3">Logística e entregas</h2>
+        {contratos.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">Nenhum contrato neste dia.</p>
+        ) : (
+          <ul className="space-y-3">
+            {contratos.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3"
+              >
+                <p className="font-bold text-slate-900">{c.nome_contrato}</p>
+                <p className="text-xs text-slate-600 mt-0.5">{c.contratante}</p>
+                <p className="text-xs font-mono font-semibold text-emerald-700 mt-1">{formatCurrency(c.valor_total_contrato)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-700 mb-3">Vencimentos financeiros</h2>
+        {detalhesDia.loadingParcelas ? (
+          <p className="text-sm text-slate-500">Carregando parcelas…</p>
+        ) : parcelas.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">Sem parcelas com vencimento neste dia.</p>
+        ) : (
+          <>
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex justify-between items-center">
+              <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Total do dia</span>
+              <span className="text-xl font-black font-mono text-emerald-800">{formatCurrency(totalParcelas)}</span>
+            </div>
+            <table className="w-full border-collapse text-[10px]">
+              <thead>
+                <tr className="border-b-2 border-slate-300 text-left text-[9px] font-black uppercase tracking-wider text-slate-600">
+                  <th className="py-2 pr-2">Vencimento</th>
+                  <th className="py-2 pr-2">Contrato</th>
+                  <th className="py-2 pr-2 text-right">Valor</th>
+                  <th className="py-2 pr-2 text-right">Pago</th>
+                  <th className="py-2 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parcelas.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-200">
+                    <td className="py-2 pr-2 font-medium">{formatDate(p.data_vencimento)}</td>
+                    <td className="py-2 pr-2 font-semibold">{p.codigo_contrato || '—'}</td>
+                    <td className="py-2 pr-2 text-right font-mono">{formatCurrency(p.valor_original)}</td>
+                    <td className="py-2 pr-2 text-right font-mono text-emerald-800">
+                      {p.valor_pago > 0 ? formatCurrency(p.valor_pago) : '—'}
+                    </td>
+                    <td className="py-2 text-center font-bold">{p.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </section>
+
+      <footer className="mt-10 pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+        Documento gerado em {geradoEm} · Links e ações interativas não são incluídos na impressão.
+      </footer>
     </div>
   )
 }

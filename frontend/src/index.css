@@ -79,3 +79,48 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-dark-600;
 }
+
+/* Relatório do dia (Calendário) — impressão / PDF */
+.calendario-print-sheet {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+  padding: 18mm 16mm;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  z-index: 0;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #calendario-dia-print,
+  #calendario-dia-print * {
+    visibility: visible;
+  }
+  #calendario-dia-print {
+    left: 0 !important;
+    top: 0 !important;
+    position: absolute !important;
+    width: 100% !important;
+    min-height: auto !important;
+    padding: 12mm !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #calendario-dia-print table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
