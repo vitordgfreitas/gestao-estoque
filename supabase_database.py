@@ -783,7 +783,13 @@ def listar_financiamentos(status=None, item_id=None, q=None, pagina=None, por_pa
         query = query.in_('id', fin_ids)
 
     if q:
-        filtro = f"codigo_contrato.ilike.%{q}%, busca_itens.ilike.%{q}%"
+        qe = str(q).strip()
+        # Contrato, nomes dos itens (view) e instituição financeira
+        filtro = (
+            f"codigo_contrato.ilike.%{qe}%,"
+            f"busca_itens.ilike.%{qe}%,"
+            f"instituicao_financeira.ilike.%{qe}%"
+        )
         query = query.or_(filtro)
 
     if pagina is not None:

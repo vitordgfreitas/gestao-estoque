@@ -1927,8 +1927,8 @@ async def buscar_financiamento(financiamento_id: int, token: str = Depends(verif
 @app.put("/api/financiamentos/{financiamento_id}", response_model=dict)
 async def atualizar_financiamento(financiamento_id: int, fin: FinanciamentoUpdate, token: str = Depends(verify_token), db_module = Depends(get_db)):
     try:
-        # Passamos todos os campos como um dicionário
-        dados_atualizacao = fin.dict(exclude_unset=True)
+        # Passamos todos os campos como um dicionário (Pydantic v2)
+        dados_atualizacao = fin.model_dump(exclude_unset=True)
         
         fin_atualizado = db_module.atualizar_financiamento(
             financiamento_id=financiamento_id,

@@ -18,7 +18,6 @@ export default function Financiamentos() {
   const [formLoading, setFormLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [selectedFinanciamento, setSelectedFinanciamento] = useState(null)
-  const [selectedItem, setSelectedItem] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('Todos')
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
   const [itensFiltrados, setItensFiltrados] = useState([])
@@ -28,6 +27,15 @@ export default function Financiamentos() {
   const [pagina, setPagina] = useState(1)
   const [totalRecords, setTotalRecords] = useState(0)
   const [busca, setBusca] = useState('')
+  const [showMetaEdit, setShowMetaEdit] = useState(false)
+  const [metaEditId, setMetaEditId] = useState(null)
+  const [metaFormData, setMetaFormData] = useState({
+    codigo_contrato: '',
+    observacoes: '',
+    instituicao_financeira: ''
+  })
+  const [metaSelectedItens, setMetaSelectedItens] = useState([])
+  const [metaLoading, setMetaLoading] = useState(false)
   const itensFiltradosCalculados = useMemo(() => {
   if (categoriaFiltro === 'Todas') return itens;
   return itens.filter(item => item.categoria === categoriaFiltro);
@@ -110,7 +118,77 @@ useEffect(() => {
     setSelectedItens(selectedItens.filter((_, i) => i !== index))
   }
 
-  // Não precisamos mais de updateItemValor - apenas selecionamos itens
+  const addMetaItem = (itemId) => {
+    if (!itemId) return
+    const item = itens.find(i => i.id === parseInt(itemId))
+    if (!item) return
+    if (metaSelectedItens.find(i => i.id === item.id)) {
+      toast.error('Item já adicionado')
+      return
+    }
+    setMetaSelectedItens([...metaSelectedItens, { id: item.id, nome: formatItemName(item) }])
+  }
+
+  const removeMetaItem = (index) => {
+    setMetaSelectedItens(metaSelectedItens.filter((_, i) => i !== index))
+  }
+
+  const openMetaEdit = async (fin) => {
+    try {
+      setMetaLoading(true)
+      setShowForm(false)
+      const response = await financiamentosAPI.buscar(fin.id)
+      const finCompleto = response.data
+      setMetaEditId(finCompleto.id)
+      setMetaFormData({
+        codigo_contrato: finCompleto.codigo_contrato || '',
+        observacoes: finCompleto.observacoes || '',
+        instituicao_financeira: finCompleto.instituicao_financeira || ''
+      })
+      if (finCompleto.itens && finCompleto.itens.length > 0) {
+        setMetaSelectedItens(
+          finCompleto.itens.map(item => ({ id: item.id, nome: item.nome }))
+        )
+      } else {
+        setMetaSelectedItens([])
+      }
+      setShowMetaEdit(true)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao carregar dados do financiamento')
+    } finally {
+      setMetaLoading(false)
+    }
+  }
+
+  const handleSubmitMeta = async (e) => {
+    e.preventDefault()
+    if (metaSelectedItens.length === 0) {
+      toast.error('Mantenha pelo menos um item vinculado ao financiamento')
+      return
+    }
+    try {
+      setMetaLoading(true)
+      await financiamentosAPI.atualizar(metaEditId, {
+        codigo_contrato: (metaFormData.codigo_contrato || '').trim(),
+        observacoes: (metaFormData.observacoes || '').trim(),
+        instituicao_financeira: (metaFormData.instituicao_financeira || '').trim(),
+        itens_ids: metaSelectedItens.map(i => parseInt(i.id, 10))
+      })
+      toast.success('Dados do contrato atualizados!')
+      const idSalvo = metaEditId
+      setShowMetaEdit(false)
+      setMetaEditId(null)
+      await loadFinanciamentos()
+      if (selectedFinanciamento && idSalvo && selectedFinanciamento.id === idSalvo) {
+        const updated = await financiamentosAPI.buscar(idSalvo)
+        if (updated?.data) setSelectedFinanciamento(updated.data)
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao atualizar')
+    } finally {
+      setMetaLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -161,21 +239,16 @@ useEffect(() => {
         }))
       }
       
-      if (selectedFinanciamento) {
-        await financiamentosAPI.atualizar(selectedFinanciamento.id, data)
-        toast.success('Financiamento atualizado com sucesso!')
-      } else {
-        await financiamentosAPI.criar(data)
-        toast.success('Financiamento criado com sucesso!')
-      }
+      await financiamentosAPI.criar(data)
+      toast.success('Financiamento criado com sucesso!')
       
       // Fecha formulário e limpa
       setShowForm(false)
       setSelectedFinanciamento(null)
-      setSelectedItem(null)
       setSelectedItens([])
       setFormData({
         item_id: '',
+        codigo_contrato: '',
         valor_total: '',
         valor_entrada: '',
         numero_parcelas: '',
@@ -217,63 +290,31 @@ useEffect(() => {
     }
   }
 
-  const handleEdit = async (fin) => {
-    try {
-      // Busca dados completos do financiamento com itens
-      const response = await financiamentosAPI.buscar(fin.id)
-      const finCompleto = response.data
-      
-      setSelectedFinanciamento(finCompleto)
-      const item = itens.find(i => i.id === finCompleto.item_id)
-      setSelectedItem(item || null)
-      
-      // Popula a lista de itens selecionados a partir do financiamento COMPLETO
-      if (finCompleto.itens && finCompleto.itens.length > 0) {
-        setSelectedItens(finCompleto.itens.map(item => ({
-          id: item.id,
-          nome: item.nome
-        })))
-      } else {
-        setSelectedItens([])
-      }
-      
-      // Garante que valores sempre tenham 2 casas decimais com vírgula
-      const valorTotalFormatado = formatDecimalInput(finCompleto.valor_total, 2)
-      const valorEntradaFormatado = formatDecimalInput(finCompleto.valor_entrada || 0, 2)
-      
-      setFormData({
-        item_id: finCompleto.item_id,
-        codigo_contrato: finCompleto.codigo_contrato || '',
-        // Converte ponto para vírgula para exibição, sempre com 2 casas decimais
-        valor_total: valorTotalFormatado.includes(',') ? valorTotalFormatado : valorTotalFormatado + ',00',
-        valor_entrada: valorEntradaFormatado.includes(',') ? valorEntradaFormatado : valorEntradaFormatado + ',00',
-        numero_parcelas: finCompleto.numero_parcelas,
-        // Backend retorna taxa como decimal (0.0275 = 2,75%)
-        // Formata para exibir no input com 4 casas decimais
-        taxa_juros: formatDecimalInput(finCompleto.taxa_juros * 100, 9),
-        data_inicio: finCompleto.data_inicio,
-        instituicao_financeira: finCompleto.instituicao_financeira || '',
-        observacoes: finCompleto.observacoes || ''
-      })
-      setShowForm(true)
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Erro ao carregar dados do financiamento')
-    }
-  }
-
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Financiamentos</h1>
-          <p className="text-dark-400 mt-1">Gerencie os financiamentos dos seus itens</p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Financiamentos</h1>
+            <p className="text-dark-400 mt-1">Gerencie os financiamentos dos seus itens</p>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-dark-700 bg-dark-800/80 px-4 py-3">
+            <div className="h-10 w-1 rounded-full bg-primary-500/80" aria-hidden />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-dark-500">Total de contratos</p>
+              <p className="text-2xl font-bold tabular-nums text-white leading-none">
+                {loading && !showForm ? '…' : totalRecords}
+              </p>
+              <p className="text-[11px] text-dark-500 mt-1">Com os filtros de busca e status atuais</p>
+            </div>
+          </div>
         </div>
         <button
           onClick={() => {
             setShowForm(true)
+            setShowMetaEdit(false)
             setSelectedFinanciamento(null)
-            setSelectedItem(null)
             setParcelasFixas(true)
             setParcelasCustomizadas([])
             setFormData({
@@ -299,13 +340,13 @@ useEffect(() => {
   {/* Campo de Busca (Ocupa 3/4 do espaço em telas grandes) */}
   <div className="md:col-span-3">
     <label className="text-[10px] font-black text-dark-500 uppercase ml-2 mb-1 block tracking-widest">
-      Buscar Contrato
+      Buscar
     </label>
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" size={18} />
       <input 
         type="text" 
-        placeholder="Digite o código do contrato (Ex: CTR-2026)..."
+        placeholder="Contrato, instituição financeira ou nome do item…"
         className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-primary-500 transition-all"
         value={busca}
         onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
@@ -339,7 +380,7 @@ useEffect(() => {
           className="bg-dark-800 rounded-lg p-6 border border-dark-700"
         >
           <h2 className="text-xl font-bold text-white mb-4">
-            {selectedFinanciamento ? 'Editar Financiamento' : 'Novo Financiamento'}
+            Novo Financiamento
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -350,7 +391,6 @@ useEffect(() => {
                   onChange={(e) => {
                     setCategoriaFiltro(e.target.value)
                     setFormData({ ...formData, item_id: '' })
-                    setSelectedItem(null)
                   }}
                   className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
                 >
@@ -621,8 +661,120 @@ useEffect(() => {
         </motion.div>
       )}
 
+      {/* Edição apenas de metadados (sem alterar cálculo de parcelas) */}
+      {showMetaEdit && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-dark-800 rounded-lg p-6 border border-dark-700 border-l-4 border-l-amber-500/80"
+        >
+          <h2 className="text-xl font-bold text-white mb-1">Editar dados do contrato</h2>
+          <p className="text-sm text-dark-400 mb-4">
+            Código, instituição, observações e itens vinculados. Valores e parcelas não são alterados aqui.
+          </p>
+          <form onSubmit={handleSubmitMeta} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Categoria (filtro para adicionar itens)</label>
+                <select
+                  value={categoriaFiltro}
+                  onChange={(e) => setCategoriaFiltro(e.target.value)}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="Todas">Todas as Categorias</option>
+                  <option value="Carros">Carros</option>
+                  <option value="Estrutura de Evento">Estrutura de Evento</option>
+                  <option value="Peças de Carro">Peças de Carro</option>
+                  <option value="Pecas">Pecas</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Itens do financiamento</label>
+                <select
+                  onChange={(e) => {
+                    addMetaItem(e.target.value)
+                    e.target.value = ''
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="">+ Adicionar item</option>
+                  {itensFiltradosCalculados.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {formatItemName(item)}
+                    </option>
+                  ))}
+                </select>
+                {metaSelectedItens.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {metaSelectedItens.map((item, idx) => (
+                      <div key={`${item.id}-${idx}`} className="flex gap-2 items-center bg-dark-700 p-3 rounded-lg">
+                        <span className="flex-1 text-white font-medium">{item.nome}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMetaItem(idx)}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Código do contrato</label>
+                <input
+                  type="text"
+                  value={metaFormData.codigo_contrato}
+                  onChange={(e) => setMetaFormData({ ...metaFormData, codigo_contrato: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: CTR-2024-001"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Instituição financeira</label>
+                <input
+                  type="text"
+                  value={metaFormData.instituicao_financeira}
+                  onChange={(e) => setMetaFormData({ ...metaFormData, instituicao_financeira: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-dark-300 mb-2">Observações</label>
+              <textarea
+                value={metaFormData.observacoes}
+                onChange={(e) => setMetaFormData({ ...metaFormData, observacoes: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+              />
+            </div>
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={metaLoading}
+                className="w-full sm:w-auto px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {metaLoading ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMetaEdit(false)
+                  setMetaEditId(null)
+                }}
+                className="w-full sm:w-auto px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
       {/* Lista de Financiamentos */}
-      {loading && !showForm ? (
+      {loading && !showForm && !showMetaEdit ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
         </div>
@@ -730,6 +882,13 @@ useEffect(() => {
                       <p className="text-white">{fin.instituicao_financeira}</p>
                     </div>
                   )}
+
+                  <div className="mt-3 rounded-lg border border-dark-600/60 bg-dark-900/40 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-dark-500 mb-1">Observações</p>
+                    <p className={`text-sm whitespace-pre-wrap line-clamp-4 ${fin.observacoes?.trim() ? 'text-dark-200' : 'text-dark-500 italic'}`}>
+                      {fin.observacoes?.trim() || 'Nenhuma observação cadastrada.'}
+                    </p>
+                  </div>
                   
                   <ValorPresenteCard valorPresente={fin.valor_presente} compact />
                 </div>
@@ -738,17 +897,17 @@ useEffect(() => {
                   <button
                     onClick={() => handleView(fin.id)}
                     className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    title="Pré-visualizar"
                   >
                     <Eye size={18} />
                   </button>
-                  {/* BOTÃO DE EDITAR COMENTADO:
-  <button
-    onClick={() => handleEdit(fin)}
-    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
-  >
-    <Edit size={18} />
-  </button>
-  */}
+                  <button
+                    onClick={() => openMetaEdit(fin)}
+                    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    title="Editar contrato, observações e itens"
+                  >
+                    <Edit size={18} />
+                  </button>
                   <button
                     onClick={() => handleDelete(fin.id)}
                     className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
@@ -785,7 +944,7 @@ useEffect(() => {
 )}
 
       {/* Modal de Detalhes */}
-      {selectedFinanciamento && !showForm && (
+      {selectedFinanciamento && !showForm && !showMetaEdit && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -798,7 +957,7 @@ useEffect(() => {
             onClick={(e) => e.stopPropagation()}
             className="bg-dark-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-dark-700"
           >
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-4 gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-white">
                   {selectedFinanciamento.codigo_contrato || `Financiamento #${selectedFinanciamento.id}`}
@@ -807,12 +966,27 @@ useEffect(() => {
                   <p className="text-sm text-dark-400 mt-1">ID: #{selectedFinanciamento.id}</p>
                 )}
               </div>
-              <button
-                onClick={() => setSelectedFinanciamento(null)}
-                className="text-dark-400 hover:text-white"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fin = { id: selectedFinanciamento.id }
+                    setSelectedFinanciamento(null)
+                    openMetaEdit(fin)
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-primary-500/20 px-3 py-2 text-sm font-medium text-primary-300 hover:bg-primary-500/30"
+                >
+                  <Edit size={16} />
+                  Editar dados
+                </button>
+                <button
+                  onClick={() => setSelectedFinanciamento(null)}
+                  className="text-dark-400 hover:text-white p-2"
+                  aria-label="Fechar"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             
             <div className="space-y-6">
@@ -823,6 +997,15 @@ useEffect(() => {
                   <p className="text-white font-semibold">{selectedFinanciamento.codigo_contrato}</p>
                 </div>
               )}
+
+              <div className="bg-dark-700/50 p-4 rounded-lg">
+                <p className="text-sm text-dark-400 mb-1">Observações</p>
+                <p className="text-white whitespace-pre-wrap">
+                  {selectedFinanciamento.observacoes?.trim()
+                    ? selectedFinanciamento.observacoes
+                    : <span className="text-dark-500 italic">Nenhuma observação cadastrada.</span>}
+                </p>
+              </div>
               
               {/* Itens Financiados */}
               {selectedFinanciamento.itens && selectedFinanciamento.itens.length > 0 && (
