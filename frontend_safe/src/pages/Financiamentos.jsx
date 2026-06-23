@@ -1,0 +1,1164 @@
+import { useState, useEffect, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { financiamentosAPI, itensAPI } from '../services/api'
+import { 
+  Plus, DollarSign, Calendar, Building2, Trash2, Edit, Eye, 
+  Search, ChevronLeft, ChevronRight, Printer
+} from 'lucide-react'
+import toast from 'react-hot-toast'
+import TabelaParcelas from '../components/TabelaParcelas'
+import CalculadoraNPV from '../components/CalculadoraNPV'
+import ValorPresenteCard from '../components/ValorPresenteCard'
+import { formatCurrency, formatDate, formatPercentage, roundToTwoDecimals, formatItemName, formatDecimalWhileTyping, parseDecimalInput, formatDecimalInput, formatCurrencyInput, formatPercentageInput, formatPercentageDisplay } from '../utils/format'
+
+function FinanciamentosPrint({ financiamentos, busca, filtroStatus, pagina, totalPaginas, totalRecords }) {
+  const geradoEm = new Date().toLocaleString('pt-BR')
+  const filtros = []
+  if (busca.trim()) filtros.push(`Busca: "${busca.trim()}"`)
+  if (filtroStatus !== 'Todos') filtros.push(`Status: ${filtroStatus}`)
+
+  return (
+    <div className="text-slate-900">
+      <header className="border-b-2 border-slate-200 pb-4 mb-6">
+        <p className="text-[9px] font-bold uppercase tracking-[0.35em] text-slate-500 mb-1">Star Gestão · Brasília/DF</p>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">Financiamentos</h1>
+        <p className="mt-2 text-sm text-slate-700">
+          Página {pagina} de {totalPaginas} · {totalRecords} contrato(s) no total
+          {filtros.length > 0 ? ` · ${filtros.join(' · ')}` : ''}
+        </p>
+      </header>
+
+      <table className="w-full border-collapse text-[9px]">
+        <thead>
+          <tr className="border-b-2 border-slate-300 text-left font-black uppercase text-slate-600">
+            <th className="py-2 pr-2">Contrato</th>
+            <th className="py-2 pr-2">Itens</th>
+            <th className="py-2 pr-2 text-center">Status</th>
+            <th className="py-2 pr-2 text-right">Valor total</th>
+            <th className="py-2 pr-2 text-center">Parc.</th>
+            <th className="py-2 pr-2 text-right">Vlr parcela</th>
+            <th className="py-2">Instituição</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(financiamentos || []).map((fin) => {
+            const itensNomes = fin.itens?.length
+              ? fin.itens.map((i) => i.nome).join(', ')
+              : '—'
+            return (
+              <tr key={fin.id} className="border-b border-slate-200">
+                <td className="py-2 pr-2 align-top font-bold">
+                  {fin.codigo_contrato || `#${fin.id}`}
+                </td>
+                <td className="py-2 pr-2 align-top text-[8px] leading-snug max-w-[200px]">{itensNomes}</td>
+                <td className="py-2 pr-2 text-center">{fin.status}</td>
+                <td className="py-2 pr-2 text-right font-mono">{formatCurrency(fin.valor_total)}</td>
+                <td className="py-2 pr-2 text-center font-mono">{fin.numero_parcelas}</td>
+                <td className="py-2 pr-2 text-right font-mono">{formatCurrency(fin.valor_parcela)}</td>
+                <td className="py-2 align-top text-[8px]">{fin.instituicao_financeira || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <footer className="mt-8 pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+        Lista da página atual (até {financiamentos?.length || 0} contratos nesta folha). Gerado em {geradoEm}.
+      </footer>
+    </div>
+  )
+}
+
+export default function Financiamentos() {
+  const [financiamentos, setFinanciamentos] = useState([])
+  const [itens, setItens] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [selectedFinanciamento, setSelectedFinanciamento] = useState(null)
+  const [filtroStatus, setFiltroStatus] = useState('Todos')
+  const [categoriaFiltro, setCategoriaFiltro] = useState('Todas')
+  const [itensFiltrados, setItensFiltrados] = useState([])
+  const [parcelasFixas, setParcelasFixas] = useState(true)
+  const [parcelasCustomizadas, setParcelasCustomizadas] = useState([])
+  const [selectedItens, setSelectedItens] = useState([])  // Array de {id, nome, valor}
+  const [pagina, setPagina] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [busca, setBusca] = useState('')
+  const [showMetaEdit, setShowMetaEdit] = useState(false)
+  const [metaEditId, setMetaEditId] = useState(null)
+  const [metaFormData, setMetaFormData] = useState({
+    codigo_contrato: '',
+    observacoes: '',
+    instituicao_financeira: ''
+  })
+  const [metaSelectedItens, setMetaSelectedItens] = useState([])
+  const [metaLoading, setMetaLoading] = useState(false)
+  const itensFiltradosCalculados = useMemo(() => {
+  if (categoriaFiltro === 'Todas') return itens;
+  return itens.filter(item => item.categoria === categoriaFiltro);
+}, [itens, categoriaFiltro]);
+  const porPagina = 10
+  const totalPaginas = Math.ceil(totalRecords / porPagina);
+  const [formData, setFormData] = useState({
+    item_id: '',
+    codigo_contrato: '',
+    valor_total: '',
+    valor_entrada: '',
+    numero_parcelas: '',
+    taxa_juros: '',
+    data_inicio: '',
+    instituicao_financeira: '',
+    observacoes: ''
+  })
+
+  
+
+useEffect(() => {
+    loadItens()
+  }, [])
+
+  // 2. Carrega os FINANCIAMENTOS sempre que mudar página, status ou busca
+  useEffect(() => {
+    loadFinanciamentos()
+  }, [pagina, filtroStatus, busca])
+
+  const loadItens = async () => {
+    try {
+      const response = await itensAPI.listar()
+      setItens(response.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar itens:', error)
+    }
+  }
+
+  const loadFinanciamentos = async () => {
+    try {
+      setLoading(true)
+      const params = {
+        pagina: pagina,
+        por_pagina: porPagina,
+        q: busca, 
+        ...(filtroStatus !== 'Todos' && { status: filtroStatus })
+      }
+      const response = await financiamentosAPI.listar(params)
+      
+      // O backend otimizado agora retorna data e total
+      setFinanciamentos(response.data.data || [])
+      setTotalRecords(response.data.total || 0)
+    } catch (error) {
+      toast.error('Erro ao carregar financiamentos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handlers para múltiplos itens
+  const addItem = (itemId) => {
+    if (!itemId) return
+    
+    const item = itens.find(i => i.id === parseInt(itemId))
+    if (!item) return
+    
+    // Verifica se já foi adicionado
+    if (selectedItens.find(i => i.id === item.id)) {
+      toast.error('Item já adicionado')
+      return
+    }
+    
+    setSelectedItens([...selectedItens, { 
+      id: item.id, 
+      nome: formatItemName(item)
+    }])
+  }
+
+  const removeItem = (index) => {
+    setSelectedItens(selectedItens.filter((_, i) => i !== index))
+  }
+
+  const addMetaItem = (itemId) => {
+    if (!itemId) return
+    const item = itens.find(i => i.id === parseInt(itemId))
+    if (!item) return
+    if (metaSelectedItens.find(i => i.id === item.id)) {
+      toast.error('Item já adicionado')
+      return
+    }
+    setMetaSelectedItens([...metaSelectedItens, { id: item.id, nome: formatItemName(item) }])
+  }
+
+  const removeMetaItem = (index) => {
+    setMetaSelectedItens(metaSelectedItens.filter((_, i) => i !== index))
+  }
+
+  const openMetaEdit = async (fin) => {
+    try {
+      setMetaLoading(true)
+      setShowForm(false)
+      const response = await financiamentosAPI.buscar(fin.id)
+      const finCompleto = response.data
+      setMetaEditId(finCompleto.id)
+      setMetaFormData({
+        codigo_contrato: finCompleto.codigo_contrato || '',
+        observacoes: finCompleto.observacoes || '',
+        instituicao_financeira: finCompleto.instituicao_financeira || ''
+      })
+      if (finCompleto.itens && finCompleto.itens.length > 0) {
+        setMetaSelectedItens(
+          finCompleto.itens.map(item => ({ id: item.id, nome: item.nome }))
+        )
+      } else {
+        setMetaSelectedItens([])
+      }
+      setShowMetaEdit(true)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao carregar dados do financiamento')
+    } finally {
+      setMetaLoading(false)
+    }
+  }
+
+  const handleSubmitMeta = async (e) => {
+    e.preventDefault()
+    if (metaSelectedItens.length === 0) {
+      toast.error('Mantenha pelo menos um item vinculado ao financiamento')
+      return
+    }
+    try {
+      setMetaLoading(true)
+      await financiamentosAPI.atualizar(metaEditId, {
+        codigo_contrato: (metaFormData.codigo_contrato || '').trim(),
+        observacoes: (metaFormData.observacoes || '').trim(),
+        instituicao_financeira: (metaFormData.instituicao_financeira || '').trim(),
+        itens_ids: metaSelectedItens.map(i => parseInt(i.id, 10))
+      })
+      toast.success('Dados do contrato atualizados!')
+      const idSalvo = metaEditId
+      setShowMetaEdit(false)
+      setMetaEditId(null)
+      await loadFinanciamentos()
+      if (selectedFinanciamento && idSalvo && selectedFinanciamento.id === idSalvo) {
+        const updated = await financiamentosAPI.buscar(idSalvo)
+        if (updated?.data) setSelectedFinanciamento(updated.data)
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao atualizar')
+    } finally {
+      setMetaLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      setFormLoading(true)
+      
+      // Converte valores com precisão (converte vírgula para ponto)
+      const valorTotal = roundToTwoDecimals(parseDecimalInput(formData.valor_total || '0'))
+      const valorEntrada = roundToTwoDecimals(parseDecimalInput(formData.valor_entrada || '0'))
+      // Taxa: converte e garante que está em formato decimal (0.0155 = 1,55%)
+      const taxaJuros = parseDecimalInput(formData.taxa_juros)
+      
+      // Valida entrada
+      if (valorEntrada > valorTotal) {
+        toast.error('Valor de entrada não pode ser maior que o valor total')
+        setFormLoading(false)
+        return
+      }
+      
+      // Valida que pelo menos um item foi selecionado
+      if (selectedItens.length === 0) {
+        toast.error('Selecione pelo menos um item para financiar')
+        setFormLoading(false)
+        return
+      }
+      
+      // Prepara apenas os IDs dos itens (sem valores individuais)
+      const itens_ids = selectedItens.map(item => parseInt(item.id))
+      
+      const data = {
+        codigo_contrato: formData.codigo_contrato || null,
+        itens_ids: itens_ids,
+        valor_total: valorTotal,
+        valor_entrada: valorEntrada,
+        numero_parcelas: parcelasFixas ? parseInt(formData.numero_parcelas) : parcelasCustomizadas.length,
+        taxa_juros: taxaJuros,
+        data_inicio: formData.data_inicio,
+        instituicao_financeira: formData.instituicao_financeira || null,
+        observacoes: formData.observacoes || null
+      }
+      
+      // Se parcelas variáveis, adiciona array de parcelas
+      if (!parcelasFixas && parcelasCustomizadas.length > 0) {
+        data.parcelas_customizadas = parcelasCustomizadas.map((p, idx) => ({
+          numero: idx + 1,
+          valor: roundToTwoDecimals(parseDecimalInput(p.valor)),
+          data_vencimento: p.data_vencimento
+        }))
+      }
+      
+      await financiamentosAPI.criar(data)
+      toast.success('Financiamento criado com sucesso!')
+      
+      // Fecha formulário e limpa
+      setShowForm(false)
+      setSelectedFinanciamento(null)
+      setSelectedItens([])
+      setFormData({
+        item_id: '',
+        codigo_contrato: '',
+        valor_total: '',
+        valor_entrada: '',
+        numero_parcelas: '',
+        taxa_juros: '',
+        data_inicio: '',
+        instituicao_financeira: '',
+        observacoes: ''
+      })
+      setParcelasFixas(true)
+      setParcelasCustomizadas([])
+      
+      // Recarrega a lista
+      await loadFinanciamentos()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao salvar financiamento')
+    } finally {
+      setFormLoading(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Tem certeza que deseja deletar este financiamento?')) return
+    
+    try {
+      await financiamentosAPI.deletar(id)
+      toast.success('Financiamento deletado com sucesso!')
+      loadFinanciamentos()
+    } catch (error) {
+      toast.error('Erro ao deletar financiamento')
+    }
+  }
+
+  const handleView = async (id) => {
+    try {
+      const response = await financiamentosAPI.buscar(id)
+      setSelectedFinanciamento(response.data)
+    } catch (error) {
+      toast.error('Erro ao carregar detalhes do financiamento')
+    }
+  }
+
+  const imprimirListaFinanciamentos = () => {
+    window.setTimeout(() => window.print(), 50)
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Financiamentos</h1>
+            <p className="text-dark-400 mt-1">Gerencie os financiamentos dos seus itens</p>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-dark-700 bg-dark-800/80 px-4 py-3">
+            <div className="h-10 w-1 rounded-full bg-primary-500/80" aria-hidden />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-dark-500">Total de contratos</p>
+              <p className="text-2xl font-bold tabular-nums text-white leading-none">
+                {loading && !showForm ? '…' : totalRecords}
+              </p>
+              <p className="text-[11px] text-dark-500 mt-1">Com os filtros de busca e status atuais</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={imprimirListaFinanciamentos}
+            className="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-600 hover:border-primary-500/50 text-white rounded-lg transition-colors"
+          >
+            <Printer size={20} />
+            Imprimir
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true)
+              setShowMetaEdit(false)
+              setSelectedFinanciamento(null)
+              setParcelasFixas(true)
+              setParcelasCustomizadas([])
+              setFormData({
+                item_id: '',
+                codigo_contrato: '',
+                valor_total: '',
+                valor_entrada: '',
+                numero_parcelas: '',
+                taxa_juros: '',
+                data_inicio: '',
+                instituicao_financeira: '',
+                observacoes: ''
+              })
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+          >
+            <Plus size={20} />
+            Novo Financiamento
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+  {/* Campo de Busca (Ocupa 3/4 do espaço em telas grandes) */}
+  <div className="md:col-span-3">
+    <label className="text-[10px] font-black text-dark-500 uppercase ml-2 mb-1 block tracking-widest">
+      Buscar
+    </label>
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" size={18} />
+      <input 
+        type="text" 
+        placeholder="Contrato, instituição financeira ou nome do item…"
+        className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+        value={busca}
+        onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
+      />
+    </div>
+  </div>
+
+  {/* Filtro de Status (Ocupa 1/4 do espaço) */}
+  <div>
+    <label className="text-[10px] font-black text-dark-500 uppercase ml-2 mb-1 block tracking-widest">
+      Filtrar Status
+    </label>
+    <select
+      value={filtroStatus}
+      onChange={(e) => { setFiltroStatus(e.target.value); setPagina(1); }}
+      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-primary-500"
+    >
+      <option value="Todos">Todos</option>
+      <option value="Ativo">Ativos</option>
+      <option value="Quitado">Quitados</option>
+      <option value="Cancelado">Cancelados</option>
+    </select>
+  </div>
+</div>
+
+      {/* Formulário */}
+      {showForm && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-dark-800 rounded-lg p-6 border border-dark-700"
+        >
+          <h2 className="text-xl font-bold text-white mb-4">
+            Novo Financiamento
+          </h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Categoria</label>
+                <select
+                  value={categoriaFiltro}
+                  onChange={(e) => {
+                    setCategoriaFiltro(e.target.value)
+                    setFormData({ ...formData, item_id: '' })
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="Todas">Todas as Categorias</option>
+                  <option value="Carros">Carros</option>
+                  <option value="Estrutura de Evento">Estrutura de Evento</option>
+                  <option value="Peças de Carro">Peças de Carro</option>
+                  <option value="Pecas">Pecas</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Itens Financiados</label>
+                <select
+                  onChange={(e) => {
+                    addItem(e.target.value)
+                    e.target.value = '' // Reseta o select
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="">+ Adicionar item</option>
+                  {itensFiltradosCalculados.map(item => (
+  <option key={item.id} value={item.id}>
+    {formatItemName(item)}
+  </option>
+))}
+                </select>
+                
+                {/* Lista de itens selecionados */}
+                {selectedItens.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    <div className="bg-dark-700/50 p-2 rounded text-sm mb-2">
+                      <p className="text-dark-300">
+                        <span className="font-semibold">{selectedItens.length} {selectedItens.length === 1 ? 'item selecionado' : 'itens selecionados'}</span>
+                      </p>
+                    </div>
+                    {selectedItens.map((item, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-dark-700 p-3 rounded-lg">
+                        <span className="flex-1 text-white font-medium">{item.nome}</span>
+                        <button 
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Código do Contrato</label>
+                <input
+                  type="text"
+                  value={formData.codigo_contrato}
+                  onChange={(e) => setFormData({ ...formData, codigo_contrato: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: CTR-2024-001"
+                />
+                <p className="text-xs text-dark-400 mt-1">Código único do contrato (opcional)</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Valor Total</label>
+                <input
+                  type="text"
+                  value={formData.valor_total}
+                  onChange={(e) => {
+                    // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                    const formatted = formatCurrencyInput(e.target.value)
+                    setFormData({ ...formData, valor_total: formatted })
+                  }}
+                  required
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: 8000050 será R$ 80.000,50"
+                />
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos centavos (ex: 8000050 = R$ 80.000,50)</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Valor de Entrada</label>
+                <input
+                  type="text"
+                  value={formData.valor_entrada}
+                  onChange={(e) => {
+                    // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                    const formatted = formatCurrencyInput(e.target.value)
+                    setFormData({ ...formData, valor_entrada: formatted })
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: 500025 será R$ 5.000,25"
+                />
+                <p className="text-xs text-dark-400 mt-1">Digite apenas números - começa pelos centavos (ex: 500025 = R$ 5.000,25)</p>
+                {formData.valor_total && parseDecimalInput(formData.valor_entrada) > 0 && (
+                  <p className="text-xs text-dark-400 mt-1">
+                    Valor financiado: {formatCurrency(parseDecimalInput(formData.valor_total) - parseDecimalInput(formData.valor_entrada))}
+                  </p>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Tipo de Parcelas</label>
+                <div className="flex gap-4 mb-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={parcelasFixas}
+                      onChange={() => {
+                        setParcelasFixas(true)
+                        setParcelasCustomizadas([])
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white">Parcelas Fixas</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!parcelasFixas}
+                      onChange={() => {
+                        setParcelasFixas(false)
+                        if (parcelasCustomizadas.length === 0) {
+                          setParcelasCustomizadas([{ valor: '', data_vencimento: '' }])
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white">Parcelas Variáveis</span>
+                  </label>
+                </div>
+                {parcelasFixas ? (
+                  <input
+                    type="number"
+                    value={formData.numero_parcelas}
+                    onChange={(e) => setFormData({ ...formData, numero_parcelas: e.target.value })}
+                    required
+                    min="1"
+                    className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                    placeholder="Número de Parcelas"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {parcelasCustomizadas.map((parcela, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={parcela.valor}
+                          onChange={(e) => {
+                            // Formata tipo "caixa registradora" - sempre últimos 2 dígitos são centavos
+                            const formatted = formatCurrencyInput(e.target.value)
+                            const novas = [...parcelasCustomizadas]
+                            novas[idx].valor = formatted
+                            setParcelasCustomizadas(novas)
+                          }}
+                          placeholder="Ex: 422969 será R$ 4.229,69"
+                          className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                        />
+                        <input
+                          type="date"
+                          value={parcela.data_vencimento}
+                          onChange={(e) => {
+                            const novas = [...parcelasCustomizadas]
+                            novas[idx].data_vencimento = e.target.value
+                            setParcelasCustomizadas(novas)
+                          }}
+                          className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setParcelasCustomizadas(parcelasCustomizadas.filter((_, i) => i !== idx))
+                          }}
+                          className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParcelasCustomizadas([...parcelasCustomizadas, { valor: '', data_vencimento: '' }])
+                      }}
+                      className="w-full px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    >
+                      + Adicionar Parcela
+                    </button>
+                    {parcelasCustomizadas.length > 0 && (
+                      <div className="text-sm text-dark-400">
+                        Total: {formatCurrency(parcelasCustomizadas.reduce((sum, p) => sum + parseDecimalInput(p.valor), 0))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Taxa de Juros (% ao mês)</label>
+                <input
+                  type="text"
+                  value={formData.taxa_juros}
+                  onChange={(e) => {
+                    // Formata tipo "caixa registradora" - sempre últimos 7 dígitos são decimais
+                    const formatted = formatPercentageInput(e.target.value)
+                    setFormData({ ...formData, taxa_juros: formatted })
+                  }}
+                  required
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: 123456 = 1,234567% ou digite 1,234567"
+                />
+                <p className="text-xs text-dark-400 mt-1">Digite números (até 7 decimais). Ex: 1234567 = 1,234567%</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Data de Início</label>
+                <input
+                  type="date"
+                  value={formData.data_inicio}
+                  onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
+                  required
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Instituição Financeira</label>
+                <input
+                  type="text"
+                  value={formData.instituicao_financeira}
+                  onChange={(e) => setFormData({ ...formData, instituicao_financeira: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-dark-300 mb-2">Observações</label>
+              <textarea
+                value={formData.observacoes}
+                onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                rows="3"
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+              />
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={formLoading}
+                className="w-full sm:w-auto px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {formLoading ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false)
+                  setSelectedFinanciamento(null)
+                }}
+                className="w-full sm:w-auto px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
+      {/* Edição apenas de metadados (sem alterar cálculo de parcelas) */}
+      {showMetaEdit && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-dark-800 rounded-lg p-6 border border-dark-700 border-l-4 border-l-amber-500/80"
+        >
+          <h2 className="text-xl font-bold text-white mb-1">Editar dados do contrato</h2>
+          <p className="text-sm text-dark-400 mb-4">
+            Código, instituição, observações e itens vinculados. Valores e parcelas não são alterados aqui.
+          </p>
+          <form onSubmit={handleSubmitMeta} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Categoria (filtro para adicionar itens)</label>
+                <select
+                  value={categoriaFiltro}
+                  onChange={(e) => setCategoriaFiltro(e.target.value)}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="Todas">Todas as Categorias</option>
+                  <option value="Carros">Carros</option>
+                  <option value="Estrutura de Evento">Estrutura de Evento</option>
+                  <option value="Peças de Carro">Peças de Carro</option>
+                  <option value="Pecas">Pecas</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Itens do financiamento</label>
+                <select
+                  onChange={(e) => {
+                    addMetaItem(e.target.value)
+                    e.target.value = ''
+                  }}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                >
+                  <option value="">+ Adicionar item</option>
+                  {itensFiltradosCalculados.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {formatItemName(item)}
+                    </option>
+                  ))}
+                </select>
+                {metaSelectedItens.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {metaSelectedItens.map((item, idx) => (
+                      <div key={`${item.id}-${idx}`} className="flex gap-2 items-center bg-dark-700 p-3 rounded-lg">
+                        <span className="flex-1 text-white font-medium">{item.nome}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMetaItem(idx)}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Código do contrato</label>
+                <input
+                  type="text"
+                  value={metaFormData.codigo_contrato}
+                  onChange={(e) => setMetaFormData({ ...metaFormData, codigo_contrato: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                  placeholder="Ex: CTR-2024-001"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">Instituição financeira</label>
+                <input
+                  type="text"
+                  value={metaFormData.instituicao_financeira}
+                  onChange={(e) => setMetaFormData({ ...metaFormData, instituicao_financeira: e.target.value })}
+                  className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-dark-300 mb-2">Observações</label>
+              <textarea
+                value={metaFormData.observacoes}
+                onChange={(e) => setMetaFormData({ ...metaFormData, observacoes: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white"
+              />
+            </div>
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={metaLoading}
+                className="w-full sm:w-auto px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {metaLoading ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMetaEdit(false)
+                  setMetaEditId(null)
+                }}
+                className="w-full sm:w-auto px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+
+      {/* Lista de Financiamentos */}
+      {loading && !showForm && !showMetaEdit ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {financiamentos.map((fin) => (
+            <motion.div
+              key={fin.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-dark-800 rounded-lg p-6 border border-dark-700"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-white mb-1">
+                        {fin.codigo_contrato || `Financiamento #${fin.id}`}
+                      </h3>
+                      {fin.itens && fin.itens.length > 0 && (
+                        <div className="text-sm text-dark-300">
+                          {fin.itens.length === 1 ? (
+                            <span>{fin.itens[0].nome}</span>
+                          ) : (
+                            <span>{fin.itens.length} itens: {fin.itens.map(i => i.nome).join(', ')}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      fin.status === 'Ativo' ? 'bg-green-500/20 text-green-400' :
+                      fin.status === 'Quitado' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {fin.status}
+                    </span>
+                  </div>
+                  
+                  {/* Detalhamento dos itens */}
+                  {fin.itens && fin.itens.length > 0 && (
+                    <div className="mb-3 p-2 bg-dark-700/50 rounded">
+                      <p className="text-xs text-dark-400 mb-1">Itens Financiados:</p>
+                      {fin.itens.map((item, idx) => (
+                        <div key={idx} className="text-sm text-dark-300">
+                          <span>• {item.nome}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    <div>
+                      <p className="text-sm text-dark-400">Valor Total</p>
+                      <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_total)}</p>
+                    </div>
+                    {fin.valor_entrada >= 0 && (
+                      <div>
+                        <p className="text-sm text-dark-400">Entrada</p>
+                        <p className="text-lg font-semibold text-green-400">{formatCurrency(fin.valor_entrada)}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-dark-400">Valor Financiado</p>
+                      <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_financiado || (fin.valor_total - (fin.valor_entrada || 0)))}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-dark-400">Parcelas</p>
+                      <p className="text-lg font-semibold text-white">{fin.numero_parcelas}x</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-dark-400">Valor Parcela</p>
+                      <p className="text-lg font-semibold text-white">{formatCurrency(fin.valor_parcela)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-dark-400">Taxa Juros</p>
+                      <p className="text-lg font-semibold text-white">
+                        {formatPercentageDisplay(fin.taxa_juros)}
+                      </p>
+                    </div>
+                    {/* Saldo Devedor Nominal (O valor bruto que falta) */}
+                    <div>
+                      <p className="text-sm text-red-400">Saldo Vincendo</p>
+                      <p className="text-lg font-semibold text-white">
+                        {formatCurrency(fin.saldo_devedor_nominal)}
+                      </p>
+                      <p className="text-[10px] text-dark-500 uppercase">Soma das parcelas restantes</p>
+                    </div>
+
+                    {/* Valor para Quitação (O valor com desconto que a gente já tinha) */}
+                    <div>
+                      <p className="text-sm text-green-500 font-bold">Saldo Devedor Aproximado</p>
+                      <p className="text-lg font-black text-green-400 font-mono">
+                        {formatCurrency(fin.valor_quitacao_hoje)}
+                      </p>
+                      {/* Cálculo de Economia em tempo real */}
+                      <p className="text-[10px] text-green-600 font-bold uppercase">
+                        Economia: {formatCurrency(fin.saldo_devedor_nominal - fin.valor_quitacao_hoje)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {fin.instituicao_financeira && (
+                    <div className="mt-2">
+                      <p className="text-sm text-dark-400">Instituição</p>
+                      <p className="text-white">{fin.instituicao_financeira}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-3 rounded-lg border border-dark-600/60 bg-dark-900/40 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-dark-500 mb-1">Observações</p>
+                    <p className={`text-sm whitespace-pre-wrap line-clamp-4 ${fin.observacoes?.trim() ? 'text-dark-200' : 'text-dark-500 italic'}`}>
+                      {fin.observacoes?.trim() || 'Nenhuma observação cadastrada.'}
+                    </p>
+                  </div>
+                  
+                  <ValorPresenteCard valorPresente={fin.valor_presente} compact />
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleView(fin.id)}
+                    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    title="Pré-visualizar"
+                  >
+                    <Eye size={18} />
+                  </button>
+                  <button
+                    onClick={() => openMetaEdit(fin)}
+                    className="p-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                    title="Editar contrato, observações e itens"
+                  >
+                    <Edit size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(fin.id)}
+                    className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+      {totalPaginas > 1 && (
+  <div className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-dark-700 mt-6">
+    <p className="text-sm text-dark-400">Total: {totalRecords} contratos</p>
+    <div className="flex gap-2">
+      <button 
+        disabled={pagina === 1} 
+        onClick={() => setPagina(p => p - 1)}
+        className="p-2 bg-dark-700 rounded disabled:opacity-30"
+      >
+        <ChevronLeft />
+      </button>
+      <span className="px-4 py-2 text-white font-bold">{pagina} / {totalPaginas}</span>
+      <button 
+        disabled={pagina === totalPaginas} 
+        onClick={() => setPagina(p => p + 1)}
+        className="p-2 bg-dark-700 rounded disabled:opacity-30"
+      >
+        <ChevronRight />
+      </button>
+    </div>
+  </div>
+)}
+
+      {/* Modal de Detalhes */}
+      {selectedFinanciamento && !showForm && !showMetaEdit && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedFinanciamento(null)}
+        >
+          <motion.div
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-dark-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-dark-700"
+          >
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-white">
+                  {selectedFinanciamento.codigo_contrato || `Financiamento #${selectedFinanciamento.id}`}
+                </h2>
+                {selectedFinanciamento.codigo_contrato && (
+                  <p className="text-sm text-dark-400 mt-1">ID: #{selectedFinanciamento.id}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fin = { id: selectedFinanciamento.id }
+                    setSelectedFinanciamento(null)
+                    openMetaEdit(fin)
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-primary-500/20 px-3 py-2 text-sm font-medium text-primary-300 hover:bg-primary-500/30"
+                >
+                  <Edit size={16} />
+                  Editar dados
+                </button>
+                <button
+                  onClick={() => setSelectedFinanciamento(null)}
+                  className="text-dark-400 hover:text-white p-2"
+                  aria-label="Fechar"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Código do Contrato */}
+              {selectedFinanciamento.codigo_contrato && (
+                <div className="bg-dark-700/50 p-4 rounded-lg">
+                  <p className="text-sm text-dark-400 mb-1">Código do Contrato</p>
+                  <p className="text-white font-semibold">{selectedFinanciamento.codigo_contrato}</p>
+                </div>
+              )}
+
+              <div className="bg-dark-700/50 p-4 rounded-lg">
+                <p className="text-sm text-dark-400 mb-1">Observações</p>
+                <p className="text-white whitespace-pre-wrap">
+                  {selectedFinanciamento.observacoes?.trim()
+                    ? selectedFinanciamento.observacoes
+                    : <span className="text-dark-500 italic">Nenhuma observação cadastrada.</span>}
+                </p>
+              </div>
+              
+              {/* Itens Financiados */}
+              {selectedFinanciamento.itens && selectedFinanciamento.itens.length > 0 && (
+                <div className="bg-dark-700/50 p-4 rounded-lg">
+                  <p className="text-sm text-dark-400 mb-2">Itens Financiados ({selectedFinanciamento.itens.length})</p>
+                  <div className="space-y-2">
+                    {selectedFinanciamento.itens.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 p-2 bg-dark-700 rounded">
+                        <span className="w-6 h-6 flex items-center justify-center bg-primary-500/20 text-primary-400 rounded-full text-xs font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-white font-medium">{item.nome}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-dark-400">Status</p>
+                  <p className="text-white font-semibold">{selectedFinanciamento.status}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-400">Valor Total</p>
+                  <p className="text-white font-semibold">{formatCurrency(selectedFinanciamento.valor_total)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-400">Número de Parcelas</p>
+                  <p className="text-white font-semibold">{selectedFinanciamento.numero_parcelas}</p>
+                </div>
+                {selectedFinanciamento.parcelas && (
+                  <>
+                    <div>
+                      <p className="text-sm text-dark-400">Parcelas Pagas</p>
+                      <p className="text-white font-semibold text-green-400">
+                        {selectedFinanciamento.parcelas.filter(p => p.status === 'Paga').length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-dark-400">Parcelas Faltantes</p>
+                      <p className="text-white font-semibold text-yellow-400">
+                        {selectedFinanciamento.parcelas.filter(p => p.status !== 'Paga').length}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {selectedFinanciamento.parcelas && (
+                <>
+                  <TabelaParcelas 
+                    parcelas={selectedFinanciamento.parcelas} 
+                    financiamentoId={selectedFinanciamento.id} 
+                    onPagar={async () => {
+                      await loadFinanciamentos()
+                      // Recarrega o financiamento selecionado para atualizar as parcelas
+                      const updated = await financiamentosAPI.buscar(selectedFinanciamento.id)
+                      if (updated?.data) {
+                        setSelectedFinanciamento(updated.data)
+                      }
+                    }} 
+                  />
+                  <CalculadoraNPV financiamentoId={selectedFinanciamento.id} />
+                </>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      <div className="app-print-sheet" aria-hidden="true">
+        <FinanciamentosPrint
+          financiamentos={financiamentos}
+          busca={busca}
+          filtroStatus={filtroStatus}
+          pagina={pagina}
+          totalPaginas={Math.max(1, totalPaginas)}
+          totalRecords={totalRecords}
+        />
+      </div>
+    </div>
+  )
+}

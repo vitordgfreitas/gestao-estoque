@@ -1,0 +1,229 @@
+import { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  PlusCircle, 
+  CalendarCheck, 
+  Search, 
+  Calendar, 
+  Table,
+  Menu,
+  X,
+  LogOut,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react'
+
+const menuGroups = [
+  
+  {
+    label: 'Agenda',
+    items: [
+      { path: '/calendario', icon: Calendar, label: 'Calendário' }
+    ]
+  },
+  {
+    label: 'Estoque',
+    items: [
+      { path: '/itens', icon: PlusCircle, label: 'Registrar Item' },
+      { path: '/compromissos', icon: CalendarCheck, label: 'Registrar Compromisso' },
+      { path: '/disponibilidade', icon: Search, label: 'Verificar Disponibilidade' },
+      { path: '/visualizar', icon: Table, label: 'Visualizar Dados' }
+    ]
+  },
+  {
+    label: 'Financeiro',
+    items: [
+      { path: '/financeiro', icon: DollarSign, label: 'Dashboard Financeiro' },
+      { path: '/contas-receber', icon: TrendingUp, label: 'Contas a Receber' },
+      { path: '/contas-pagar', icon: TrendingDown, label: 'Contas a Pagar' },
+      { path: '/financiamentos', icon: DollarSign, label: 'Financiamentos' }
+    ]
+  }
+]
+
+export default function Layout({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState({
+    estoque: true,
+    agenda: true,
+    financeiro: true
+  })
+  const location = useLocation()
+
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }))
+  }
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(true)
+      } else {
+        setSidebarOpen(false)
+      }
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return (
+    <div className="h-screen bg-dark-900 flex overflow-hidden">
+      {/* Sidebar */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            {/* Overlay para mobile */}
+            {isMobile && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-40"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
+            
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed md:static h-full w-[280px] bg-dark-800 border-r border-dark-700 flex flex-col z-50 overflow-y-auto"
+            >
+              {/* Logo */}
+              <div className="p-6 border-b border-dark-700">
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={import.meta.env.VITE_LOGO_BASE64}
+                    alt="STAR" 
+                    className="w-full h-auto"
+                  />
+                </div>
+              </div>
+
+              {/* Navigation */}
+              <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                {menuGroups.map((group) => {
+                  const groupKey = group.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                  const isExpanded = expandedGroups[groupKey]
+                  
+                  return (
+                    <div key={group.label} className="mb-4">
+                      {/* Group Header - Clicável */}
+                      <button
+                        onClick={() => toggleGroup(groupKey)}
+                        className="w-full flex items-center justify-between text-xs font-semibold text-dark-400 uppercase tracking-wider px-4 py-2 mb-1 hover:text-dark-300 transition-colors"
+                      >
+                        <span>{group.label}</span>
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                      
+                      {/* Group Items - Colapsáveis */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="space-y-1 overflow-hidden"
+                          >
+                            {group.items.map((item) => {
+                              const Icon = item.icon
+                              const isActive = location.pathname === item.path
+                              return (
+                                <Link
+                                  key={item.path}
+                                  to={item.path}
+                                  onClick={() => isMobile && setSidebarOpen(false)}
+                                  className={`
+                                    flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+                                    ${isActive 
+                                      ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-500' 
+                                      : 'text-dark-400 hover:bg-dark-700/50 hover:text-dark-200'
+                                    }
+                                  `}
+                                >
+                                  <Icon size={20} />
+                                  <span className="font-medium">{item.label}</span>
+                                </Link>
+                              )
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+                })}
+              </nav>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-dark-700 space-y-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold">
+                      {localStorage.getItem('usuario')?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <span className="text-sm text-dark-300">{localStorage.getItem('usuario') || 'Usuário'}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    localStorage.removeItem('token')
+                    localStorage.removeItem('usuario')
+                    window.location.href = '/login'
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-dark-400 hover:text-dark-200 hover:bg-dark-700/50 rounded-lg transition-colors"
+                >
+                  <LogOut size={16} />
+                  Sair
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Topbar */}
+        <header className="sticky top-0 z-30 bg-dark-800/80 backdrop-blur-lg border-b border-dark-700 px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 hover:bg-dark-700 rounded-lg transition-colors flex-shrink-0"
+              type="button"
+            >
+              {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+            <h2 className="text-base sm:text-xl font-semibold text-dark-50 truncate">
+              {menuGroups.flatMap(g => g.items).find(item => item.path === location.pathname)?.label || 'Dashboard'}
+            </h2>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {children}
+    </motion.div>
+        </main>
+      </div>
+    </div>
+  )
+}

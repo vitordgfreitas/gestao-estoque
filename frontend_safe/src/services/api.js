@@ -1,0 +1,159 @@
+import axios from 'axios'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000, // 30 segundos para cold start do Render
+})
+
+// Interceptor para adicionar token e header de banco (fixo em Supabase)
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  // Sempre usar Supabase como backend de dados
+  config.headers['X-Use-Database'] = 'supabase'
+  return config
+})
+
+// Interceptor para tratar erros de autenticação e logar 500 com detalhe
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token inválido ou expirado
+      localStorage.removeItem('token')
+      localStorage.removeItem('usuario')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    if (error.response?.status === 500 && error.response?.data?.detail) {
+      console.error('[API 500]', error.response.data.detail, error.response.data.hint || '')
+    }
+    return Promise.reject(error)
+  }
+)
+
+// Itens
+export const itensAPI = {
+  listar: () => api.get('/api/itens'),
+  buscar: (id) => api.get(`/api/itens/${id}`),
+  criar: (data) => api.post('/api/itens', data),
+  atualizar: (id, data) => api.put(`/api/itens/${id}`, data),
+  deletar: (id) => api.delete(`/api/itens/${id}`),
+}
+
+// Compromissos
+export const compromissosAPI = {
+  listar: () => api.get('/api/compromissos'),
+  buscar: (id) => api.get(`/api/compromissos/${id}`),
+  criar: (data) => api.post('/api/compromissos', data),
+  atualizar: (id, data) => api.put(`/api/compromissos/${id}`, data),
+  deletar: (id) => api.delete(`/api/compromissos/${id}`),
+}
+
+// Disponibilidade
+export const disponibilidadeAPI = {
+  // Antes estava api.post, mude para api.get
+  verificar: (params) => api.get('/api/disponibilidade', { params })
+};
+
+// Estatísticas
+export const statsAPI = {
+  obter: () => api.get('/api/stats'),
+}
+
+// Categorias
+export const categoriasAPI = {
+  listar: () => api.get('/api/categorias'),
+  obterCampos: (categoria) => api.get(`/api/categorias/${encodeURIComponent(categoria)}/campos`),
+  criar: (nomeCategoria) => api.post('/api/categorias', { nome_categoria: nomeCategoria })
+}
+
+// Informações da API
+export const infoAPI = {
+  obter: () => api.get('/api/info'),
+}
+
+// Contas a Receber
+export const contasReceberAPI = {
+  listar: (params) => api.get('/api/contas-receber', { params }),
+  buscar: (id) => api.get(`/api/contas-receber/${id}`),
+  criar: (data) => api.post('/api/contas-receber', data),
+  atualizar: (id, data) => api.put(`/api/contas-receber/${id}`, data),
+  marcarPaga: (id, data) => api.put(`/api/contas-receber/${id}/pagar`, data),
+  deletar: (id) => api.delete(`/api/contas-receber/${id}`),
+}
+
+// Contas a Pagar
+export const contasPagarAPI = {
+  listar: (params) => api.get('/api/contas-pagar', { params }),
+  buscar: (id) => api.get(`/api/contas-pagar/${id}`),
+  criar: (data) => api.post('/api/contas-pagar', data),
+  atualizar: (id, data) => api.put(`/api/contas-pagar/${id}`, data),
+  marcarPaga: (id, data) => api.put(`/api/contas-pagar/${id}/pagar`, data),
+  deletar: (id) => api.delete(`/api/contas-pagar/${id}`),
+}
+
+// Financeiro
+export const financeiroAPI = {
+  dashboard: () => api.get('/api/financeiro/dashboard'),
+  fluxoCaixa: (params) => api.get('/api/financeiro/fluxo-caixa', { params }),
+}
+
+// Financiamentos
+export const financiamentosAPI = {
+  listar: (params) => api.get('/api/financiamentos', { params }),
+  buscar: (id) => api.get(`/api/financiamentos/${id}`),
+  criar: (data) => api.post('/api/financiamentos', data),
+  atualizar: (id, data) => api.put(`/api/financiamentos/${id}`, data),
+  deletar: (id) => api.delete(`/api/financiamentos/${id}`),
+  pagarParcela: (financiamentoId, parcelaId, data) => api.post(`/api/financiamentos/${financiamentoId}/parcelas/${parcelaId}/pagar`, data),
+  atualizarParcela: (financiamentoId, parcelaId, data) => api.put(`/api/financiamentos/${financiamentoId}/parcelas/${parcelaId}`, data),
+  valorPresente: (id, usarCdi) => api.get(`/api/financiamentos/${id}/valor-presente`, { params: { usar_cdi: usarCdi } }),
+  dashboard: () => api.get('/api/financiamentos/dashboard'),
+}
+
+// Função de retry para login (até 2 tentativas com delay de 1s)
+const retryLogin = async (credentials, maxRetries = 2) => {
+  let lastError = null
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await api.post('/api/auth/login', credentials)
+      return response
+    } catch (error) {
+      lastError = error
+      
+      // Se não for erro de timeout ou conexão, não tenta novamente
+      if (error.code !== 'ECONNABORTED' && error.code !== 'ERR_NETWORK' && error.response?.status !== 408) {
+        throw error
+      }
+      
+      // Se não for a última tentativa, aguarda antes de tentar novamente
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 segundo de delay
+      }
+    }
+  }
+  
+  throw lastError
+}
+
+// Autenticação
+export const authAPI = {
+  login: (credentials) => retryLogin(credentials),
+  logout: () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('usuario')
+  },
+  isAuthenticated: () => !!localStorage.getItem('token'),
+}
+
+export default api

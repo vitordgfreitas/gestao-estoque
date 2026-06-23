@@ -1,0 +1,8 @@
+# Configuração para Render Static Site
+# Este arquivo ajuda o Render a servir corretamente o SPA
+
+# Para Static Sites no Render, precisamos garantir que todas as rotas
+# retornem index.html. Isso é feito através da configuração do servidor web.
+
+# Nota: Render Static Sites usa nginx por padrão
+# A configuração abaixo deve ser aplicada nas configurações do serviço
